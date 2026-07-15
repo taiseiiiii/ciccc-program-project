@@ -1,28 +1,16 @@
-import { useState } from "react";
-import Button from "./components/Button";
-import Input from "./components/Input";
-import Card from "./components/Card";
+import { BrowserRouter } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext";
+import AppRoutes from "./routes/AppRoutes";
 
 const App = () => {
-  const [isDark, setIsDark] = useState(false);
-
   return (
-    <div
-      className={`p-8 min-h-screen bg-background text-on-background ${isDark ? "dark" : ""}`}
-    >
-      <h1 className="text-body-lg">Testing page!</h1>
-      <Button variant="secondary" onClick={() => setIsDark(!isDark)}>
-        {isDark ? "Light" : "Dark"}
-      </Button>
-      <Card>
-        <Input
-          type="email"
-          label="Email"
-          placeholder="Type your email address"
-        />
-        <Button variant="primary">View</Button>
-      </Card>
-    </div>
+    <ThemeProvider>
+      <div className={`p-8 min-h-screen bg-background text-on-background`}>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </div>
+    </ThemeProvider>
   );
 };
 
