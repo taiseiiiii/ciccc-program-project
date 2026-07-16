@@ -5,7 +5,7 @@ import AppRoutes from "./routes/AppRoutes";
 const App = () => {
   return (
     <ThemeProvider>
-      <div className={`p-8 min-h-screen bg-background text-on-background`}>
+      <div className={`min-h-screen bg-background text-on-background`}>
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>
