@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { pingDatabase } from '../db/pool';
 import sessionRoutes from './session.routes';
+import gradeRoutes from './grade.routes';
+import routeRoutes from './route.routes';
+import attemptRoutes from './attempt.routes';
+import goalRoutes from './goal.routes';
 
 const router = Router();
 
@@ -20,14 +24,16 @@ router.get(
   }),
 );
 
-// Sample resource — the reference CRUD slice.
+// Core ERD entities (basic CRUD).
 router.use('/sessions', sessionRoutes);
+router.use('/grades', gradeRoutes); // read-only master data (V0–V17)
+router.use('/routes', routeRoutes);
+router.use('/attempts', attemptRoutes);
+router.use('/goals', goalRoutes);
 
-// Register additional ERD entities here as they are built out, e.g.:
-// router.use('/users', userRoutes);
-// router.use('/attempts', attemptRoutes);
-// router.use('/routes', routeRoutes);
-// router.use('/grades', gradeRoutes);
-// router.use('/goals', goalRoutes);
+// Still to build out:
+// router.use('/users', userRoutes);            // ships with the auth layer
+// router.use('/performances', performanceRoutes); // AI-generated reports
+// router.use('/trainings', trainingRoutes);       // AI-generated reports
 
 export default router;
