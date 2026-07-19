@@ -4,6 +4,7 @@ import LogSession from "../pages/LogSession";
 import Progress from "../pages/Progress";
 import AICoach from "../pages/AICoach";
 import AppLayout from "../layouts/AppLayout";
+import Profile from "../pages/Profile";
 
 const AppRoutes = () => {
   return (
@@ -13,6 +14,7 @@ const AppRoutes = () => {
         <Route path="log-session" element={<LogSession />} />
         <Route path="progress" element={<Progress />} />
         <Route path="ai-coach" element={<AICoach />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>
   );
