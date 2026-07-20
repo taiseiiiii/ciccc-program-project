@@ -1,6 +1,9 @@
 import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { useTheme } from "../context/ThemeContext";
 import { CgProfile } from "react-icons/cg";
+import { FiSun } from "react-icons/fi";
+import { FiMoon } from "react-icons/fi";
 
 interface HeaderProps extends ComponentPropsWithoutRef<"div"> {
   children?: ReactNode;
@@ -11,6 +14,7 @@ export default function Header({
   className = "",
   ...props
 }: HeaderProps) {
+  const { theme, toggleTheme } = useTheme();
   const getSideNavLinkClass = ({ isActive }: { isActive: boolean }) => {
     const baseClass = "flex flex-row items-center px-3 gap-3 text-body-lg";
     const activeClass = "text-primary font-bold";
@@ -30,9 +34,17 @@ export default function Header({
         >
           ClimbLog AI
         </Link>
-        <NavLink to="/profile" className={getSideNavLinkClass}>
-          <CgProfile size={24} />
-        </NavLink>
+        <div className="flex flex-row items-center justify-centerj">
+          <button
+            className="text-body-lg text-on-surface-variant hover:text-primary"
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
+          </button>
+          <NavLink to="/profile" className={getSideNavLinkClass}>
+            <CgProfile size={24} />
+          </NavLink>
+        </div>
         {children}
       </div>
     </div>

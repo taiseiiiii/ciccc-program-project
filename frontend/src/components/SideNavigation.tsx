@@ -1,10 +1,13 @@
 import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { useTheme } from "../context/ThemeContext";
 import { LuLayoutDashboard } from "react-icons/lu";
 import { MdOutlineAddToPhotos } from "react-icons/md";
 import { BsGraphUpArrow } from "react-icons/bs";
 import { LuBotMessageSquare } from "react-icons/lu";
 import { CgProfile } from "react-icons/cg";
+import { FiSun } from "react-icons/fi";
+import { FiMoon } from "react-icons/fi";
 
 interface SideNavigationProps extends ComponentPropsWithoutRef<"div"> {
   children?: ReactNode;
@@ -15,6 +18,7 @@ export default function SideNavigation({
   className = "",
   ...props
 }: SideNavigationProps) {
+  const { theme, toggleTheme } = useTheme();
   const getSideNavLinkClass = ({ isActive }: { isActive: boolean }) => {
     const baseClass = "flex flex-row items-center px-3 gap-3 text-body-lg";
     const activeClass = "text-primary font-bold";
@@ -49,6 +53,13 @@ export default function SideNavigation({
       <NavLink to={"/profile"} className={getSideNavLinkClass}>
         <CgProfile size={24} /> Profile
       </NavLink>
+      <button
+        className="flex flex-row items-center px-3 gap-3 text-body-lg text-on-surface-variant hover:text-primary"
+        onClick={toggleTheme}
+      >
+        {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
+        Theme
+      </button>
       {children}
     </div>
   );
