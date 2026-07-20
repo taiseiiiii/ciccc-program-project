@@ -18,10 +18,10 @@ const Auth = () => {
           />
           <div className="absolute inset-0 bg-surface-container-lowest/60" />
           <div className="relative z-10 flex flex-col items-center justify-center text-center p-8">
-            <h1 className="text-on-surface text-headline-md font-bold">
+            <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
               Elevate your performance with data-driven insights.
             </h1>
-            <p className="text-on-surface-variant text-body-md mt-2">
+            <p className="text-on-surface-variant text-body-md mt-2 tracking-tight">
               Turn every attempt into valuable progress. <br />
               Visualize your strengths and focus areas. <br />
               Start sending your dream grades today.
@@ -57,7 +57,7 @@ const Auth = () => {
             ></Input>
             <Button type="submit">{isSignUp ? "Sign in →" : "Log in →"}</Button>
             <div className="flex flex-row gap-3">
-              <p className="text-label-sm md:text-label-md">
+              <p className="text-label-sm md:text-label-md tracking-tight">
                 {isSignUp
                   ? "Already have an account?"
                   : "Don't have an account?"}
