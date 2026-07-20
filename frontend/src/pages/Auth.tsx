@@ -39,22 +39,29 @@ const Auth = () => {
                 : "Log in to continue your training session."}
             </p>
             {isSignUp && (
-              <Input
-                type="text"
-                label="Username"
-                placeholder="Climbing lover"
-              ></Input>
+              <div className="flex gap-4">
+                <Input
+                  type="text"
+                  label="Firstname"
+                  placeholder="John"
+                  autoCapitalize="words"
+                  className="capitalize"
+                />
+                <Input
+                  type="text"
+                  label="Lastname"
+                  placeholder="Smith"
+                  autoCapitalize="words"
+                  className="capitalize"
+                />
+              </div>
             )}
             <Input
               type="email"
               label="Email address"
               placeholder="climbLogAI@email.com"
-            ></Input>
-            <Input
-              type="password"
-              label="Password"
-              placeholder="••••••••"
-            ></Input>
+            />
+            <Input type="password" label="Password" placeholder="••••••••" />
             <Button type="submit">{isSignUp ? "Sign in →" : "Log in →"}</Button>
             <div className="flex flex-row gap-3">
               <p className="text-label-sm md:text-label-md tracking-tight">
