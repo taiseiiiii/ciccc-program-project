@@ -15,7 +15,7 @@ export default function Input({ label, className = "", ...props }: InputProps) {
         </label>
       )}
       <input
-        className={`w-full px-4 py-2 rounded-lg text-body-md bg-surface border border-outline transition-colors duration-200 text-on-surface placeholder:text-outline-variant focus:border-primary focus:outline-none ${className}`}
+        className={`w-full px-4 py-2 rounded-lg text-body-md bg-surface border border-outline transition-colors duration-200 text-on-surface placeholder:text-outline-variant focus:border-primary focus:outline-none dark:scheme-dark ${className}`}
         id={id}
         {...props}
       />
