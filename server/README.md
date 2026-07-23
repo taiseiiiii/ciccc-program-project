@@ -69,17 +69,26 @@ copy the three `session.*` files and register the router in
 
 Base path: `/api/v1`
 
-| Method | Path             | Description                     |
-| ------ | ---------------- | ------------------------------- |
-| GET    | `/health`        | Liveness + DB connectivity      |
-| GET    | `/sessions`      | List sessions                   |
-| GET    | `/sessions/:id`  | Get one session                 |
-| POST   | `/sessions`      | Create session                  |
-| PATCH  | `/sessions/:id`  | Update session (partial)        |
-| DELETE | `/sessions/:id`  | Delete session                  |
+**Full API reference (Swagger UI): <http://localhost:4000/api/v1/docs>** — the
+source of truth is [`docs/openapi.yaml`](docs/openapi.yaml). The raw spec is
+also served at `/api/v1/openapi.yaml` for import into Postman/Insomnia or
+client codegen (e.g. `openapi-typescript`).
 
+| Method | Path                            | Description                     |
+| ------ | ------------------------------- | ------------------------------- |
+| GET    | `/health`                       | Liveness + DB connectivity      |
+| GET    | `/grades`, `/grades/:id`        | Grades (read-only, V0–V17)      |
+| CRUD   | `/sessions`, `/sessions/:id`    | Gym visits                      |
+| CRUD   | `/routes`, `/routes/:id`        | Climbing problems               |
+| CRUD   | `/attempts`, `/attempts/:id`    | Tries at a route (`?session_id=`) |
+| CRUD   | `/goals`, `/goals/:id`          | Target grades (`?user_id=`)     |
+
+CRUD = `GET` list, `POST`, `GET :id`, `PATCH :id` (partial), `DELETE :id`.
 Responses are JSON: success payloads are wrapped in `{ "data": ... }`, errors in
 `{ "error": { "message": ... } }`.
+
+> When you add or change an endpoint, update `docs/openapi.yaml` in the same PR
+> so the docs never drift from the code.
 
 ### Quick check
 
