@@ -1,13 +1,67 @@
 import { useState } from "react";
+import toast from "react-hot-toast";
+import type AttemptType from "../types/AttemptType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
+import Textarea from "../components/Textarea";
 
 const LogSession = () => {
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("sv-SE");
   const [visitDate, setVisitDate] = useState(today);
   const [gymName, setGymName] = useState("");
-  const [selectedGrade, setSelectedGrade] = useState("V3");
+  const [routeName, setRouteName] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState("V0");
+  const [climbersNote, setClimbersNote] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [attemptsList, setAttemptsList] = useState<AttemptType[]>([]);
+
+  const handleSaveAttempt = () => {
+    if (!routeName.trim()) {
+      toast.error("Route Name is empty");
+      return;
+    }
+
+    const newAttempt = {
+      id: Date.now(),
+      grade_name: selectedGrade,
+      is_success: isSuccess,
+      route_name: routeName,
+      note: climbersNote,
+    };
+    setAttemptsList([newAttempt, ...attemptsList]);
+
+    setRouteName("");
+    setClimbersNote("");
+    setIsSuccess(false);
+    setSelectedGrade("V0");
+    toast.success("Successfully saved");
+  };
+
+  const handleSaveSession = () => {
+    if (!gymName.trim()) {
+      toast.error("Not found Location");
+      return;
+    }
+
+    // mock data has to be sent here
+    const saveSessionList = {
+      visit_date: visitDate,
+      gym_name: gymName,
+      attempts: attemptsList,
+    };
+    console.log(saveSessionList);
+
+    setRouteName("");
+    setClimbersNote("");
+    setIsSuccess(false);
+    setSelectedGrade("V0");
+    setGymName("");
+    setVisitDate(today);
+    setAttemptsList([]);
+    toast.success("Successfully saved");
+  };
+
   const GRADES = [
     "V0",
     "V1",
@@ -30,53 +84,137 @@ const LogSession = () => {
   ];
 
   return (
-    <div>
-      <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-        New Performance Entry
-      </h1>
-      <p>
-        Log your latest sends and track your progress through technical
-        analytics.
-      </p>
-      <Card>
-        <Input
-          type="text"
-          label="Location"
-          placeholder="The hive"
-          value={gymName}
-          autoCapitalize="words"
-          className="capitalize"
-          onChange={(e) => setGymName(e.target.value)}
-        />
-        <Input
-          type="date"
-          label="Session Date"
-          value={visitDate}
-          onChange={(e) => setVisitDate(e.target.value)}
-        />
-      </Card>
-      <Card>
+    <div className="max-w-5xl mx-auto">
+      <div className="gap-3">
+        <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
+          New Performance Entry
+        </h1>
+        <p>
+          Log your latest sends and track your progress through technical
+          analytics.
+        </p>
+        <Card className="flex flex-col md:flex-row gap-3 mt-6">
+          <Input
+            type="text"
+            label="Location"
+            placeholder="The hive"
+            value={gymName}
+            autoCapitalize="words"
+            className="capitalize"
+            onChange={(e) => setGymName(e.target.value)}
+          />
+          <Input
+            type="date"
+            label="Session Date"
+            value={visitDate}
+            onChange={(e) => setVisitDate(e.target.value)}
+          />
+        </Card>
+        <Card className="mt-3 mb-3">
+          <Input
+            type="text"
+            label="Route Name"
+            placeholder="e.g. grade, color, inclination angle"
+            value={routeName}
+            onChange={(e) => setRouteName(e.target.value)}
+          />
+          <div className="mt-3">
+            <p className="text-label-md text-on-surface-variant mb-2">Result</p>
+            <Button
+              onClick={() => setIsSuccess(true)}
+              className={
+                isSuccess
+                  ? ""
+                  : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+              }
+            >
+              Sent
+            </Button>
+            <Button
+              onClick={() => setIsSuccess(false)}
+              className={
+                !isSuccess
+                  ? ""
+                  : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+              }
+            >
+              Attempted
+            </Button>
+          </div>
+          <div className="mt-3">
+            <p className="text-label-md text-on-surface-variant mb-2">
+              Grades (v-Score)
+            </p>
+            <div className="flex flex-row gap-2 overflow-x-auto py-2">
+              {GRADES.map((grade) => (
+                <Button
+                  key={grade}
+                  onClick={() => setSelectedGrade(grade)}
+                  className={
+                    selectedGrade === grade
+                      ? ""
+                      : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+                  }
+                >
+                  {grade}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </Card>
         <div>
-          <p className="text-label-md text-on-surface-variant mb-2">
-            Grades (v-Score)
-          </p>
-          <div className="flex flex-row gap-2 overflow-x-auto py-2">
-            {GRADES.map((grade) => (
-              <Button
-                key={grade}
-                onClick={() => setSelectedGrade(grade)}
-                className={
-                  selectedGrade === grade
-                    ? ""
-                    : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-                }
+          <Card className="w-full">
+            <Textarea
+              label="Climber's Note"
+              placeholder="Describe the feeling, specific bata used or the reason for failure ..."
+              className="min-h-30"
+              value={climbersNote}
+              onChange={(e) => setClimbersNote(e.target.value)}
+            />
+          </Card>
+        </div>
+        <div className="flex justify-end">
+          <Button className="mt-3" onClick={() => handleSaveAttempt()}>
+            Save Attempt
+          </Button>
+        </div>
+      </div>
+
+      {attemptsList.length > 0 && (
+        <div className="mt-6">
+          <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
+            Attempted List
+          </h1>
+          <div className="flex flex-col gap-3 mt-3">
+            {attemptsList.map((attempt) => (
+              <Card
+                key={attempt.id}
+                className="p-4 flex flex-row items-center justify-between"
               >
-                {grade}
-              </Button>
+                <div className="flex flex-row gap-3">
+                  <span
+                    className={
+                      attempt.is_success
+                        ? "text-primary bg-primary/10 font-bold px-2.5 py-1 rounded-full text-xs"
+                        : "text-tertiary bg-surface-container-high px-2.5 py-1 rounded-full text-xs"
+                    }
+                  >
+                    {attempt.is_success ? "Sent" : "Attempted"}
+                  </span>
+                  <p className="font-bold">{attempt.grade_name}</p>
+                  <p> - {attempt.route_name}</p>
+                </div>
+                <Button variant="secondary">Edit</Button>
+              </Card>
             ))}
           </div>
+          <div className="flex justify-end">
+            <Button className="mt-3" onClick={() => handleSaveSession()}>
+              Save Session
+            </Button>
+          </div>
         </div>
-      </Card>
+      )}
     </div>
   );
 };
