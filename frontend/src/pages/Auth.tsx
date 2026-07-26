@@ -1,11 +1,44 @@
 import Card from "../components/Card";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import RockWall from "../assets/rock-wall.jpg";
 
 const Auth = () => {
+  const navigate = useNavigate();
+  const { signUp, signIn } = useAuth();
+
   const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    let result: { error: string | null };
+
+    if (isSignUp) {
+      result = await signUp({ email, password, firstName, lastName });
+    } else {
+      result = await signIn({ email, password });
+    }
+
+    if (result.error) {
+      setErrorMessage(result.error);
+      setIsSubmitting(false);
+    } else {
+      navigate("/");
+    }
+  };
 
   return (
     <div className="h-screen w-screen bg-background flex items-center justify-center">
@@ -29,7 +62,10 @@ const Auth = () => {
           </div>
         </div>
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center">
-          <div className="w-full max-w-sm flex flex-col gap-4 p-8">
+          <form
+            onSubmit={handleSubmit}
+            className="w-full max-w-sm flex flex-col gap-4 p-8"
+          >
             <h1 className="text-headline-md">
               {isSignUp ? "Sign up" : "Welcome back"}
             </h1>
@@ -38,12 +74,19 @@ const Auth = () => {
                 ? "Create your account!"
                 : "Log in to continue your training session."}
             </p>
+            {errorMessage && (
+              <div className="p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                {errorMessage}
+              </div>
+            )}
             {isSignUp && (
               <div className="flex gap-4">
                 <Input
                   type="text"
                   label="Firstname"
                   placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                   autoCapitalize="words"
                   className="capitalize"
                 />
@@ -51,6 +94,8 @@ const Auth = () => {
                   type="text"
                   label="Lastname"
                   placeholder="Smith"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                   autoCapitalize="words"
                   className="capitalize"
                 />
@@ -60,9 +105,27 @@ const Auth = () => {
               type="email"
               label="Email address"
               placeholder="climbLogAI@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-            <Input type="password" label="Password" placeholder="••••••••" />
-            <Button type="submit">{isSignUp ? "Sign in →" : "Log in →"}</Button>
+            <Input
+              type="password"
+              label="Password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className={isSubmitting ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              {isSubmitting
+                ? "Loading..."
+                : isSignUp
+                  ? "Sign up →"
+                  : "Log in →"}
+            </Button>
             <div className="flex flex-row gap-3">
               <p className="text-label-sm md:text-label-md tracking-tight">
                 {isSignUp
@@ -77,7 +140,7 @@ const Auth = () => {
                 {isSignUp ? "Log in" : "Create account"}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       </Card>
     </div>
