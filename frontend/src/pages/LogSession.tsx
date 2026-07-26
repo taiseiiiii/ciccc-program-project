@@ -8,13 +8,24 @@ import Textarea from "../components/Textarea";
 
 const LogSession = () => {
   const today = new Date().toLocaleDateString("sv-SE");
-  const [visitDate, setVisitDate] = useState(today);
-  const [gymName, setGymName] = useState("");
-  const [routeName, setRouteName] = useState("");
-  const [selectedGrade, setSelectedGrade] = useState("V0");
-  const [climbersNote, setClimbersNote] = useState("");
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [visitDate, setVisitDate] = useState<string>(today);
+  const [gymName, setGymName] = useState<string>("");
+  const [routeName, setRouteName] = useState<string>("");
+  const [selectedGrade, setSelectedGrade] = useState<string>("V0");
+  const [climbersNote, setClimbersNote] = useState<string>("");
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [attemptsList, setAttemptsList] = useState<AttemptType[]>([]);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [editingAttempt, setEditingAttempt] = useState<null | AttemptType>(
+    null,
+  );
+
+  const resetAttemptForm = () => {
+    setRouteName("");
+    setClimbersNote("");
+    setIsSuccess(false);
+    setSelectedGrade("V0");
+  };
 
   const handleSaveAttempt = () => {
     if (!routeName.trim()) {
@@ -31,11 +42,30 @@ const LogSession = () => {
     };
     setAttemptsList([newAttempt, ...attemptsList]);
 
-    setRouteName("");
-    setClimbersNote("");
-    setIsSuccess(false);
-    setSelectedGrade("V0");
+    resetAttemptForm();
     toast.success("Successfully saved");
+  };
+
+  const handleEditAttempt = (attempt: AttemptType) => {
+    setIsEditModalOpen(true);
+    setEditingAttempt(attempt);
+  };
+
+  const updateEditingField = (field: keyof AttemptType, value: any) => {
+    if (!editingAttempt) return;
+    setEditingAttempt({ ...editingAttempt, [field]: value });
+  };
+
+  const handleUpdateAttempt = () => {
+    if (!editingAttempt) return;
+    const updatedList = attemptsList.map((attempt) =>
+      attempt.id === editingAttempt.id ? editingAttempt : attempt,
+    );
+
+    setAttemptsList(updatedList);
+    setEditingAttempt(null);
+    setIsEditModalOpen(false);
+    toast.success("Attempt Updated!");
   };
 
   const handleSaveSession = () => {
@@ -44,7 +74,7 @@ const LogSession = () => {
       return;
     }
 
-    // mock data has to be sent here
+    // mock data will be here
     const saveSessionList = {
       visit_date: visitDate,
       gym_name: gymName,
@@ -52,14 +82,21 @@ const LogSession = () => {
     };
     console.log(saveSessionList);
 
-    setRouteName("");
-    setClimbersNote("");
-    setIsSuccess(false);
-    setSelectedGrade("V0");
+    resetAttemptForm();
     setGymName("");
     setVisitDate(today);
     setAttemptsList([]);
     toast.success("Successfully saved");
+  };
+
+  const handleDeleteAttempt = () => {
+    const filteredAttempt = attemptsList.filter(
+      (attempt) => attempt.id !== editingAttempt?.id,
+    );
+
+    setAttemptsList(filteredAttempt);
+    setIsEditModalOpen(false);
+    toast.success("Attempt Deleted");
   };
 
   const GRADES = [
@@ -204,7 +241,12 @@ const LogSession = () => {
                   <p className="font-bold">{attempt.grade_name}</p>
                   <p> - {attempt.route_name}</p>
                 </div>
-                <Button variant="secondary">Edit</Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleEditAttempt(attempt)}
+                >
+                  Edit
+                </Button>
               </Card>
             ))}
           </div>
@@ -212,6 +254,107 @@ const LogSession = () => {
             <Button className="mt-3" onClick={() => handleSaveSession()}>
               Save Session
             </Button>
+          </div>
+        </div>
+      )}
+
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="p-4 gap-3 overflow-y-auto w-full  max-w-lg mx-auto bg-surface max-h-[90vh]">
+            <Card className="mt-3 mb-3">
+              <h1 className="text-on-surface text-headline-md font-bold tracking-tight mb-5">
+                Edit
+              </h1>
+              <Input
+                type="text"
+                label="Route Name"
+                placeholder="e.g. grade, color, inclination angle"
+                value={editingAttempt?.route_name}
+                onChange={(e) =>
+                  updateEditingField("route_name", e.target.value)
+                }
+              />
+              <div className="mt-3">
+                <p className="text-label-md text-on-surface-variant mb-2">
+                  Result
+                </p>
+                <Button
+                  onClick={() => updateEditingField("is_success", true)}
+                  className={
+                    editingAttempt?.is_success
+                      ? ""
+                      : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+                  }
+                >
+                  Sent
+                </Button>
+                <Button
+                  onClick={() => updateEditingField("is_success", false)}
+                  className={
+                    editingAttempt?.is_success === false
+                      ? ""
+                      : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+                  }
+                >
+                  Attempted
+                </Button>
+              </div>
+              <div className="mt-3">
+                <p className="text-label-md text-on-surface-variant mb-2">
+                  Grades (v-Score)
+                </p>
+                <div className="flex flex-row gap-2 overflow-x-auto py-2">
+                  {GRADES.map((grade) => (
+                    <Button
+                      key={grade}
+                      onClick={() => updateEditingField("grade_name", grade)}
+                      className={
+                        editingAttempt?.grade_name === grade
+                          ? ""
+                          : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+                      }
+                    >
+                      {grade}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </Card>
+            <div>
+              <Card className="">
+                <Textarea
+                  label="Climber's Note"
+                  placeholder="Describe the feeling, specific bata used or the reason for failure ..."
+                  className="min-h-30"
+                  value={editingAttempt?.note}
+                  onChange={(e) => updateEditingField("note", e.target.value)}
+                />
+              </Card>
+            </div>
+            <div className="flex gap-3 justify-between">
+              <Button
+                variant="error"
+                className="mt-3"
+                onClick={() => handleDeleteAttempt()}
+              >
+                Delete
+              </Button>
+              <div className="mt-3 flex gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsEditModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={() => handleUpdateAttempt()}>Save</Button>
+                {/* <Button
+                  variant="secondary"
+                  onClick={() => setIsEditModalOpen(false)}
+                >
+                  Cancel
+                </Button> */}
+              </div>
+            </div>
           </div>
         </div>
       )}
