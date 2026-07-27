@@ -1,6 +1,7 @@
 import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import SignoutButton from "./SignoutButton";
 import { LuLayoutDashboard } from "react-icons/lu";
 import { MdOutlineAddToPhotos } from "react-icons/md";
 import { BsGraphUpArrow } from "react-icons/bs";
@@ -53,13 +54,21 @@ export default function SideNavigation({
       <NavLink to={"/profile"} className={getSideNavLinkClass}>
         <CgProfile size={24} /> Profile
       </NavLink>
-      <button
-        className="flex flex-row items-center px-3 gap-3 text-body-lg text-on-surface-variant hover:text-primary"
-        onClick={toggleTheme}
-      >
-        {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
-        Theme
-      </button>
+      <div className="mt-auto">
+        <button
+          className="flex flex-row items-center px-3 gap-3 text-body-lg text-on-surface-variant hover:text-primary"
+          onClick={toggleTheme}
+        >
+          {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
+          Theme
+        </button>
+        <SignoutButton
+          variant="error"
+          className="flex items-center mt-8 mx-3 px-3 gap-3 hover:text-error"
+        >
+          Sign Out
+        </SignoutButton>
+      </div>
       {children}
     </div>
   );
