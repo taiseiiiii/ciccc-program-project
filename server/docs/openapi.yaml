@@ -1,0 +1,869 @@
+openapi: 3.0.3
+
+info:
+  title: Climb App API
+  version: 0.1.0
+  description: |
+    Backend API for the climbing (bouldering) log app.
+
+    ## Conventions
+    - Success payloads are wrapped in `{ "data": ... }`.
+    - Errors are wrapped in `{ "error": { "message": "...", "details": ... } }`.
+    - `DATE` columns (`visit_date`, `target_date`) are plain `YYYY-MM-DD` strings.
+    - `TIMESTAMPTZ` columns (`created_at`, `updated_at`, `achieved_at`) are ISO 8601 date-time strings.
+    - All `PATCH` endpoints accept partial bodies: omitted fields are left untouched.
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local development
+
+tags:
+  - name: Health
+    description: Liveness and database connectivity
+  - name: Sessions
+    description: Gym visits. A session groups the attempts made on one visit.
+  - name: Grades
+    description: Read-only master data — the V0–V17 bouldering scale (created by the seed).
+  - name: Routes
+    description: Climbing problems, each tied to a grade.
+  - name: Attempts
+    description: One try at a route within a session.
+  - name: Goals
+    description: A user's target grade, with optional deadline.
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Reports server liveness and database connectivity.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Server and database are up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                db: up
+        '503':
+          description: Server is up but the database is unreachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                db: down
+
+  /sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions
+      description: Ordered by `visit_date` descending, then `session_id` descending.
+      operationId: listSessions
+      responses:
+        '200':
+          description: All sessions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+    post:
+      tags: [Sessions]
+      summary: Create a session
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreate'
+            example:
+              user_id: 1
+              visit_date: '2026-07-07'
+              gym_name: The Hive
+      responses:
+        '201':
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Sessions]
+      summary: Get a session
+      operationId: getSession
+      responses:
+        '200':
+          description: The session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Sessions]
+      summary: Update a session (partial)
+      operationId: updateSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionUpdate'
+      responses:
+        '200':
+          description: The updated session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Sessions]
+      summary: Delete a session
+      description: Also deletes its attempts (`ON DELETE CASCADE`).
+      operationId: deleteSession
+      responses:
+        '204':
+          description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /grades:
+    get:
+      tags: [Grades]
+      summary: List grades
+      description: The V0–V17 scale, seeded once. Read-only.
+      operationId: listGrades
+      responses:
+        '200':
+          description: All grades.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Grade'
+
+  /grades/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Grades]
+      summary: Get a grade
+      operationId: getGrade
+      responses:
+        '200':
+          description: The grade.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Grade'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /routes:
+    get:
+      tags: [Routes]
+      summary: List routes
+      operationId: listRoutes
+      responses:
+        '200':
+          description: All routes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Route'
+    post:
+      tags: [Routes]
+      summary: Create a route
+      description: '`grade_id` must reference an existing grade.'
+      operationId: createRoute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteCreate'
+            example:
+              grade_id: 3
+              route_name: Yellow slab by the door
+      responses:
+        '201':
+          description: Route created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Route'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /routes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Routes]
+      summary: Get a route
+      operationId: getRoute
+      responses:
+        '200':
+          description: The route.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Route'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Routes]
+      summary: Update a route (partial)
+      operationId: updateRoute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteUpdate'
+      responses:
+        '200':
+          description: The updated route.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Route'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Routes]
+      summary: Delete a route
+      description: Fails while any attempt still references the route (`ON DELETE RESTRICT`).
+      operationId: deleteRoute
+      responses:
+        '204':
+          description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /attempts:
+    get:
+      tags: [Attempts]
+      summary: List attempts
+      operationId: listAttempts
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          description: Only return attempts belonging to this session.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: All attempts (optionally filtered by session).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attempt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Attempts]
+      summary: Create an attempt
+      description: '`session_id` and `route_id` must reference existing rows.'
+      operationId: createAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttemptCreate'
+            example:
+              session_id: 1
+              route_id: 2
+              is_success: true
+              note: Flashed it!
+      responses:
+        '201':
+          description: Attempt created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Attempt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /attempts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Attempts]
+      summary: Get an attempt
+      operationId: getAttempt
+      responses:
+        '200':
+          description: The attempt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Attempt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Attempts]
+      summary: Update an attempt (partial)
+      operationId: updateAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttemptUpdate'
+      responses:
+        '200':
+          description: The updated attempt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Attempt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Attempts]
+      summary: Delete an attempt
+      operationId: deleteAttempt
+      responses:
+        '204':
+          description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /goals:
+    get:
+      tags: [Goals]
+      summary: List goals
+      operationId: listGoals
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          description: Only return goals belonging to this user.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: All goals (optionally filtered by user).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Goal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Goals]
+      summary: Create a goal
+      description: '`user_id` and `grade_id` must reference existing rows.'
+      operationId: createGoal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalCreate'
+            example:
+              user_id: 1
+              grade_id: 5
+              goal_description: Send my first V4 before the season ends
+              target_date: '2026-09-30'
+      responses:
+        '201':
+          description: Goal created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Goal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /goals/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Goals]
+      summary: Get a goal
+      operationId: getGoal
+      responses:
+        '200':
+          description: The goal.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Goal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Goals]
+      summary: Update a goal (partial)
+      description: >-
+        `achieved_at` is derived from `is_achieved` and cannot be set directly:
+        it is stamped with the current time when `is_achieved` flips to `true`
+        and cleared when it flips back to `false`.
+      operationId: updateGoal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalUpdate'
+      responses:
+        '200':
+          description: The updated goal.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Goal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Goals]
+      summary: Delete a goal
+      operationId: deleteGoal
+      responses:
+        '204':
+          description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      description: Positive integer ID of the resource.
+      schema:
+        type: integer
+        minimum: 1
+
+  responses:
+    BadRequest:
+      description: Invalid request — malformed ID, missing required field, or wrong field type.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: 'user_id is required and must be a positive integer'
+    NotFound:
+      description: No resource with the given ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: 'Session 42 not found'
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message]
+          properties:
+            message:
+              type: string
+            details:
+              description: Optional extra context. Usually absent.
+
+    Health:
+      type: object
+      required: [status, db]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        db:
+          type: string
+          enum: [up, down]
+
+    Session:
+      type: object
+      description: A gym visit.
+      required: [session_id, user_id, visit_date, gym_name, created_at, updated_at]
+      properties:
+        session_id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        visit_date:
+          type: string
+          format: date
+          example: '2026-07-07'
+        gym_name:
+          type: string
+          nullable: true
+          maxLength: 150
+          example: The Hive
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SessionCreate:
+      type: object
+      required: [user_id, visit_date]
+      properties:
+        user_id:
+          type: integer
+          minimum: 1
+        visit_date:
+          type: string
+          format: date
+          description: 'Must match `YYYY-MM-DD`.'
+        gym_name:
+          type: string
+          nullable: true
+          maxLength: 150
+
+    SessionUpdate:
+      type: object
+      properties:
+        visit_date:
+          type: string
+          format: date
+          description: 'Must match `YYYY-MM-DD`.'
+        gym_name:
+          type: string
+          nullable: true
+          maxLength: 150
+
+    Grade:
+      type: object
+      description: One step of the V0–V17 bouldering scale.
+      required: [grade_id, grade_name, level, created_at, updated_at]
+      properties:
+        grade_id:
+          type: integer
+          example: 1
+        grade_name:
+          type: string
+          maxLength: 20
+          example: V0
+        level:
+          type: integer
+          minimum: 0
+          maximum: 17
+          description: Unique ordering value, 0–17.
+          example: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Route:
+      type: object
+      description: A climbing problem tied to a grade.
+      required: [route_id, grade_id, route_name, created_at, updated_at]
+      properties:
+        route_id:
+          type: integer
+          example: 2
+        grade_id:
+          type: integer
+          example: 3
+        route_name:
+          type: string
+          nullable: true
+          maxLength: 150
+          example: Yellow slab by the door
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RouteCreate:
+      type: object
+      required: [grade_id]
+      properties:
+        grade_id:
+          type: integer
+          minimum: 1
+        route_name:
+          type: string
+          nullable: true
+          maxLength: 150
+
+    RouteUpdate:
+      type: object
+      properties:
+        grade_id:
+          type: integer
+          minimum: 1
+        route_name:
+          type: string
+          nullable: true
+          maxLength: 150
+
+    Attempt:
+      type: object
+      description: One try at a route within a session.
+      required: [attempt_id, session_id, route_id, is_success, note, created_at, updated_at]
+      properties:
+        attempt_id:
+          type: integer
+          example: 10
+        session_id:
+          type: integer
+          example: 1
+        route_id:
+          type: integer
+          example: 2
+        is_success:
+          type: boolean
+          example: true
+        note:
+          type: string
+          nullable: true
+          example: Flashed it!
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AttemptCreate:
+      type: object
+      required: [session_id, route_id]
+      properties:
+        session_id:
+          type: integer
+          minimum: 1
+        route_id:
+          type: integer
+          minimum: 1
+        is_success:
+          type: boolean
+          default: false
+        note:
+          type: string
+          nullable: true
+
+    AttemptUpdate:
+      type: object
+      properties:
+        route_id:
+          type: integer
+          minimum: 1
+        is_success:
+          type: boolean
+        note:
+          type: string
+          nullable: true
+
+    Goal:
+      type: object
+      description: A user's target grade.
+      required:
+        [goal_id, user_id, grade_id, goal_description, is_achieved, achieved_at, target_date, created_at, updated_at]
+      properties:
+        goal_id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        grade_id:
+          type: integer
+          example: 5
+        goal_description:
+          type: string
+          nullable: true
+          example: Send my first V4 before the season ends
+        is_achieved:
+          type: boolean
+          example: false
+        achieved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set automatically when `is_achieved` flips to `true`; `null` otherwise.
+        target_date:
+          type: string
+          format: date
+          nullable: true
+          example: '2026-09-30'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    GoalCreate:
+      type: object
+      required: [user_id, grade_id]
+      properties:
+        user_id:
+          type: integer
+          minimum: 1
+        grade_id:
+          type: integer
+          minimum: 1
+        goal_description:
+          type: string
+          nullable: true
+        target_date:
+          type: string
+          format: date
+          nullable: true
+          description: 'Optional deadline. Must match `YYYY-MM-DD`.'
+
+    GoalUpdate:
+      type: object
+      properties:
+        grade_id:
+          type: integer
+          minimum: 1
+        goal_description:
+          type: string
+          nullable: true
+        is_achieved:
+          type: boolean
+        target_date:
+          type: string
+          format: date
+          nullable: true
+          description: 'Must match `YYYY-MM-DD`.'
