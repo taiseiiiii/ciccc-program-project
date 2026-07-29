@@ -30,10 +30,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- USER --------------------------------------------------------------------------
+-- Authentication is delegated to Supabase Auth: auth_user_id stores the
+-- Supabase user id (JWT `sub`) and rows are provisioned on first authenticated
+-- request. No credentials are stored here.
 CREATE TABLE users (
   user_id       SERIAL PRIMARY KEY,
+  auth_user_id  UUID NOT NULL UNIQUE,
   email         VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
   first_name    VARCHAR(100),
   last_name     VARCHAR(100),
   status        VARCHAR(20) NOT NULL DEFAULT 'active'

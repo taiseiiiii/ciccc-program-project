@@ -15,27 +15,21 @@ function parseId(raw: string): number {
 
 /**
  * HTTP layer for goals. Keeps validation + status codes here and delegates all
- * persistence to the repository.
+ * persistence to the repository. All routes sit behind requireAuth, so
+ * req.user is always set; the owner is taken from the token, never the body.
+ * A row owned by someone else is indistinguishable from a missing one (404).
  */
 export const goalController = {
-  // GET /api/v1/goals        (optionally ?user_id=123)
+  // GET /api/v1/goals
   async list(req: Request, res: Response): Promise<void> {
-    let userId: number | undefined;
-    const raw = req.query.user_id;
-    if (raw !== undefined) {
-      userId = Number(raw);
-      if (!Number.isInteger(userId) || userId <= 0) {
-        throw HttpError.badRequest('user_id query param must be a positive integer');
-      }
-    }
-    const goals = await goalRepository.findAll(userId);
+    const goals = await goalRepository.findAll(req.user!.user_id);
     res.json({ data: goals });
   },
 
   // GET /api/v1/goals/:id
   async get(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
-    const goal = await goalRepository.findById(id);
+    const goal = await goalRepository.findById(id, req.user!.user_id);
     if (!goal) {
       throw HttpError.notFound(`Goal ${id} not found`);
     }
@@ -44,11 +38,8 @@ export const goalController = {
 
   // POST /api/v1/goals
   async create(req: Request, res: Response): Promise<void> {
-    const { user_id, grade_id, goal_description, target_date } = req.body ?? {};
+    const { grade_id, goal_description, target_date } = req.body ?? {};
 
-    if (!Number.isInteger(user_id) || user_id <= 0) {
-      throw HttpError.badRequest('user_id is required and must be a positive integer');
-    }
     if (!Number.isInteger(grade_id) || grade_id <= 0) {
       throw HttpError.badRequest('grade_id is required and must be a positive integer');
     }
@@ -59,7 +50,12 @@ export const goalController = {
       throw HttpError.badRequest('target_date must be a YYYY-MM-DD date');
     }
 
-    const goal = await goalRepository.create({ user_id, grade_id, goal_description, target_date });
+    const goal = await goalRepository.create({
+      user_id: req.user!.user_id,
+      grade_id,
+      goal_description,
+      target_date,
+    });
     res.status(201).json({ data: goal });
   },
 
@@ -81,7 +77,12 @@ export const goalController = {
       throw HttpError.badRequest('target_date must be a YYYY-MM-DD date');
     }
 
-    const goal = await goalRepository.update(id, { grade_id, goal_description, is_achieved, target_date });
+    const goal = await goalRepository.update(id, req.user!.user_id, {
+      grade_id,
+      goal_description,
+      is_achieved,
+      target_date,
+    });
     if (!goal) {
       throw HttpError.notFound(`Goal ${id} not found`);
     }
@@ -91,7 +92,7 @@ export const goalController = {
   // DELETE /api/v1/goals/:id
   async remove(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
-    const deleted = await goalRepository.remove(id);
+    const deleted = await goalRepository.remove(id, req.user!.user_id);
     if (!deleted) {
       throw HttpError.notFound(`Goal ${id} not found`);
     }

@@ -24,19 +24,25 @@ export interface UpdateSessionInput {
 /**
  * Data-access layer for sessions. Every SQL statement here is parameterized
  * ($1, $2, ...) so values are never concatenated into the query string.
+ *
+ * All reads/writes are scoped to a user_id (taken from the verified token by
+ * the controller) so one user can never see or touch another user's rows.
  */
 export const sessionRepository = {
-  async findAll(): Promise<Session[]> {
+  async findAll(userId: number): Promise<Session[]> {
     const { rows } = await query<Session>(
-      `SELECT * FROM sessions ORDER BY visit_date DESC, session_id DESC`,
+      `SELECT * FROM sessions
+       WHERE user_id = $1
+       ORDER BY visit_date DESC, session_id DESC`,
+      [userId],
     );
     return rows;
   },
 
-  async findById(id: number): Promise<Session | null> {
+  async findById(id: number, userId: number): Promise<Session | null> {
     const { rows } = await query<Session>(
-      `SELECT * FROM sessions WHERE session_id = $1`,
-      [id],
+      `SELECT * FROM sessions WHERE session_id = $1 AND user_id = $2`,
+      [id, userId],
     );
     return rows[0] ?? null;
   },
@@ -55,7 +61,7 @@ export const sessionRepository = {
    * Partial update. Builds the SET clause only from the fields provided so a
    * missing field is left untouched (rather than overwritten with NULL).
    */
-  async update(id: number, input: UpdateSessionInput): Promise<Session | null> {
+  async update(id: number, userId: number, input: UpdateSessionInput): Promise<Session | null> {
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -69,21 +75,26 @@ export const sessionRepository = {
     }
 
     if (fields.length === 0) {
-      return this.findById(id);
+      return this.findById(id, userId);
     }
 
     values.push(id);
+    const idIdx = values.length;
+    values.push(userId);
+    const userIdx = values.length;
     const { rows } = await query<Session>(
-      `UPDATE sessions SET ${fields.join(', ')} WHERE session_id = $${values.length} RETURNING *`,
+      `UPDATE sessions SET ${fields.join(', ')}
+       WHERE session_id = $${idIdx} AND user_id = $${userIdx}
+       RETURNING *`,
       values,
     );
     return rows[0] ?? null;
   },
 
-  async remove(id: number): Promise<boolean> {
+  async remove(id: number, userId: number): Promise<boolean> {
     const { rowCount } = await query(
-      `DELETE FROM sessions WHERE session_id = $1`,
-      [id],
+      `DELETE FROM sessions WHERE session_id = $1 AND user_id = $2`,
+      [id, userId],
     );
     return (rowCount ?? 0) > 0;
   },

@@ -6,12 +6,14 @@
 --   * one demo user (so sessions have an owner)
 --   * the V0–V17 grade scale
 --   * a couple of routes
--- password_hash is a placeholder — real hashing belongs in the auth layer.
+-- The demo user's auth_user_id is a fixed placeholder UUID; it does not match
+-- any real Supabase user, so its data is only reachable via direct SQL. Real
+-- users get their own row on first authenticated request (JIT provisioning).
 -- =============================================================================
 
 -- Demo user ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, first_name, last_name)
-VALUES ('demo@climb.app', 'placeholder-not-a-real-hash', 'Demo', 'Climber')
+INSERT INTO users (auth_user_id, email, first_name, last_name)
+VALUES ('00000000-0000-0000-0000-000000000001', 'demo@climb.app', 'Demo', 'Climber')
 ON CONFLICT (email) DO NOTHING;
 
 -- Grade scale V0–V17 ------------------------------------------------------------
