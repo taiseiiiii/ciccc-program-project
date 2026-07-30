@@ -1,1 +1,20 @@
 .DS_Store
+
+# Secrets. Matched at any depth on purpose: server/ and frontend/ already ignore
+# their own env files, and this makes a new directory safe by default rather
+# than only after someone remembers to add a .gitignore to it. This repository
+# is public — a committed secret is a leaked secret.
+.env
+.env.*
+!.env.example
+*.local
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
