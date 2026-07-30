@@ -5,8 +5,8 @@ Backend API for the climbing (bouldering) log app.
 
 This is the minimal foundation: server bootstrap, a shared DB pool, a health
 check, and a full CRUD slice for `sessions` that serves as the pattern to copy
-for the other ERD entities. The full schema for all 8 entities lives in
-[`db/schema.sql`](db/schema.sql).
+for the other ERD entities. The schema for all 8 entities is built up by the
+migrations in [`db/migrations/`](db/migrations).
 
 ## Prerequisites
 
@@ -24,13 +24,63 @@ cp .env.example .env        # then set DATABASE_URL and SUPABASE_URL
 # create the database (once)
 createdb climb_app
 
-# apply schema + seed data
-pnpm db:reset               # = db:schema then db:seed
+# apply migrations + development seed data
+pnpm db:migrate
+pnpm db:seed
 ```
 
-> `db:schema` / `db:seed` read `DATABASE_URL` from your shell. If you keep it in
-> `.env`, export it first: `export $(grep -v '^#' .env | xargs)` — or pass the
-> connection string inline.
+All `db:*` commands read `DATABASE_URL` from `.env` themselves — no shell
+exporting, and `psql` is not required.
+
+## Database migrations
+
+Schema changes are forward-only SQL files in [`db/migrations/`](db/migrations),
+applied in filename order and recorded in the `schema_migrations` table.
+
+```bash
+pnpm db:migrate     # apply everything pending
+pnpm db:status      # what is applied / pending
+pnpm db:seed        # LOCAL ONLY: load db/seed.sql (development fixtures)
+pnpm db:reset       # LOCAL ONLY: drop everything, re-migrate, re-seed
+```
+
+**Reference data vs fixtures.** Anything the app cannot run without is a
+migration, not a seed: the V0–V17 grade scale lives in
+`0003_grades_master_data.sql` because `routes.grade_id` and `goals.grade_id` are
+NOT NULL foreign keys. `db/seed.sql` holds only throwaway sample data (a demo
+user with a placeholder `auth_user_id`, a few routes, one session), which is why
+`db:seed` refuses non-local hosts. A production database is **migrated and never
+seeded** — and still has its grades.
+
+Rules that keep environments in sync:
+
+- **Never edit an applied migration.** Each is checksummed, and `db:migrate`
+  aborts if a recorded file changed. Add a new numbered file instead.
+- **Never put `DROP` in a migration** unless dropping is genuinely the intent —
+  migrations run against live production data. The destructive teardown lives
+  separately in [`db/reset.sql`](db/reset.sql).
+- `db:reset` and `db:seed` refuse any host other than localhost (override:
+  `--force`), so pointing `DATABASE_URL` at production cannot wipe it or fill it
+  with fixtures by accident. `db:migrate` has no such guard — migrating a remote
+  database is the deploy step.
+- Each migration runs in its own transaction, so a failure rolls back cleanly.
+  Statements that cannot run in a transaction (e.g. `CREATE INDEX
+  CONCURRENTLY`) need a different approach.
+
+In production, migrate with the compiled runner as a deploy step, before the
+new server version starts:
+
+```bash
+pnpm build && pnpm db:migrate:prod
+```
+
+`0002_lock_down_data_api.sql` exists because this database may be hosted on
+Supabase: it revokes the `anon`/`authenticated` privileges that Supabase's Data
+API would otherwise use and enables RLS with no policies, so nothing reaches
+these tables except this server. It is a no-op on a plain Postgres. The server
+connects as the tables' owner, and owners are exempt from RLS — which is why no
+policies are needed. Do not add `FORCE ROW LEVEL SECURITY`, and if the server is
+ever switched to a non-owner role, give that role `BYPASSRLS`.
 
 ## Run
 
@@ -47,13 +97,16 @@ Server defaults to <http://localhost:4000>.
 ```
 server/
 ├── db/
-│   ├── schema.sql          # all 8 ERD tables + updated_at trigger
+│   ├── migrations/         # forward-only schema history, applied in order
+│   ├── reset.sql           # local teardown (destructive, not a migration)
 │   └── seed.sql            # demo user, V0–V17 grades, sample routes/session
 └── src/
     ├── index.ts            # entrypoint: listen + graceful shutdown
     ├── app.ts              # express app: middleware + routes wiring
     ├── config/env.ts       # env loading/validation
     ├── db/pool.ts          # pg Pool, query(), pingDatabase()
+    ├── db/ssl.ts           # TLS settings for the DB connection
+    ├── db/migrate.ts       # migration runner (db:migrate / db:status / ...)
     ├── middleware/         # 404 + central error handler
     ├── routes/             # /api/v1 router + per-entity routers
     ├── controllers/        # HTTP layer: validation + status codes

@@ -13,9 +13,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "db:schema": "psql \"$DATABASE_URL\" -f db/schema.sql",
-    "db:seed": "psql \"$DATABASE_URL\" -f db/seed.sql",
-    "db:reset": "pnpm db:schema && pnpm db:seed"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:status": "tsx src/db/migrate.ts status",
+    "db:seed": "tsx src/db/migrate.ts seed",
+    "db:reset": "tsx src/db/migrate.ts reset && tsx src/db/migrate.ts seed",
+    "db:migrate:prod": "node dist/db/migrate.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

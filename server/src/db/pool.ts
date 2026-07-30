@@ -1,5 +1,6 @@
 import { Pool, types, type QueryResult, type QueryResultRow } from 'pg';
 import { env } from '../config/env';
+import { resolveSsl } from './ssl';
 
 // Return SQL DATE (type OID 1082) as a plain 'YYYY-MM-DD' string rather than a
 // JS Date. Parsing to Date applies the server's timezone and can shift the day
@@ -13,6 +14,8 @@ types.setTypeParser(1082, (value) => value);
  */
 export const pool = new Pool({
   connectionString: env.databaseUrl,
+  // Off for localhost, verified TLS for hosted databases. See ./ssl.ts.
+  ssl: resolveSsl(env.databaseUrl),
 });
 
 pool.on('error', (err) => {

@@ -13,7 +13,7 @@ function parseId(raw: string): number {
 
 /**
  * HTTP layer for grades. Grades are read-only master data (the V0–V17 scale is
- * created by the seed), so only list/get are exposed.
+ * created by migration 0003), so only list/get are exposed.
  */
 export const gradeController = {
   // GET /api/v1/grades
