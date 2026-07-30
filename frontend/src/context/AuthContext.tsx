@@ -4,6 +4,20 @@ import { supabase } from "../lib/supabase";
 import { api } from "../lib/api";
 import type User from "../types/UserType";
 
+/**
+ * Outcome of a sign-up or sign-in attempt.
+ *
+ * `needsEmailConfirmation` is its own flag rather than something the caller has
+ * to infer: with Supabase's "Confirm email" setting on, signing up succeeds but
+ * produces no session, and signing in fails outright, until the emailed link is
+ * clicked. Both cases should lead the user to the same "check your inbox"
+ * screen, so both report it here.
+ */
+export interface AuthResult {
+  error: string | null;
+  needsEmailConfirmation: boolean;
+}
+
 interface AuthContextValue {
   session: Session | null;
   loading: boolean; // true until the initial getSession() resolves
@@ -16,13 +30,20 @@ interface AuthContextValue {
     password: string;
     firstName: string;
     lastName: string;
-  }) => Promise<{ error: string | null }>;
-  signIn: (args: {
-    email: string;
-    password: string;
-  }) => Promise<{ error: string | null }>;
+  }) => Promise<AuthResult>;
+  signIn: (args: { email: string; password: string }) => Promise<AuthResult>;
+  /** Re-send the sign-up confirmation link, for when the first one is lost. */
+  resendConfirmation: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
+
+/**
+ * Where the confirmation link returns the user. Deriving it from the current
+ * origin means it follows localhost in development and the real domain once
+ * deployed, with no code change — but the URL must still be allow-listed under
+ * Supabase → Authentication → URL Configuration.
+ */
+const emailRedirectTo = (): string => window.location.origin;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -85,18 +106,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile: current?.profile ?? null,
     profileError: current?.error ?? null,
     async signUp({ email, password, firstName, lastName }) {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password, // first/last name ride along in user_metadata; the backend reads them
         // from the JWT to create the profile row. No extra API call needed.
-        options: { data: { first_name: firstName, last_name: lastName } },
+        options: {
+          data: { first_name: firstName, last_name: lastName },
+          emailRedirectTo: emailRedirectTo(),
+        },
       });
-      return { error: error?.message ?? null };
+      if (error) {
+        return { error: error.message, needsEmailConfirmation: false };
+      }
+      // A session here means confirmation is switched off and the user is
+      // already signed in; its absence means Supabase sent a link instead.
+      return { error: null, needsEmailConfirmation: data.session === null };
     },
     async signIn({ email, password }) {
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
+      });
+      if (error) {
+        return {
+          error: error.message,
+          needsEmailConfirmation: error.code === "email_not_confirmed",
+        };
+      }
+      return { error: null, needsEmailConfirmation: false };
+    },
+    async resendConfirmation(email) {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: emailRedirectTo() },
       });
       return { error: error?.message ?? null };
     },

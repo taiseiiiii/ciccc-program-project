@@ -31,12 +31,24 @@ Provisioning takes 1–2 minutes.
 ## 3. Auth settings (only two things)
 
 1. **Authentication → Sign In / Providers**
-   Confirm the **Email** provider is enabled (it is by default), and turn
-   **"Confirm email" OFF** for now. With it on, nobody can log in until they
-   click a verification link, which gets in the way during development.
-   We'll turn it back on before the public launch.
+   Confirm the **Email** provider is enabled (it is by default), and leave
+   **"Confirm email" ON**.
+
+   > We run a single Supabase project for both development and production, so
+   > this setting cannot differ between them — and turning it off in production
+   > would let anyone sign up with an address they don't own. The app handles the
+   > confirmation step: after signing up (or trying to sign in before
+   > confirming) you get a "Confirm your email" screen with a resend button, so
+   > it does not block development. You just need a real inbox for test accounts.
+
 2. **Authentication → URL Configuration**
-   Set **Site URL** to `http://localhost:5173`.
+   Set **Site URL** to `http://localhost:5173` for now, and change it to the
+   deployed domain at release — it is what confirmation and password-reset links
+   point at, so leaving it on localhost would break those emails in production.
+
+   The app asks Supabase to return users to whatever origin it is running on, so
+   add every origin you use to **Additional Redirect URLs** (the deployed domain
+   once it exists). Unlisted URLs silently fall back to the Site URL.
 
 ## 4. Grab the keys
 
@@ -71,11 +83,15 @@ VITE_API_URL=http://localhost:4000/api/v1
 ## Done checklist
 
 - [ ] Project created under your own account, region set
-- [ ] Database password saved somewhere safe
-- [ ] Email confirmation OFF, Site URL = `http://localhost:5173`
+- [ ] Database password saved somewhere safe (needed for the server's
+      `DATABASE_URL` — it is not the publishable key, and invited members cannot
+      see it)
+- [ ] Email confirmation **ON**, Site URL = `http://localhost:5173`,
+      `http://localhost:5173` in Additional Redirect URLs
 - [ ] `frontend/.env.local` filled in (and not committed)
 - [ ] Project URL sent to taisei
 - [ ] taisei invited as Developer
 
-Once this is done, continue with the frontend auth integration guide
-(Supabase SDK + AuthContext + attaching the token to API calls).
+Auth is already wired up in the app, so once this is done you can sign up and
+land on the dashboard. To connect the rest of the pages to the API, see
+[`API_INTEGRATION.md`](API_INTEGRATION.md).
