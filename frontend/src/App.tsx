@@ -1,15 +1,20 @@
 import { BrowserRouter } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
+import { AuthProvider } from "./context/AuthContext";
 import AppRoutes from "./routes/AppRoutes";
+import { Toaster } from "react-hot-toast";
 
 const App = () => {
   return (
     <ThemeProvider>
-      <div className={`min-h-screen bg-background text-on-background`}>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </div>
+      <AuthProvider>
+        <div className={`min-h-screen bg-background text-on-background`}>
+          <BrowserRouter>
+            <Toaster />
+            <AppRoutes />
+          </BrowserRouter>
+        </div>
+      </AuthProvider>
     </ThemeProvider>
   );
 };
