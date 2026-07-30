@@ -1,10 +1,14 @@
 import { useId, type ComponentPropsWithoutRef } from "react";
 
-interface InputProps extends ComponentPropsWithoutRef<"input"> {
+interface TextareaProps extends ComponentPropsWithoutRef<"textarea"> {
   label?: string;
 }
 
-export default function Input({ label, className = "", ...props }: InputProps) {
+export default function Textarea({
+  label,
+  className = "",
+  ...props
+}: TextareaProps) {
   const id = useId();
 
   return (
@@ -14,7 +18,7 @@ export default function Input({ label, className = "", ...props }: InputProps) {
           {label}
         </label>
       )}
-      <input
+      <textarea
         className={`w-full px-4 py-2 rounded-lg text-body-md bg-surface border border-outline transition-colors duration-200 text-on-surface placeholder:text-outline-variant focus:border-primary focus:outline-none dark:scheme-dark ${className}`}
         id={id}
         {...props}

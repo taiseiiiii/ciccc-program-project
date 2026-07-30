@@ -1,28 +1,20 @@
 -- =============================================================================
--- Climb App — database schema
+-- 0001 — initial schema (baseline)
 -- Derived directly from required/climb-app-erd.md
+--
+-- This is the starting point every environment is built up from. It contains no
+-- DROP statements: migrations run forward on live data and must never destroy
+-- it. For a local rebuild from scratch use `pnpm db:reset`, which is refused
+-- against non-local hosts.
 --
 -- Notes:
 --   * Table names are pluralized; "user" is a reserved word in Postgres so the
 --     table is named "users".
 --   * updated_at is maintained automatically by the trigger defined below.
---   * Run with:  psql "$DATABASE_URL" -f db/schema.sql
 -- =============================================================================
 
--- Reset (safe to re-run during development) --------------------------------------
-DROP TABLE IF EXISTS attempts     CASCADE;
-DROP TABLE IF EXISTS routes       CASCADE;
-DROP TABLE IF EXISTS sessions     CASCADE;
-DROP TABLE IF EXISTS goals        CASCADE;
-DROP TABLE IF EXISTS trainings    CASCADE;
-DROP TABLE IF EXISTS performances CASCADE;
-DROP TABLE IF EXISTS grades       CASCADE;
-DROP TABLE IF EXISTS users        CASCADE;
-
-DROP FUNCTION IF EXISTS set_updated_at() CASCADE;
-
 -- Shared trigger: keep updated_at in sync on every UPDATE ------------------------
-CREATE FUNCTION set_updated_at() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
@@ -30,10 +22,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- USER --------------------------------------------------------------------------
+-- Authentication is delegated to Supabase Auth: auth_user_id stores the
+-- Supabase user id (JWT `sub`) and rows are provisioned on first authenticated
+-- request. No credentials are stored here.
 CREATE TABLE users (
   user_id       SERIAL PRIMARY KEY,
+  auth_user_id  UUID NOT NULL UNIQUE,
   email         VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
   first_name    VARCHAR(100),
   last_name     VARCHAR(100),
   status        VARCHAR(20) NOT NULL DEFAULT 'active'

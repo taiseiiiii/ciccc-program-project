@@ -6,12 +6,23 @@ info:
   description: |
     Backend API for the climbing (bouldering) log app.
 
+    ## Authentication
+    Every endpoint except `/health` requires a **Supabase access token**:
+    `Authorization: Bearer <jwt>`. Requests without a valid token get `401`;
+    a suspended/withdrawn account gets `403`.
+
+    The server derives the caller's identity from the token — sessions, goals
+    and attempts are always scoped to the authenticated user, and `user_id` is
+    never sent by the client. A row owned by another user is indistinguishable
+    from a missing one (`404`).
+
     ## Conventions
     - Success payloads are wrapped in `{ "data": ... }`.
     - Errors are wrapped in `{ "error": { "message": "...", "details": ... } }`.
     - `DATE` columns (`visit_date`, `target_date`) are plain `YYYY-MM-DD` strings.
     - `TIMESTAMPTZ` columns (`created_at`, `updated_at`, `achieved_at`) are ISO 8601 date-time strings.
     - All `PATCH` endpoints accept partial bodies: omitted fields are left untouched.
+    - Deleting a row still referenced by others (`ON DELETE RESTRICT`) returns `409`.
   license:
     name: MIT
 
@@ -19,9 +30,14 @@ servers:
   - url: http://localhost:4000/api/v1
     description: Local development
 
+security:
+  - bearerAuth: []
+
 tags:
   - name: Health
     description: Liveness and database connectivity
+  - name: Users
+    description: The authenticated user's profile (provisioned automatically on first request).
   - name: Sessions
     description: Gym visits. A session groups the attempts made on one visit.
   - name: Grades
@@ -38,8 +54,9 @@ paths:
     get:
       tags: [Health]
       summary: Health check
-      description: Reports server liveness and database connectivity.
+      description: Reports server liveness and database connectivity. Public — no token required.
       operationId: getHealth
+      security: []
       responses:
         '200':
           description: Server and database are up.
@@ -60,15 +77,38 @@ paths:
                 status: ok
                 db: down
 
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get my profile
+      description: >-
+        Returns the authenticated user's profile row. On the very first
+        authenticated request the row is created automatically from the token's
+        claims (email plus `first_name` / `last_name` from `user_metadata`).
+      operationId: getMe
+      responses:
+        '200':
+          description: The caller's profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /sessions:
     get:
       tags: [Sessions]
       summary: List sessions
-      description: Ordered by `visit_date` descending, then `session_id` descending.
+      description: The authenticated user's sessions, ordered by `visit_date` descending, then `session_id` descending.
       operationId: listSessions
       responses:
         '200':
-          description: All sessions.
+          description: The user's sessions.
           content:
             application/json:
               schema:
@@ -79,9 +119,12 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Sessions]
       summary: Create a session
+      description: The session is created for the authenticated user.
       operationId: createSession
       requestBody:
         required: true
@@ -90,7 +133,6 @@ paths:
             schema:
               $ref: '#/components/schemas/SessionCreate'
             example:
-              user_id: 1
               visit_date: '2026-07-07'
               gym_name: The Hive
       responses:
@@ -106,6 +148,8 @@ paths:
                     $ref: '#/components/schemas/Session'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /sessions/{id}:
     parameters:
@@ -127,6 +171,8 @@ paths:
                     $ref: '#/components/schemas/Session'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
@@ -152,6 +198,8 @@ paths:
                     $ref: '#/components/schemas/Session'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -164,6 +212,8 @@ paths:
           description: Deleted. No content.
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -186,6 +236,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Grade'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /grades/{id}:
     parameters:
@@ -207,6 +259,8 @@ paths:
                     $ref: '#/components/schemas/Grade'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -228,6 +282,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Route'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Routes]
       summary: Create a route
@@ -255,6 +311,8 @@ paths:
                     $ref: '#/components/schemas/Route'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /routes/{id}:
     parameters:
@@ -276,6 +334,8 @@ paths:
                     $ref: '#/components/schemas/Route'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
@@ -301,37 +361,51 @@ paths:
                     $ref: '#/components/schemas/Route'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
       tags: [Routes]
       summary: Delete a route
-      description: Fails while any attempt still references the route (`ON DELETE RESTRICT`).
+      description: Returns `409` while any attempt still references the route (`ON DELETE RESTRICT`).
       operationId: deleteRoute
       responses:
         '204':
           description: Deleted. No content.
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The route is still referenced by one or more attempts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  message: 'Operation conflicts with related data (foreign key constraint)'
 
   /attempts:
     get:
       tags: [Attempts]
       summary: List attempts
+      description: All attempts across the authenticated user's sessions.
       operationId: listAttempts
       parameters:
         - name: session_id
           in: query
           required: false
-          description: Only return attempts belonging to this session.
+          description: Only return attempts belonging to this session (must be one of the user's sessions).
           schema:
             type: integer
             minimum: 1
       responses:
         '200':
-          description: All attempts (optionally filtered by session).
+          description: The user's attempts (optionally filtered by session).
           content:
             application/json:
               schema:
@@ -344,10 +418,14 @@ paths:
                       $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Attempts]
       summary: Create an attempt
-      description: '`session_id` and `route_id` must reference existing rows.'
+      description: >-
+        `session_id` must reference one of the authenticated user's sessions and
+        `route_id` an existing route; otherwise the request fails with `400`.
       operationId: createAttempt
       requestBody:
         required: true
@@ -373,6 +451,8 @@ paths:
                     $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /attempts/{id}:
     parameters:
@@ -394,6 +474,8 @@ paths:
                     $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
@@ -419,6 +501,8 @@ paths:
                     $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -430,6 +514,8 @@ paths:
           description: Deleted. No content.
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -437,18 +523,11 @@ paths:
     get:
       tags: [Goals]
       summary: List goals
+      description: The authenticated user's goals.
       operationId: listGoals
-      parameters:
-        - name: user_id
-          in: query
-          required: false
-          description: Only return goals belonging to this user.
-          schema:
-            type: integer
-            minimum: 1
       responses:
         '200':
-          description: All goals (optionally filtered by user).
+          description: The user's goals.
           content:
             application/json:
               schema:
@@ -461,10 +540,12 @@ paths:
                       $ref: '#/components/schemas/Goal'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Goals]
       summary: Create a goal
-      description: '`user_id` and `grade_id` must reference existing rows.'
+      description: The goal is created for the authenticated user. `grade_id` must reference an existing grade.
       operationId: createGoal
       requestBody:
         required: true
@@ -473,7 +554,6 @@ paths:
             schema:
               $ref: '#/components/schemas/GoalCreate'
             example:
-              user_id: 1
               grade_id: 5
               goal_description: Send my first V4 before the season ends
               target_date: '2026-09-30'
@@ -490,6 +570,8 @@ paths:
                     $ref: '#/components/schemas/Goal'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /goals/{id}:
     parameters:
@@ -511,6 +593,8 @@ paths:
                     $ref: '#/components/schemas/Goal'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
@@ -540,6 +624,8 @@ paths:
                     $ref: '#/components/schemas/Goal'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -551,10 +637,21 @@ paths:
           description: Deleted. No content.
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Supabase access token. On the frontend, obtain it from
+        `supabase.auth.getSession()` and send it as `Authorization: Bearer <token>`.
+
   parameters:
     IdParam:
       name: id
@@ -566,6 +663,15 @@ components:
         minimum: 1
 
   responses:
+    Unauthorized:
+      description: Missing, invalid, or expired access token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: 'Invalid or expired token'
     BadRequest:
       description: Invalid request — malformed ID, missing required field, or wrong field type.
       content:
@@ -610,6 +716,42 @@ components:
           type: string
           enum: [up, down]
 
+    User:
+      type: object
+      description: The app-side profile of a Supabase Auth user.
+      required: [user_id, auth_user_id, email, first_name, last_name, status, created_at, updated_at]
+      properties:
+        user_id:
+          type: integer
+          description: Internal ID — foreign key target for sessions/goals.
+          example: 1
+        auth_user_id:
+          type: string
+          format: uuid
+          description: Supabase Auth user ID (the JWT `sub` claim).
+        email:
+          type: string
+          format: email
+          example: climber@example.com
+        first_name:
+          type: string
+          nullable: true
+          example: John
+        last_name:
+          type: string
+          nullable: true
+          example: Smith
+        status:
+          type: string
+          enum: [active, withdrawn, suspended]
+          example: active
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
     Session:
       type: object
       description: A gym visit.
@@ -639,11 +781,8 @@ components:
 
     SessionCreate:
       type: object
-      required: [user_id, visit_date]
+      required: [visit_date]
       properties:
-        user_id:
-          type: integer
-          minimum: 1
         visit_date:
           type: string
           format: date
@@ -834,11 +973,8 @@ components:
 
     GoalCreate:
       type: object
-      required: [user_id, grade_id]
+      required: [grade_id]
       properties:
-        user_id:
-          type: integer
-          minimum: 1
         grade_id:
           type: integer
           minimum: 1

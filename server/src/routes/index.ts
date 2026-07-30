@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { pingDatabase } from '../db/pool';
+import { requireAuth } from '../middleware/auth';
+import userRoutes from './user.routes';
 import sessionRoutes from './session.routes';
 import gradeRoutes from './grade.routes';
 import routeRoutes from './route.routes';
@@ -24,7 +26,10 @@ router.get(
   }),
 );
 
-// Core ERD entities (basic CRUD).
+// Everything below requires a valid Supabase access token.
+router.use(requireAuth);
+
+router.use('/users', userRoutes); // GET /users/me
 router.use('/sessions', sessionRoutes);
 router.use('/grades', gradeRoutes); // read-only master data (V0–V17)
 router.use('/routes', routeRoutes);
@@ -32,7 +37,6 @@ router.use('/attempts', attemptRoutes);
 router.use('/goals', goalRoutes);
 
 // Still to build out:
-// router.use('/users', userRoutes);            // ships with the auth layer
 // router.use('/performances', performanceRoutes); // AI-generated reports
 // router.use('/trainings', trainingRoutes);       // AI-generated reports
 
