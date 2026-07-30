@@ -366,17 +366,28 @@ them silently:
 You run the API server yourself, pointed at the shared Supabase database — no
 local Postgres to install.
 
+**Nothing here has to be sent to you by anyone.** The Supabase project is under
+your account, so every value below comes from your own dashboard, and the
+certificate is already committed to this repo.
+
+Prerequisites: **Node 20+**, and pnpm for the server (the frontend stays on npm):
+
+```bash
+corepack enable      # provides pnpm — `pnpm install` fails without it
+```
+
 ```bash
 cd server
 pnpm install
 cp .env.example .env
 ```
 
-Fill in `server/.env`:
+Fill in `server/.env`. `<project-ref>` is the subdomain of your project URL —
+`https://abcdefgh.supabase.co` means `<project-ref>` is `abcdefgh`:
 
 ```bash
-# From the Supabase dashboard: Connect -> Direct connection.
-# [YOUR-PASSWORD] is the database password from when you created the project.
+# Dashboard -> Connect (top of the page) -> Direct connection.
+# Pick Direct, not the transaction pooler.
 DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.<project-ref>.supabase.co:5432/postgres
 
 # Supabase signs Postgres certs with its own CA; the file is already in the repo.
@@ -385,12 +396,23 @@ DATABASE_CA_CERT=./certs/prod-ca-2021.crt
 SUPABASE_URL=https://<project-ref>.supabase.co
 ```
 
+`[YOUR-PASSWORD]` is the **database** password you chose when creating the
+project — not the publishable key. If you no longer have it, reset it under the
+dashboard's Database settings.
+
+> ⚠️ Resetting that password invalidates the connection string taisei is using,
+> so tell him if you do. Everything else here is safe to change on your own.
+
 Then run both halves:
 
 ```bash
 cd server   && pnpm dev      # http://localhost:4000
-cd frontend && npm run dev   # http://localhost:5173 — needs .env.local, see SUPABASE_SETUP.md
+cd frontend && npm run dev   # http://localhost:5173
 ```
+
+The frontend needs `frontend/.env.local` as well — the publishable key and
+project URL, both from the same dashboard. See
+[`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) step 4, or copy `.env.example`.
 
 `curl http://localhost:4000/api/v1/health` should return
 `{"status":"ok","db":"up"}` before you debug anything else.
