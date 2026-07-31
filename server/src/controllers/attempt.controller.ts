@@ -1,6 +1,8 @@
-import type { Request, Response } from 'express';
-import { attemptRepository } from '../repositories/attempt.repository';
-import { HttpError } from '../utils/HttpError';
+import type { Request, Response } from "express";
+import { attemptRepository } from "../repositories/attempt.repository";
+import { sessionRepository } from "../repositories/session.repository";
+import { routeRepository } from "../repositories/route.repository";
+import { HttpError } from "../utils/HttpError";
 
 /** Parse and validate a numeric route param (e.g. :id). */
 function parseId(raw: string): number {
@@ -13,7 +15,9 @@ function parseId(raw: string): number {
 
 /**
  * HTTP layer for attempts. Keeps validation + status codes here and delegates
- * all persistence to the repository.
+ * all persistence to the repository. Ownership flows through the parent
+ * session: every read/write is scoped to the token's user, and a row owned by
+ * someone else is indistinguishable from a missing one (404).
  */
 export const attemptController = {
   // GET /api/v1/attempts        (optionally ?session_id=123)
@@ -23,17 +27,22 @@ export const attemptController = {
     if (raw !== undefined) {
       sessionId = Number(raw);
       if (!Number.isInteger(sessionId) || sessionId <= 0) {
-        throw HttpError.badRequest('session_id query param must be a positive integer');
+        throw HttpError.badRequest(
+          "session_id query param must be a positive integer",
+        );
       }
     }
-    const attempts = await attemptRepository.findAll(sessionId);
+    const attempts = await attemptRepository.findAll(
+      req.user!.user_id,
+      sessionId,
+    );
     res.json({ data: attempts });
   },
 
   // GET /api/v1/attempts/:id
   async get(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
-    const attempt = await attemptRepository.findById(id);
+    const attempt = await attemptRepository.findById(id, req.user!.user_id);
     if (!attempt) {
       throw HttpError.notFound(`Attempt ${id} not found`);
     }
@@ -45,19 +54,45 @@ export const attemptController = {
     const { session_id, route_id, is_success, note } = req.body ?? {};
 
     if (!Number.isInteger(session_id) || session_id <= 0) {
-      throw HttpError.badRequest('session_id is required and must be a positive integer');
+      throw HttpError.badRequest(
+        "session_id is required and must be a positive integer",
+      );
     }
     if (!Number.isInteger(route_id) || route_id <= 0) {
-      throw HttpError.badRequest('route_id is required and must be a positive integer');
+      throw HttpError.badRequest(
+        "route_id is required and must be a positive integer",
+      );
     }
-    if (is_success !== undefined && typeof is_success !== 'boolean') {
-      throw HttpError.badRequest('is_success must be a boolean');
+    if (is_success !== undefined && typeof is_success !== "boolean") {
+      throw HttpError.badRequest("is_success must be a boolean");
     }
-    if (note !== undefined && note !== null && typeof note !== 'string') {
-      throw HttpError.badRequest('note must be a string');
+    if (note !== undefined && note !== null && typeof note !== "string") {
+      throw HttpError.badRequest("note must be a string");
     }
 
-    const attempt = await attemptRepository.create({ session_id, route_id, is_success, note });
+    // The parent session must exist AND belong to the caller.
+    const session = await sessionRepository.findById(
+      session_id,
+      req.user!.user_id,
+    );
+    if (!session) {
+      throw HttpError.badRequest(
+        `session_id ${session_id} does not reference one of your sessions`,
+      );
+    }
+    const route = await routeRepository.findById(route_id);
+    if (!route) {
+      throw HttpError.badRequest(
+        `route_id ${route_id} does not reference an existing route`,
+      );
+    }
+
+    const attempt = await attemptRepository.create({
+      session_id,
+      route_id,
+      is_success,
+      note,
+    });
     res.status(201).json({ data: attempt });
   },
 
@@ -66,17 +101,33 @@ export const attemptController = {
     const id = parseId(req.params.id!);
     const { route_id, is_success, note } = req.body ?? {};
 
-    if (route_id !== undefined && (!Number.isInteger(route_id) || route_id <= 0)) {
-      throw HttpError.badRequest('route_id must be a positive integer');
+    if (
+      route_id !== undefined &&
+      (!Number.isInteger(route_id) || route_id <= 0)
+    ) {
+      throw HttpError.badRequest("route_id must be a positive integer");
     }
-    if (is_success !== undefined && typeof is_success !== 'boolean') {
-      throw HttpError.badRequest('is_success must be a boolean');
+    if (is_success !== undefined && typeof is_success !== "boolean") {
+      throw HttpError.badRequest("is_success must be a boolean");
     }
-    if (note !== undefined && note !== null && typeof note !== 'string') {
-      throw HttpError.badRequest('note must be a string');
+    if (note !== undefined && note !== null && typeof note !== "string") {
+      throw HttpError.badRequest("note must be a string");
     }
 
-    const attempt = await attemptRepository.update(id, { route_id, is_success, note });
+    if (route_id !== undefined) {
+      const route = await routeRepository.findById(route_id);
+      if (!route) {
+        throw HttpError.badRequest(
+          `route_id ${route_id} does not reference an existing route`,
+        );
+      }
+    }
+
+    const attempt = await attemptRepository.update(id, req.user!.user_id, {
+      route_id,
+      is_success,
+      note,
+    });
     if (!attempt) {
       throw HttpError.notFound(`Attempt ${id} not found`);
     }
@@ -86,7 +137,7 @@ export const attemptController = {
   // DELETE /api/v1/attempts/:id
   async remove(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
-    const deleted = await attemptRepository.remove(id);
+    const deleted = await attemptRepository.remove(id, req.user!.user_id);
     if (!deleted) {
       throw HttpError.notFound(`Attempt ${id} not found`);
     }

@@ -1,6 +1,6 @@
-import type { Request, Response } from 'express';
-import { gradeRepository } from '../repositories/grade.repository';
-import { HttpError } from '../utils/HttpError';
+import type { Request, Response } from "express";
+import { gradeRepository } from "../repositories/grade.repository";
+import { HttpError } from "../utils/HttpError";
 
 /** Parse and validate a numeric route param (e.g. :id). */
 function parseId(raw: string): number {
@@ -13,7 +13,7 @@ function parseId(raw: string): number {
 
 /**
  * HTTP layer for grades. Grades are read-only master data (the V0–V17 scale is
- * created by the seed), so only list/get are exposed.
+ * created by migration 0003), so only list/get are exposed.
  */
 export const gradeController = {
   // GET /api/v1/grades

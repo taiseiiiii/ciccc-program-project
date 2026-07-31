@@ -1,4 +1,4 @@
-import { query } from '../db/pool';
+import { query } from "../db/pool";
 
 /** Shape of a row in the `goals` table (a user's target grade). */
 export interface Goal {
@@ -30,27 +30,23 @@ export interface UpdateGoalInput {
 /**
  * Data-access layer for goals. Every SQL statement here is parameterized
  * ($1, $2, ...) so values are never concatenated into the query string.
+ *
+ * All reads/writes are scoped to a user_id (taken from the verified token by
+ * the controller) so one user can never see or touch another user's rows.
  */
 export const goalRepository = {
-  /** List all goals, optionally scoped to a single user. */
-  async findAll(userId?: number): Promise<Goal[]> {
-    if (userId !== undefined) {
-      const { rows } = await query<Goal>(
-        `SELECT * FROM goals WHERE user_id = $1 ORDER BY goal_id DESC`,
-        [userId],
-      );
-      return rows;
-    }
+  async findAll(userId: number): Promise<Goal[]> {
     const { rows } = await query<Goal>(
-      `SELECT * FROM goals ORDER BY goal_id DESC`,
+      `SELECT * FROM goals WHERE user_id = $1 ORDER BY goal_id DESC`,
+      [userId],
     );
     return rows;
   },
 
-  async findById(id: number): Promise<Goal | null> {
+  async findById(id: number, userId: number): Promise<Goal | null> {
     const { rows } = await query<Goal>(
-      `SELECT * FROM goals WHERE goal_id = $1`,
-      [id],
+      `SELECT * FROM goals WHERE goal_id = $1 AND user_id = $2`,
+      [id, userId],
     );
     return rows[0] ?? null;
   },
@@ -60,7 +56,12 @@ export const goalRepository = {
       `INSERT INTO goals (user_id, grade_id, goal_description, target_date)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [input.user_id, input.grade_id, input.goal_description ?? null, input.target_date ?? null],
+      [
+        input.user_id,
+        input.grade_id,
+        input.goal_description ?? null,
+        input.target_date ?? null,
+      ],
     );
     return rows[0]!;
   },
@@ -73,7 +74,11 @@ export const goalRepository = {
    * goal flips to achieved and cleared when it flips back, so the two stay
    * consistent without the caller managing the timestamp.
    */
-  async update(id: number, input: UpdateGoalInput): Promise<Goal | null> {
+  async update(
+    id: number,
+    userId: number,
+    input: UpdateGoalInput,
+  ): Promise<Goal | null> {
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -93,25 +98,32 @@ export const goalRepository = {
       values.push(input.is_achieved);
       fields.push(`is_achieved = $${values.length}`);
       // Keep achieved_at in lockstep with the flag.
-      fields.push(`achieved_at = CASE WHEN $${values.length} THEN now() ELSE NULL END`);
+      fields.push(
+        `achieved_at = CASE WHEN $${values.length} THEN now() ELSE NULL END`,
+      );
     }
 
     if (fields.length === 0) {
-      return this.findById(id);
+      return this.findById(id, userId);
     }
 
     values.push(id);
+    const idIdx = values.length;
+    values.push(userId);
+    const userIdx = values.length;
     const { rows } = await query<Goal>(
-      `UPDATE goals SET ${fields.join(', ')} WHERE goal_id = $${values.length} RETURNING *`,
+      `UPDATE goals SET ${fields.join(", ")}
+       WHERE goal_id = $${idIdx} AND user_id = $${userIdx}
+       RETURNING *`,
       values,
     );
     return rows[0] ?? null;
   },
 
-  async remove(id: number): Promise<boolean> {
+  async remove(id: number, userId: number): Promise<boolean> {
     const { rowCount } = await query(
-      `DELETE FROM goals WHERE goal_id = $1`,
-      [id],
+      `DELETE FROM goals WHERE goal_id = $1 AND user_id = $2`,
+      [id, userId],
     );
     return (rowCount ?? 0) > 0;
   },

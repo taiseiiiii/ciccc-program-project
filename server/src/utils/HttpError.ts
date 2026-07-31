@@ -8,16 +8,24 @@ export class HttpError extends Error {
 
   constructor(statusCode: number, message: string, details?: unknown) {
     super(message);
-    this.name = 'HttpError';
+    this.name = "HttpError";
     this.statusCode = statusCode;
     this.details = details;
   }
 
-  static badRequest(message = 'Bad Request', details?: unknown): HttpError {
+  static badRequest(message = "Bad Request", details?: unknown): HttpError {
     return new HttpError(400, message, details);
   }
 
-  static notFound(message = 'Not Found'): HttpError {
+  static unauthorized(message = "Unauthorized"): HttpError {
+    return new HttpError(401, message);
+  }
+
+  static forbidden(message = "Forbidden"): HttpError {
+    return new HttpError(403, message);
+  }
+
+  static notFound(message = "Not Found"): HttpError {
     return new HttpError(404, message);
   }
 }
