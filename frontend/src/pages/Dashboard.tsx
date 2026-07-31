@@ -1,14 +1,30 @@
-import { useTheme } from "../context/ThemeContext";
-import Button from "../components/Button";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../lib/api";
 
 const Dashboard = () => {
-  const { theme, toggleTheme } = useTheme();
+  const { data, isPending, isError } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => api("/health"),
+  });
   return (
     <div>
       <h1>Dashboard Page</h1>
-      <Button variant="secondary" onClick={toggleTheme}>
-        {theme === "dark" ? "Light" : "Dark"}
-      </Button>
+      <div className="font-bold">Server Connection</div>
+      <div
+        className={
+          isPending
+            ? "text-amber-200"
+            : isError
+              ? "text-amber-700"
+              : "text-blue-600"
+        }
+      >
+        {isPending
+          ? "connecting..."
+          : isError
+            ? "Server is not found"
+            : "It's connected!"}
+      </div>
     </div>
   );
 };

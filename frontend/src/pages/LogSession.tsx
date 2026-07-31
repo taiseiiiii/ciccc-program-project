@@ -1,6 +1,9 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import type AttemptType from "../types/AttemptType";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../lib/api";
+import type Grades from "../types/Grades";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
@@ -19,6 +22,12 @@ const LogSession = () => {
   const [editingAttempt, setEditingAttempt] = useState<null | AttemptType>(
     null,
   );
+  const { data, isPending, isError } = useQuery<{ data: Grades[] }>({
+    queryKey: ["grades"],
+    queryFn: () => api("/grades"),
+  });
+
+  console.log("Grades data from server:", data);
 
   const resetAttemptForm = () => {
     setRouteName("");
@@ -99,27 +108,6 @@ const LogSession = () => {
     toast.success("Attempt Deleted");
   };
 
-  const GRADES = [
-    "V0",
-    "V1",
-    "V2",
-    "V3",
-    "V4",
-    "V5",
-    "V6",
-    "V7",
-    "V8",
-    "V9",
-    "V10",
-    "V11",
-    "V12",
-    "V13",
-    "V14",
-    "V15",
-    "V16",
-    "V17",
-  ];
-
   return (
     <div className="max-w-5xl mx-auto">
       <div className="gap-3">
@@ -183,17 +171,18 @@ const LogSession = () => {
               Grades (v-Score)
             </p>
             <div className="flex flex-row gap-2 overflow-x-auto py-2">
-              {GRADES.map((grade) => (
+              {data?.data?.map((grade: Grades) => (
                 <Button
-                  key={grade}
-                  onClick={() => setSelectedGrade(grade)}
+                  key={grade.grade_id}
+                  // key={grade.id ?? `grade-${index}`}
+                  onClick={() => setSelectedGrade(grade.grade_name)}
                   className={
-                    selectedGrade === grade
+                    selectedGrade === grade.grade_name
                       ? ""
                       : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
                   }
                 >
-                  {grade}
+                  {grade.grade_name}
                 </Button>
               ))}
             </div>
@@ -223,7 +212,7 @@ const LogSession = () => {
             Attempted List
           </h1>
           <div className="flex flex-col gap-3 mt-3">
-            {attemptsList.map((attempt) => (
+            {attemptsList?.map((attempt: AttemptType) => (
               <Card
                 key={attempt.id}
                 className="p-4 flex flex-row items-center justify-between"
@@ -304,17 +293,19 @@ const LogSession = () => {
                   Grades (v-Score)
                 </p>
                 <div className="flex flex-row gap-2 overflow-x-auto py-2">
-                  {GRADES.map((grade) => (
+                  {data?.data?.map((grade: Grades) => (
                     <Button
-                      key={grade}
-                      onClick={() => updateEditingField("grade_name", grade)}
+                      key={grade.grade_id}
+                      onClick={() =>
+                        updateEditingField("grade_name", grade.grade_name)
+                      }
                       className={
-                        editingAttempt?.grade_name === grade
+                        editingAttempt?.grade_name === grade.grade_name
                           ? ""
                           : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
                       }
                     >
-                      {grade}
+                      {grade.grade_name}
                     </Button>
                   ))}
                 </div>
@@ -347,12 +338,6 @@ const LogSession = () => {
                   Cancel
                 </Button>
                 <Button onClick={() => handleUpdateAttempt()}>Save</Button>
-                {/* <Button
-                  variant="secondary"
-                  onClick={() => setIsEditModalOpen(false)}
-                >
-                  Cancel
-                </Button> */}
               </div>
             </div>
           </div>
