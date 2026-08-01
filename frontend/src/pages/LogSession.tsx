@@ -1,9 +1,12 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
-import type AttemptType from "../types/AttemptType";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type Grades from "../types/Grades";
+
+import type AttemptType from "../types/AttemptType";
+import type Grade from "../types/GradeType";
+import type Route from "../types/RouteType";
+import type Session from "../types/SessionType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
@@ -22,12 +25,12 @@ const LogSession = () => {
   const [editingAttempt, setEditingAttempt] = useState<null | AttemptType>(
     null,
   );
-  const { data, isPending, isError } = useQuery<{ data: Grades[] }>({
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const { data, isPending, isError } = useQuery<{ data: Grade[] }>({
     queryKey: ["grades"],
     queryFn: () => api("/grades"),
   });
-
-  console.log("Grades data from server:", data);
 
   const resetAttemptForm = () => {
     setRouteName("");
@@ -77,25 +80,60 @@ const LogSession = () => {
     toast.success("Attempt Updated!");
   };
 
-  const handleSaveSession = () => {
+  const handleSaveSession = async () => {
     if (!gymName.trim()) {
       toast.error("Not found Location");
       return;
     }
 
-    // mock data will be here
-    const saveSessionList = {
-      visit_date: visitDate,
-      gym_name: gymName,
-      attempts: attemptsList,
-    };
-    console.log(saveSessionList);
+    setIsSaving(true);
 
-    resetAttemptForm();
-    setGymName("");
-    setVisitDate(today);
-    setAttemptsList([]);
-    toast.success("Successfully saved");
+    const grades = data?.data;
+    if (!grades) {
+      toast.error("Grade data is not loaded yet");
+      return;
+    }
+
+    try {
+      const { data: session } = await api<{ data: Session }>("/sessions", {
+        method: "POST",
+        body: JSON.stringify({ visit_date: visitDate, gym_name: gymName }),
+      });
+
+      for (const attempt of attemptsList) {
+        const grade = grades.find((g) => g.grade_name === attempt.grade_name);
+        if (!grade) throw new Error(`Unknown grade ${attempt.grade_name}`);
+
+        const { data: route } = await api<{ data: Route }>("/routes", {
+          method: "POST",
+          body: JSON.stringify({
+            grade_id: grade.grade_id,
+            route_name: attempt.route_name,
+          }),
+        });
+        await api("/attempts", {
+          method: "POST",
+          body: JSON.stringify({
+            session_id: session.session_id,
+            route_id: route.route_id,
+            is_success: attempt.is_success,
+            note: attempt.note,
+          }),
+        });
+      }
+
+      resetAttemptForm();
+      setGymName("");
+      setVisitDate(today);
+      setAttemptsList([]);
+      toast.success("Successfully saved");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save session",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteAttempt = () => {
@@ -171,7 +209,7 @@ const LogSession = () => {
               Grades (v-Score)
             </p>
             <div className="flex flex-row gap-2 overflow-x-auto py-2">
-              {data?.data?.map((grade: Grades) => (
+              {data?.data?.map((grade: Grade) => (
                 <Button
                   key={grade.grade_id}
                   // key={grade.id ?? `grade-${index}`}
@@ -240,8 +278,12 @@ const LogSession = () => {
             ))}
           </div>
           <div className="flex justify-end">
-            <Button className="mt-3" onClick={() => handleSaveSession()}>
-              Save Session
+            <Button
+              className="mt-3"
+              onClick={() => handleSaveSession()}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save Session"}
             </Button>
           </div>
         </div>
@@ -293,7 +335,7 @@ const LogSession = () => {
                   Grades (v-Score)
                 </p>
                 <div className="flex flex-row gap-2 overflow-x-auto py-2">
-                  {data?.data?.map((grade: Grades) => (
+                  {data?.data?.map((grade: Grade) => (
                     <Button
                       key={grade.grade_id}
                       onClick={() =>
