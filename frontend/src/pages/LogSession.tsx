@@ -1,8 +1,9 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../lib/api";
 
+import { queryClient } from "../App";
 import type AttemptType from "../types/AttemptType";
 import type Grade from "../types/GradeType";
 import type Route from "../types/RouteType";
@@ -27,10 +28,32 @@ const LogSession = () => {
   );
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const { data, isPending, isError } = useQuery<{ data: Grade[] }>({
+  const { data: gradesData, isPending: isGradesLoading } = useQuery<{
+    data: Grade[];
+  }>({
     queryKey: ["grades"],
     queryFn: () => api("/grades"),
   });
+
+  const { mutateAsync: createSession, isPending: isSavingSession } =
+    useMutation({
+      mutationFn: async (newSessionData: {
+        visit_date: string;
+        gym_name: string;
+      }) => {
+        const res = await api<{ data: Session }>("/sessions", {
+          method: "POST",
+          body: JSON.stringify(newSessionData),
+        });
+        return res.data;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      },
+      onError: () => {
+        toast.error("Something went wrong");
+      },
+    });
 
   const resetAttemptForm = () => {
     setRouteName("");
@@ -55,7 +78,7 @@ const LogSession = () => {
     setAttemptsList([newAttempt, ...attemptsList]);
 
     resetAttemptForm();
-    toast.success("Successfully saved");
+    toast.success("Attempt saved");
   };
 
   const handleEditAttempt = (attempt: AttemptType) => {
@@ -88,16 +111,16 @@ const LogSession = () => {
 
     setIsSaving(true);
 
-    const grades = data?.data;
+    const grades = gradesData?.data;
     if (!grades) {
       toast.error("Grade data is not loaded yet");
       return;
     }
 
     try {
-      const { data: session } = await api<{ data: Session }>("/sessions", {
-        method: "POST",
-        body: JSON.stringify({ visit_date: visitDate, gym_name: gymName }),
+      const session = await createSession({
+        visit_date: visitDate,
+        gym_name: gymName,
       });
 
       for (const attempt of attemptsList) {
@@ -126,7 +149,7 @@ const LogSession = () => {
       setGymName("");
       setVisitDate(today);
       setAttemptsList([]);
-      toast.success("Successfully saved");
+      toast.success("Session successfully saved");
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to save session",
@@ -209,7 +232,7 @@ const LogSession = () => {
               Grades (v-Score)
             </p>
             <div className="flex flex-row gap-2 overflow-x-auto py-2">
-              {data?.data?.map((grade: Grade) => (
+              {gradesData?.data?.map((grade: Grade) => (
                 <Button
                   key={grade.grade_id}
                   // key={grade.id ?? `grade-${index}`}
@@ -281,7 +304,7 @@ const LogSession = () => {
             <Button
               className="mt-3"
               onClick={() => handleSaveSession()}
-              disabled={isSaving}
+              disabled={isSavingSession}
             >
               {isSaving ? "Saving..." : "Save Session"}
             </Button>
@@ -335,7 +358,7 @@ const LogSession = () => {
                   Grades (v-Score)
                 </p>
                 <div className="flex flex-row gap-2 overflow-x-auto py-2">
-                  {data?.data?.map((grade: Grade) => (
+                  {gradesData?.data?.map((grade: Grade) => (
                     <Button
                       key={grade.grade_id}
                       onClick={() =>
