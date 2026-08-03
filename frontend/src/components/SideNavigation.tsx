@@ -1,6 +1,6 @@
 import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../hooks/useTheme";
 import SignoutButton from "./SignoutButton";
 import { LuLayoutDashboard } from "react-icons/lu";
 import { MdOutlineAddToPhotos } from "react-icons/md";

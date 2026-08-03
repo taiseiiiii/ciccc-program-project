@@ -1,6 +1,6 @@
-import type { Request, Response } from 'express';
-import { goalRepository } from '../repositories/goal.repository';
-import { HttpError } from '../utils/HttpError';
+import type { Request, Response } from "express";
+import { goalRepository } from "../repositories/goal.repository";
+import { HttpError } from "../utils/HttpError";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -41,13 +41,23 @@ export const goalController = {
     const { grade_id, goal_description, target_date } = req.body ?? {};
 
     if (!Number.isInteger(grade_id) || grade_id <= 0) {
-      throw HttpError.badRequest('grade_id is required and must be a positive integer');
+      throw HttpError.badRequest(
+        "grade_id is required and must be a positive integer",
+      );
     }
-    if (goal_description !== undefined && goal_description !== null && typeof goal_description !== 'string') {
-      throw HttpError.badRequest('goal_description must be a string');
+    if (
+      goal_description !== undefined &&
+      goal_description !== null &&
+      typeof goal_description !== "string"
+    ) {
+      throw HttpError.badRequest("goal_description must be a string");
     }
-    if (target_date !== undefined && target_date !== null && (typeof target_date !== 'string' || !DATE_RE.test(target_date))) {
-      throw HttpError.badRequest('target_date must be a YYYY-MM-DD date');
+    if (
+      target_date !== undefined &&
+      target_date !== null &&
+      (typeof target_date !== "string" || !DATE_RE.test(target_date))
+    ) {
+      throw HttpError.badRequest("target_date must be a YYYY-MM-DD date");
     }
 
     const goal = await goalRepository.create({
@@ -62,19 +72,31 @@ export const goalController = {
   // PATCH /api/v1/goals/:id
   async update(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
-    const { grade_id, goal_description, is_achieved, target_date } = req.body ?? {};
+    const { grade_id, goal_description, is_achieved, target_date } =
+      req.body ?? {};
 
-    if (grade_id !== undefined && (!Number.isInteger(grade_id) || grade_id <= 0)) {
-      throw HttpError.badRequest('grade_id must be a positive integer');
+    if (
+      grade_id !== undefined &&
+      (!Number.isInteger(grade_id) || grade_id <= 0)
+    ) {
+      throw HttpError.badRequest("grade_id must be a positive integer");
     }
-    if (goal_description !== undefined && goal_description !== null && typeof goal_description !== 'string') {
-      throw HttpError.badRequest('goal_description must be a string');
+    if (
+      goal_description !== undefined &&
+      goal_description !== null &&
+      typeof goal_description !== "string"
+    ) {
+      throw HttpError.badRequest("goal_description must be a string");
     }
-    if (is_achieved !== undefined && typeof is_achieved !== 'boolean') {
-      throw HttpError.badRequest('is_achieved must be a boolean');
+    if (is_achieved !== undefined && typeof is_achieved !== "boolean") {
+      throw HttpError.badRequest("is_achieved must be a boolean");
     }
-    if (target_date !== undefined && target_date !== null && (typeof target_date !== 'string' || !DATE_RE.test(target_date))) {
-      throw HttpError.badRequest('target_date must be a YYYY-MM-DD date');
+    if (
+      target_date !== undefined &&
+      target_date !== null &&
+      (typeof target_date !== "string" || !DATE_RE.test(target_date))
+    ) {
+      throw HttpError.badRequest("target_date must be a YYYY-MM-DD date");
     }
 
     const goal = await goalRepository.update(id, req.user!.user_id, {

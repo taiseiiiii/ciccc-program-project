@@ -1,6 +1,6 @@
 import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../hooks/useTheme";
 import { CgProfile } from "react-icons/cg";
 import { FiSun } from "react-icons/fi";
 import { FiMoon } from "react-icons/fi";

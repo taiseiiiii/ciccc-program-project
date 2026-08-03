@@ -1,17 +1,5 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  type ReactNode,
-} from "react";
-
-interface ThemeContextType {
-  theme: string;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+import { useState, useEffect, type ReactNode } from "react";
+import { ThemeContext } from "../hooks/useTheme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState(() => {
@@ -39,12 +27,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme should be inside of the ThemeProvider");
-  }
-  return context;
 }

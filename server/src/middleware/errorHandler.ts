@@ -1,6 +1,6 @@
-import type { ErrorRequestHandler, RequestHandler } from 'express';
-import { HttpError } from '../utils/HttpError';
-import { isProduction } from '../config/env';
+import type { ErrorRequestHandler, RequestHandler } from "express";
+import { HttpError } from "../utils/HttpError";
+import { isProduction } from "../config/env";
 
 /** 404 handler for unmatched routes. */
 export const notFound: RequestHandler = (req, res) => {
@@ -19,9 +19,9 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   }
 
   // Malformed JSON rejected by express.json() (body-parser).
-  if ((err as { type?: unknown })?.type === 'entity.parse.failed') {
+  if ((err as { type?: unknown })?.type === "entity.parse.failed") {
     res.status(400).json({
-      error: { message: 'Malformed JSON in request body' },
+      error: { message: "Malformed JSON in request body" },
     });
     return;
   }
@@ -30,26 +30,31 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   // 23001 = restrict_violation / 23503 = foreign_key_violation (e.g. deleting
   // a route that attempts still reference), 23505 = unique_violation.
   const pgCode = (err as { code?: unknown })?.code;
-  if (pgCode === '23001' || pgCode === '23503') {
+  if (pgCode === "23001" || pgCode === "23503") {
     res.status(409).json({
-      error: { message: 'Operation conflicts with related data (foreign key constraint)' },
+      error: {
+        message:
+          "Operation conflicts with related data (foreign key constraint)",
+      },
     });
     return;
   }
-  if (pgCode === '23505') {
+  if (pgCode === "23505") {
     res.status(409).json({
-      error: { message: 'A record with the same unique value already exists' },
+      error: { message: "A record with the same unique value already exists" },
     });
     return;
   }
 
-  console.error('[error]', err);
+  console.error("[error]", err);
 
   res.status(500).json({
     error: {
-      message: 'Internal Server Error',
+      message: "Internal Server Error",
       // Surface the real message in dev to make debugging easier.
-      ...(isProduction ? {} : { detail: err instanceof Error ? err.message : String(err) }),
+      ...(isProduction
+        ? {}
+        : { detail: err instanceof Error ? err.message : String(err) }),
     },
   });
 };

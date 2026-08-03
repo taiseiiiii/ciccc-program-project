@@ -1,6 +1,6 @@
 import Card from "../components/Card";
 import SignoutButton from "../components/SignoutButton";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 
 const Profile = () => {
   const { profile, profileError } = useAuth();

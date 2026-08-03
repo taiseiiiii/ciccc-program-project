@@ -1,4 +1,4 @@
-import { query } from '../db/pool';
+import { query } from "../db/pool";
 
 /** Shape of a row in the `goals` table (a user's target grade). */
 export interface Goal {
@@ -56,7 +56,12 @@ export const goalRepository = {
       `INSERT INTO goals (user_id, grade_id, goal_description, target_date)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [input.user_id, input.grade_id, input.goal_description ?? null, input.target_date ?? null],
+      [
+        input.user_id,
+        input.grade_id,
+        input.goal_description ?? null,
+        input.target_date ?? null,
+      ],
     );
     return rows[0]!;
   },
@@ -69,7 +74,11 @@ export const goalRepository = {
    * goal flips to achieved and cleared when it flips back, so the two stay
    * consistent without the caller managing the timestamp.
    */
-  async update(id: number, userId: number, input: UpdateGoalInput): Promise<Goal | null> {
+  async update(
+    id: number,
+    userId: number,
+    input: UpdateGoalInput,
+  ): Promise<Goal | null> {
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -89,7 +98,9 @@ export const goalRepository = {
       values.push(input.is_achieved);
       fields.push(`is_achieved = $${values.length}`);
       // Keep achieved_at in lockstep with the flag.
-      fields.push(`achieved_at = CASE WHEN $${values.length} THEN now() ELSE NULL END`);
+      fields.push(
+        `achieved_at = CASE WHEN $${values.length} THEN now() ELSE NULL END`,
+      );
     }
 
     if (fields.length === 0) {
@@ -101,7 +112,7 @@ export const goalRepository = {
     values.push(userId);
     const userIdx = values.length;
     const { rows } = await query<Goal>(
-      `UPDATE goals SET ${fields.join(', ')}
+      `UPDATE goals SET ${fields.join(", ")}
        WHERE goal_id = $${idIdx} AND user_id = $${userIdx}
        RETURNING *`,
       values,

@@ -9,11 +9,6 @@ export interface Route {
   updated_at: string;
 }
 
-export interface CreateRouteInput {
-  grade_id: number;
-  route_name?: string | null;
-}
-
 export interface UpdateRouteInput {
   grade_id?: number;
   route_name?: string | null;
@@ -37,16 +32,6 @@ export const routeRepository = {
       [id],
     );
     return rows[0] ?? null;
-  },
-
-  async create(input: CreateRouteInput): Promise<Route> {
-    const { rows } = await query<Route>(
-      `INSERT INTO routes (grade_id, route_name)
-       VALUES ($1, $2)
-       RETURNING *`,
-      [input.grade_id, input.route_name ?? null],
-    );
-    return rows[0]!;
   },
 
   /**

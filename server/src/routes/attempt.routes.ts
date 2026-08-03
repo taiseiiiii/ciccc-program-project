@@ -4,8 +4,9 @@ import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
+// No POST here: attempts are created with their session via POST /sessions
+// (nested `attempts`), inside one transaction.
 router.get('/', asyncHandler(attemptController.list));
-router.post('/', asyncHandler(attemptController.create));
 router.get('/:id', asyncHandler(attemptController.get));
 router.patch('/:id', asyncHandler(attemptController.update));
 router.delete('/:id', asyncHandler(attemptController.remove));

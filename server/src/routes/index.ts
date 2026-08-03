@@ -1,13 +1,13 @@
-import { Router } from 'express';
-import { asyncHandler } from '../utils/asyncHandler';
-import { pingDatabase } from '../db/pool';
-import { requireAuth } from '../middleware/auth';
-import userRoutes from './user.routes';
-import sessionRoutes from './session.routes';
-import gradeRoutes from './grade.routes';
-import routeRoutes from './route.routes';
-import attemptRoutes from './attempt.routes';
-import goalRoutes from './goal.routes';
+import { Router } from "express";
+import { asyncHandler } from "../utils/asyncHandler";
+import { pingDatabase } from "../db/pool";
+import { requireAuth } from "../middleware/auth";
+import userRoutes from "./user.routes";
+import sessionRoutes from "./session.routes";
+import gradeRoutes from "./grade.routes";
+import routeRoutes from "./route.routes";
+import attemptRoutes from "./attempt.routes";
+import goalRoutes from "./goal.routes";
 
 const router = Router();
 
@@ -16,12 +16,12 @@ const router = Router();
  * GET /api/v1/health
  */
 router.get(
-  '/health',
+  "/health",
   asyncHandler(async (_req, res) => {
     const dbUp = await pingDatabase();
     res.status(dbUp ? 200 : 503).json({
-      status: 'ok',
-      db: dbUp ? 'up' : 'down',
+      status: "ok",
+      db: dbUp ? "up" : "down",
     });
   }),
 );
@@ -29,12 +29,12 @@ router.get(
 // Everything below requires a valid Supabase access token.
 router.use(requireAuth);
 
-router.use('/users', userRoutes); // GET /users/me
-router.use('/sessions', sessionRoutes);
-router.use('/grades', gradeRoutes); // read-only master data (V0–V17)
-router.use('/routes', routeRoutes);
-router.use('/attempts', attemptRoutes);
-router.use('/goals', goalRoutes);
+router.use("/users", userRoutes); // GET /users/me
+router.use("/sessions", sessionRoutes);
+router.use("/grades", gradeRoutes); // read-only master data (V0–V17)
+router.use("/routes", routeRoutes);
+router.use("/attempts", attemptRoutes);
+router.use("/goals", goalRoutes);
 
 // Still to build out:
 // router.use('/performances', performanceRoutes); // AI-generated reports
