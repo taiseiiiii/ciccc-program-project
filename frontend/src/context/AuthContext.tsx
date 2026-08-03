@@ -1,41 +1,10 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { api } from "../lib/api";
+import { AuthContext, type AuthContextValue } from "../hooks/useAuth";
 import type User from "../types/UserType";
-
-/**
- * Outcome of a sign-up or sign-in attempt.
- *
- * `needsEmailConfirmation` is its own flag rather than something the caller has
- * to infer: with Supabase's "Confirm email" setting on, signing up succeeds but
- * produces no session, and signing in fails outright, until the emailed link is
- * clicked. Both cases should lead the user to the same "check your inbox"
- * screen, so both report it here.
- */
-export interface AuthResult {
-  error: string | null;
-  needsEmailConfirmation: boolean;
-}
-
-interface AuthContextValue {
-  session: Session | null;
-  loading: boolean; // true until the initial getSession() resolves
-  /** App-side profile from the API. null until it loads, or if the API is down. */
-  profile: User | null;
-  /** Set when /users/me fails — the session is still valid, the API is not. */
-  profileError: string | null;
-  signUp: (args: {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-  }) => Promise<AuthResult>;
-  signIn: (args: { email: string; password: string }) => Promise<AuthResult>;
-  /** Re-send the sign-up confirmation link, for when the first one is lost. */
-  resendConfirmation: (email: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
-}
 
 /**
  * Where the confirmation link returns the user. Deriving it from the current
@@ -45,9 +14,8 @@ interface AuthContextValue {
  */
 const emailRedirectTo = (): string => window.location.origin;
 
-const AuthContext = createContext<AuthContextValue | null>(null);
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   // Tagged with the user it was fetched for, so signing out or switching
@@ -63,11 +31,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      // Drop all cached server data whenever the user signs out — whether via
+      // the sign-out button or an expired session — so an account signing in
+      // afterwards can never see the previous account's data.
+      if (event === "SIGNED_OUT") queryClient.clear();
       setSession(s);
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [queryClient]);
 
   // Load the app-side profile once we have a session. This is also what creates
   // the row: the backend provisions it from the JWT on the first authenticated
@@ -149,10 +121,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
-  return ctx;
 }

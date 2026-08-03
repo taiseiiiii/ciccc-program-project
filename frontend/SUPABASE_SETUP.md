@@ -72,9 +72,13 @@ VITE_API_URL=http://localhost:4000/api/v1
 
 ## 5. Share with the backend (taisei)
 
-- Send the **Project URL** — that's all the Express server needs
-  (`SUPABASE_URL` in `server/.env`; token verification uses the project's
-  public JWKS endpoint, so no secret is required).
+- Send the **Project URL** (`SUPABASE_URL` in `server/.env`). Token verification
+  uses the project's public JWKS endpoint, so no key or secret is needed for
+  auth.
+- Send the **database password** too, over something private. The app's data
+  lives in this project's Postgres, so the server connects to it directly and
+  that password is the only part invited members cannot look up themselves.
+  Resetting it later breaks his connection string, so mention it if you do.
 - Invite taisei to the organization so auth settings can be adjusted from
   the backend side too:
   **Organization Settings → Team → Invite member** →

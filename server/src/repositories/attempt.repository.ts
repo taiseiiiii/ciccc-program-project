@@ -1,4 +1,4 @@
-import { query } from '../db/pool';
+import { query } from "../db/pool";
 
 /** Shape of a row in the `attempts` table (one try at a route within a session). */
 export interface Attempt {
@@ -9,13 +9,6 @@ export interface Attempt {
   note: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface CreateAttemptInput {
-  session_id: number;
-  route_id: number;
-  is_success?: boolean;
-  note?: string | null;
 }
 
 export interface UpdateAttemptInput {
@@ -68,22 +61,15 @@ export const attemptRepository = {
     return rows[0] ?? null;
   },
 
-  /** The controller must verify the session belongs to the user before calling this. */
-  async create(input: CreateAttemptInput): Promise<Attempt> {
-    const { rows } = await query<Attempt>(
-      `INSERT INTO attempts (session_id, route_id, is_success, note)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [input.session_id, input.route_id, input.is_success ?? false, input.note ?? null],
-    );
-    return rows[0]!;
-  },
-
   /**
    * Partial update. Builds the SET clause only from the fields provided so a
    * missing field is left untouched (rather than overwritten with NULL).
    */
-  async update(id: number, userId: number, input: UpdateAttemptInput): Promise<Attempt | null> {
+  async update(
+    id: number,
+    userId: number,
+    input: UpdateAttemptInput,
+  ): Promise<Attempt | null> {
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -109,7 +95,7 @@ export const attemptRepository = {
     values.push(userId);
     const userIdx = values.length;
     const { rows } = await query<Attempt>(
-      `UPDATE attempts SET ${fields.join(', ')}
+      `UPDATE attempts SET ${fields.join(", ")}
        WHERE attempt_id = $${idIdx}
          AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $${userIdx})
        RETURNING *`,

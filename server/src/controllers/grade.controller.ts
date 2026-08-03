@@ -1,6 +1,6 @@
-import type { Request, Response } from 'express';
-import { gradeRepository } from '../repositories/grade.repository';
-import { HttpError } from '../utils/HttpError';
+import type { Request, Response } from "express";
+import { gradeRepository } from "../repositories/grade.repository";
+import { HttpError } from "../utils/HttpError";
 
 /** Parse and validate a numeric route param (e.g. :id). */
 function parseId(raw: string): number {

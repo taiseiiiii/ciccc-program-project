@@ -1,6 +1,10 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../lib/api";
+
 import type AttemptType from "../types/AttemptType";
+import type Grade from "../types/GradeType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
@@ -19,6 +23,67 @@ const LogSession = () => {
   const [editingAttempt, setEditingAttempt] = useState<null | AttemptType>(
     null,
   );
+
+  const queryClient = useQueryClient();
+
+  const {
+    data: gradesData,
+    isPending: isGradesLoading,
+    isError: isGradesError,
+    refetch: refetchGrades,
+  } = useQuery({
+    queryKey: ["grades"],
+    queryFn: () => api<{ data: Grade[] }>("/grades"),
+    // Read-only master data (V0–V17): never stale, no background refetches.
+    staleTime: Infinity,
+  });
+
+  // One request saves the whole visit: POST /sessions accepts the attempts
+  // nested and writes session + routes + attempts in a single database
+  // transaction, so a failure never leaves a half-saved session behind.
+  const { mutate: saveSession, isPending: isSavingSession } = useMutation({
+    mutationFn: async (input: {
+      visit_date: string;
+      gym_name: string;
+      grades: Grade[];
+      attempts: AttemptType[];
+    }) => {
+      const attempts = input.attempts.map((attempt) => {
+        const grade = input.grades.find(
+          (g) => g.grade_name === attempt.grade_name,
+        );
+        if (!grade) throw new Error(`Unknown grade ${attempt.grade_name}`);
+        return {
+          grade_id: grade.grade_id,
+          route_name: attempt.route_name,
+          is_success: attempt.is_success,
+          note: attempt.note,
+        };
+      });
+
+      await api("/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          visit_date: input.visit_date,
+          gym_name: input.gym_name,
+          attempts,
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      resetAttemptForm();
+      setGymName("");
+      setVisitDate(today);
+      setAttemptsList([]);
+      toast.success("Session successfully saved");
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save session",
+      );
+    },
+  });
 
   const resetAttemptForm = () => {
     setRouteName("");
@@ -43,7 +108,7 @@ const LogSession = () => {
     setAttemptsList([newAttempt, ...attemptsList]);
 
     resetAttemptForm();
-    toast.success("Successfully saved");
+    toast.success("Attempt saved");
   };
 
   const handleEditAttempt = (attempt: AttemptType) => {
@@ -51,7 +116,10 @@ const LogSession = () => {
     setEditingAttempt(attempt);
   };
 
-  const updateEditingField = (field: keyof AttemptType, value: any) => {
+  const updateEditingField = <K extends keyof AttemptType>(
+    field: K,
+    value: AttemptType[K],
+  ) => {
     if (!editingAttempt) return;
     setEditingAttempt({ ...editingAttempt, [field]: value });
   };
@@ -74,19 +142,18 @@ const LogSession = () => {
       return;
     }
 
-    // mock data will be here
-    const saveSessionList = {
+    const grades = gradesData?.data;
+    if (!grades) {
+      toast.error("Grade data is not loaded yet");
+      return;
+    }
+
+    saveSession({
       visit_date: visitDate,
       gym_name: gymName,
+      grades,
       attempts: attemptsList,
-    };
-    console.log(saveSessionList);
-
-    resetAttemptForm();
-    setGymName("");
-    setVisitDate(today);
-    setAttemptsList([]);
-    toast.success("Successfully saved");
+    });
   };
 
   const handleDeleteAttempt = () => {
@@ -98,27 +165,6 @@ const LogSession = () => {
     setIsEditModalOpen(false);
     toast.success("Attempt Deleted");
   };
-
-  const GRADES = [
-    "V0",
-    "V1",
-    "V2",
-    "V3",
-    "V4",
-    "V5",
-    "V6",
-    "V7",
-    "V8",
-    "V9",
-    "V10",
-    "V11",
-    "V12",
-    "V13",
-    "V14",
-    "V15",
-    "V16",
-    "V17",
-  ];
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -183,17 +229,32 @@ const LogSession = () => {
               Grades (v-Score)
             </p>
             <div className="flex flex-row gap-2 overflow-x-auto py-2">
-              {GRADES.map((grade) => (
+              {isGradesLoading && (
+                <p className="text-on-surface-variant py-2">
+                  Loading grades...
+                </p>
+              )}
+              {isGradesError && (
+                <>
+                  <p className="text-error self-center">
+                    Failed to load grades
+                  </p>
+                  <Button variant="secondary" onClick={() => refetchGrades()}>
+                    Retry
+                  </Button>
+                </>
+              )}
+              {gradesData?.data?.map((grade: Grade) => (
                 <Button
-                  key={grade}
-                  onClick={() => setSelectedGrade(grade)}
+                  key={grade.grade_id}
+                  onClick={() => setSelectedGrade(grade.grade_name)}
                   className={
-                    selectedGrade === grade
+                    selectedGrade === grade.grade_name
                       ? ""
                       : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
                   }
                 >
-                  {grade}
+                  {grade.grade_name}
                 </Button>
               ))}
             </div>
@@ -223,7 +284,7 @@ const LogSession = () => {
             Attempted List
           </h1>
           <div className="flex flex-col gap-3 mt-3">
-            {attemptsList.map((attempt) => (
+            {attemptsList?.map((attempt: AttemptType) => (
               <Card
                 key={attempt.id}
                 className="p-4 flex flex-row items-center justify-between"
@@ -251,8 +312,12 @@ const LogSession = () => {
             ))}
           </div>
           <div className="flex justify-end">
-            <Button className="mt-3" onClick={() => handleSaveSession()}>
-              Save Session
+            <Button
+              className="mt-3"
+              onClick={() => handleSaveSession()}
+              disabled={isSavingSession}
+            >
+              {isSavingSession ? "Saving..." : "Save Session"}
             </Button>
           </div>
         </div>
@@ -304,17 +369,19 @@ const LogSession = () => {
                   Grades (v-Score)
                 </p>
                 <div className="flex flex-row gap-2 overflow-x-auto py-2">
-                  {GRADES.map((grade) => (
+                  {gradesData?.data?.map((grade: Grade) => (
                     <Button
-                      key={grade}
-                      onClick={() => updateEditingField("grade_name", grade)}
+                      key={grade.grade_id}
+                      onClick={() =>
+                        updateEditingField("grade_name", grade.grade_name)
+                      }
                       className={
-                        editingAttempt?.grade_name === grade
+                        editingAttempt?.grade_name === grade.grade_name
                           ? ""
                           : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
                       }
                     >
-                      {grade}
+                      {grade.grade_name}
                     </Button>
                   ))}
                 </div>
@@ -347,12 +414,6 @@ const LogSession = () => {
                   Cancel
                 </Button>
                 <Button onClick={() => handleUpdateAttempt()}>Save</Button>
-                {/* <Button
-                  variant="secondary"
-                  onClick={() => setIsEditModalOpen(false)}
-                >
-                  Cancel
-                </Button> */}
               </div>
             </div>
           </div>
