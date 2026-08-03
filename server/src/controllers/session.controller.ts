@@ -1,5 +1,8 @@
 import type { Request, Response } from "express";
-import { sessionRepository } from "../repositories/session.repository";
+import {
+  sessionRepository,
+  type CreateSessionAttemptInput,
+} from "../repositories/session.repository";
 import { HttpError } from "../utils/HttpError";
 
 /** Parse and validate a numeric route param (e.g. :id). */
@@ -35,8 +38,11 @@ export const sessionController = {
   },
 
   // POST /api/v1/sessions
+  // Optionally takes `attempts: [{ grade_id, route_name?, is_success?, note? }]`;
+  // the session, its routes and its attempts are then created in one
+  // transaction, so a failure never leaves a partially saved session behind.
   async create(req: Request, res: Response): Promise<void> {
-    const { visit_date, gym_name } = req.body ?? {};
+    const { visit_date, gym_name, attempts } = req.body ?? {};
 
     if (
       typeof visit_date !== "string" ||
@@ -53,12 +59,47 @@ export const sessionController = {
     ) {
       throw HttpError.badRequest("gym_name must be a string");
     }
+    if (attempts !== undefined && !Array.isArray(attempts)) {
+      throw HttpError.badRequest("attempts must be an array");
+    }
 
-    const session = await sessionRepository.create({
-      user_id: req.user!.user_id,
-      visit_date,
-      gym_name,
-    });
+    const attemptInputs: CreateSessionAttemptInput[] = [];
+    for (const [i, raw] of (attempts ?? []).entries()) {
+      const a = (raw ?? {}) as Record<string, unknown>;
+      if (
+        typeof a.grade_id !== "number" ||
+        !Number.isInteger(a.grade_id) ||
+        a.grade_id <= 0
+      ) {
+        throw HttpError.badRequest(
+          `attempts[${i}].grade_id is required and must be a positive integer`,
+        );
+      }
+      if (
+        a.route_name !== undefined &&
+        a.route_name !== null &&
+        typeof a.route_name !== "string"
+      ) {
+        throw HttpError.badRequest(`attempts[${i}].route_name must be a string`);
+      }
+      if (a.is_success !== undefined && typeof a.is_success !== "boolean") {
+        throw HttpError.badRequest(`attempts[${i}].is_success must be a boolean`);
+      }
+      if (a.note !== undefined && a.note !== null && typeof a.note !== "string") {
+        throw HttpError.badRequest(`attempts[${i}].note must be a string`);
+      }
+      attemptInputs.push({
+        grade_id: a.grade_id,
+        route_name: a.route_name as string | null | undefined,
+        is_success: a.is_success as boolean | undefined,
+        note: a.note as string | null | undefined,
+      });
+    }
+
+    const session = await sessionRepository.createWithAttempts(
+      { user_id: req.user!.user_id, visit_date, gym_name },
+      attemptInputs,
+    );
     res.status(201).json({ data: session });
   },
 

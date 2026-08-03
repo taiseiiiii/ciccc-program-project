@@ -21,14 +21,19 @@ Interactive reference while the server runs: <http://localhost:4000/api/v1/docs>
 
 ## 1. What already works
 
-- `AuthProvider` owns the Supabase session; `useAuth()` exposes `session`,
-  `loading`, `profile`, `profileError`, `signUp`, `signIn`, `signOut`.
+- `AuthProvider` owns the Supabase session; `useAuth()` (from
+  `src/hooks/useAuth.ts`) exposes `session`, `loading`, `profile`,
+  `profileError`, `signUp`, `signIn`, `signOut`.
 - Route guards in `src/routes/AppRoutes.tsx` already keep unauthenticated users
   out of the app pages.
 - `useAuth().profile` is the app-side user row (`GET /users/me`), fetched once a
-  session exists. It is the only API call the frontend currently makes.
+  session exists.
+- TanStack Query is wired up (`QueryClientProvider` in `App.tsx`, client in
+  `src/lib/queryClient.ts`, devtools included). `Dashboard` (`/health`) and
+  `LogSession` (`/grades`, `POST /sessions`) show the patterns to copy.
 
-So the work is: **swap local `useState` bookkeeping for `api()` calls.**
+So the work is: **swap local `useState` bookkeeping for `useQuery`/`useMutation`
+around `api()` calls.**
 
 ## 2. The `api()` helper
 
@@ -110,8 +115,8 @@ Status codes you should expect:
 These are deliberate backend decisions. Designing around them saves time:
 
 1. **Never send `user_id`.** The owner is taken from the verified token. Sending
-   one is ignored at best. `POST /sessions` takes only `visit_date` and
-   `gym_name`; `POST /goals` takes no user field either.
+   one is ignored at best. `POST /sessions` takes `visit_date`, `gym_name` and
+   optionally nested `attempts`; `POST /goals` takes no user field either.
 2. **Other people's rows return `404`, not `403`.** Existence is never leaked. A
    404 means "not yours or not there" — same handling either way.
 3. **Everything except `/health` needs a token.** `api()` covers this. If you
@@ -151,27 +156,34 @@ route or a goal, and the UI works in `grade_name` (`"V4"`).
 
 | Method | Path | Body |
 | --- | --- | --- |
-| CRUD | `/routes`, `/routes/:id` | `{ grade_id, route_name? }` |
+| GET / PATCH / DELETE | `/routes`, `/routes/:id` | PATCH: `{ grade_id?, route_name? }` |
 
-`grade_id` is required and must exist. `route_name` is optional.
+There is **no `POST /routes`** — routes are created by `POST /sessions`
+(nested `attempts`, see below).
 
 ### Sessions — a gym visit, per-user
 
 | Method | Path | Body |
 | --- | --- | --- |
-| CRUD | `/sessions`, `/sessions/:id` | `{ visit_date, gym_name? }` |
+| CRUD | `/sessions`, `/sessions/:id` | `{ visit_date, gym_name?, attempts? }` |
 
 `visit_date` is required, `YYYY-MM-DD`. No `user_id`.
+
+`POST` optionally nests
+`attempts: [{ grade_id, route_name?, is_success?, note? }]`. Each entry creates
+a route and an attempt on it, and session + routes + attempts are written in
+**one database transaction** — a failed save persists nothing, so there is no
+partial-failure state to handle. The `201` response is the session with an
+`attempts` array.
 
 ### Attempts — one try at a route, per-user via its session
 
 | Method | Path | Body |
 | --- | --- | --- |
-| CRUD | `/attempts`, `/attempts/:id` | `{ session_id, route_id, is_success?, note? }` |
+| GET / PATCH / DELETE | `/attempts`, `/attempts/:id` | PATCH: `{ route_id?, is_success?, note? }` |
 
+- There is **no `POST /attempts`** — attempts are created via `POST /sessions`.
 - `GET /attempts?session_id=12` filters to one of your sessions.
-- On create, the `session_id` must be **yours** and the `route_id` must exist,
-  otherwise you get a `400` naming which one was wrong.
 - `PATCH` accepts `route_id`, `is_success`, `note` (not `session_id`).
 
 ### Goals — target grades, per-user
@@ -239,82 +251,58 @@ export default interface Goal {
 
 ## 7. Worked example: saving a session from LogSession
 
-`handleSaveSession` in `src/pages/LogSession.tsx` currently ends at
-`console.log(saveSessionList)`. The UI collects a gym name, a date, and a list of
-attempts that each carry a `grade_name` (`"V4"`) and a free-text `route_name`.
-
-The API needs ids, so saving is three steps:
-
-1. `POST /sessions` → get `session_id`
-2. for each attempt, turn `grade_name` + `route_name` into a `route_id`
-   (`POST /routes`)
-3. `POST /attempts` for each, referencing both ids
+This is implemented in `src/pages/LogSession.tsx` — read it as the reference
+pattern. The UI collects a gym name, a date, and a list of attempts that each
+carry a `grade_name` (`"V4"`) and a free-text `route_name`. The API works in
+ids, so the only client-side work is mapping `grade_name` → `grade_id` using
+the cached `/grades` list; the whole visit is then saved with **one request**:
 
 ```ts
-import { api } from "../lib/api";
-import type Grade from "../types/GradeType";
-import type Route from "../types/RouteType";
-import type Session from "../types/SessionType";
+const queryClient = useQueryClient();
 
-// Load once (e.g. in a useEffect) and keep in state — needed for grade_id.
-const { data: grades } = await api<{ data: Grade[] }>("/grades");
-
-const handleSaveSession = async () => {
-  if (!gymName.trim()) {
-    toast.error("Not found Location");
-    return;
-  }
-
-  try {
-    const { data: session } = await api<{ data: Session }>("/sessions", {
-      method: "POST",
-      body: JSON.stringify({ visit_date: visitDate, gym_name: gymName }),
+const { mutate: saveSession, isPending: isSavingSession } = useMutation({
+  mutationFn: async (input: {
+    visit_date: string;
+    gym_name: string;
+    grades: Grade[];
+    attempts: AttemptType[];
+  }) => {
+    const attempts = input.attempts.map((attempt) => {
+      const grade = input.grades.find(
+        (g) => g.grade_name === attempt.grade_name,
+      );
+      if (!grade) throw new Error(`Unknown grade ${attempt.grade_name}`);
+      return {
+        grade_id: grade.grade_id,
+        route_name: attempt.route_name,
+        is_success: attempt.is_success,
+        note: attempt.note,
+      };
     });
 
-    // Sequential on purpose: a clearer error if one attempt fails.
-    for (const attempt of attemptsList) {
-      const grade = grades.find((g) => g.grade_name === attempt.grade_name);
-      if (!grade) throw new Error(`Unknown grade ${attempt.grade_name}`);
-
-      const { data: route } = await api<{ data: Route }>("/routes", {
-        method: "POST",
-        body: JSON.stringify({
-          grade_id: grade.grade_id,
-          route_name: attempt.route_name,
-        }),
-      });
-
-      await api("/attempts", {
-        method: "POST",
-        body: JSON.stringify({
-          session_id: session.session_id,
-          route_id: route.route_id,
-          is_success: attempt.is_success,
-          note: attempt.note,
-        }),
-      });
-    }
-
-    resetAttemptForm();
-    setGymName("");
-    setVisitDate(today);
-    setAttemptsList([]);
-    toast.success("Successfully saved");
-  } catch (err) {
+    await api("/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        visit_date: input.visit_date,
+        gym_name: input.gym_name,
+        attempts,
+      }),
+    });
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    // ...reset the form, success toast
+  },
+  onError: (err) => {
     toast.error(err instanceof Error ? err.message : "Failed to save session");
-  }
-};
+  },
+});
 ```
 
-Two things worth handling while you are in there:
-
-- **Disable the save button while the request is in flight** (`isSaving` state),
-  otherwise a double click creates two sessions.
-- **Partial failure is possible.** If attempt 3 of 5 fails, the session and the
-  first two attempts already exist. Simplest acceptable behaviour: report the
-  error and leave the user on the page with their list intact. If we want
-  all-or-nothing, ask the backend for a single `POST /sessions` that accepts
-  nested attempts — that is a small server change and a much better API.
+Because the server writes session + routes + attempts in one transaction, there
+is no partial failure to handle: either the whole visit is saved or nothing is.
+Drive the save button's `disabled` and its "Saving..." label from the
+mutation's `isPending` so a double click can't submit twice.
 
 ## 8. Loading data into Dashboard / Progress
 
@@ -322,20 +310,29 @@ Both pages are still placeholders. The data they need:
 
 ```ts
 // Recent visits
-const { data: sessions } = await api<{ data: Session[] }>("/sessions");
+const { data: sessions } = useQuery({
+  queryKey: ["sessions"],
+  queryFn: () => api<{ data: Session[] }>("/sessions"),
+});
 
 // Attempts for one session
-const { data: attempts } = await api<{ data: Attempt[] }>(
-  `/attempts?session_id=${sessionId}`,
-);
+const { data: attempts } = useQuery({
+  queryKey: ["attempts", sessionId],
+  queryFn: () => api<{ data: Attempt[] }>(`/attempts?session_id=${sessionId}`),
+});
 
 // Goals
-const { data: goals } = await api<{ data: Goal[] }>("/goals");
+const { data: goals } = useQuery({
+  queryKey: ["goals"],
+  queryFn: () => api<{ data: Goal[] }>("/goals"),
+});
 ```
 
-A small `useEffect` + `useState` per page is fine to start. If it gets repetitive
-across pages, a tiny `useApi(path)` hook (data / loading / error) is worth
-extracting — but do it after two or three pages exist, not before.
+Use TanStack Query (`useQuery`) rather than hand-rolled `useEffect` +
+`useState`: caching, loading/error state and refetching come for free, and the
+`["sessions"]` key above is already invalidated by LogSession's save mutation,
+so a new visit shows up without extra wiring. Put anything that identifies the
+request (like `sessionId`) into the query key.
 
 Note there is currently **no aggregate/statistics endpoint**. Anything like
 "success rate by grade" or "sessions per month" has to be computed on the client
@@ -347,17 +344,16 @@ For a realistic amount of data, computing on the client is fine.
 Real limitations of the current API — raise these rather than working around
 them silently:
 
-1. **Routes are created blindly.** There is no find-or-create and no uniqueness
-   constraint, so logging "Crimpy Overhang" twice creates two `routes` rows. If
-   we want route reuse, the backend should add a lookup (`GET /routes?name=`) or
-   make `POST /routes` idempotent.
-2. **No nested create.** Saving a session with N attempts is `1 + 2N` requests
-   and is not atomic (see above).
-3. **No pagination anywhere.** `GET /sessions` returns everything. Fine now,
+1. **Routes are created blindly.** Every attempt saved through `POST /sessions`
+   creates a new `routes` row; there is no find-or-create and no uniqueness
+   constraint, so logging "Crimpy Overhang" twice creates two rows. If we want
+   route reuse, the backend should dedupe inside the bulk create (or add a
+   lookup).
+2. **No pagination anywhere.** `GET /sessions` returns everything. Fine now,
    needs `?limit`/`?offset` before the data grows.
-4. **Attempts carry no grade/route names.** Join client-side against `/routes`
+3. **Attempts carry no grade/route names.** Join client-side against `/routes`
    and `/grades`, or ask for an expanded response.
-5. **`/performances` and `/trainings` (the AI reports) do not exist yet** — the
+4. **`/performances` and `/trainings` (the AI reports) do not exist yet** — the
    tables are in the schema and the routes are commented out in
    `server/src/routes/index.ts`. AICoach has no backend to call.
 

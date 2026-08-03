@@ -1,4 +1,5 @@
-import { query } from "../db/pool";
+import { pool, query } from "../db/pool";
+import type { Attempt } from "./attempt.repository";
 
 /** Shape of a row in the `sessions` table. */
 export interface Session {
@@ -14,6 +15,18 @@ export interface CreateSessionInput {
   user_id: number;
   visit_date: string;
   gym_name?: string | null;
+}
+
+/** One attempt nested in a bulk session create. The route is created with it. */
+export interface CreateSessionAttemptInput {
+  grade_id: number;
+  route_name?: string | null;
+  is_success?: boolean;
+  note?: string | null;
+}
+
+export interface SessionWithAttempts extends Session {
+  attempts: Attempt[];
 }
 
 export interface UpdateSessionInput {
@@ -55,6 +68,63 @@ export const sessionRepository = {
       [input.user_id, input.visit_date, input.gym_name ?? null],
     );
     return rows[0]!;
+  },
+
+  /**
+   * Create a session together with its routes and attempts in one database
+   * transaction: either everything is persisted or nothing is. This is what
+   * the log-session form uses — creating the pieces via separate requests
+   * would leave a half-saved session behind whenever a later request failed,
+   * and retrying would then duplicate it.
+   */
+  async createWithAttempts(
+    input: CreateSessionInput,
+    attempts: CreateSessionAttemptInput[],
+  ): Promise<SessionWithAttempts> {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const { rows: sessionRows } = await client.query<Session>(
+        `INSERT INTO sessions (user_id, visit_date, gym_name)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [input.user_id, input.visit_date, input.gym_name ?? null],
+      );
+      const session = sessionRows[0]!;
+
+      const createdAttempts: Attempt[] = [];
+      for (const attempt of attempts) {
+        const { rows: routeRows } = await client.query<{ route_id: number }>(
+          `INSERT INTO routes (grade_id, route_name)
+           VALUES ($1, $2)
+           RETURNING route_id`,
+          [attempt.grade_id, attempt.route_name ?? null],
+        );
+        const { rows: attemptRows } = await client.query<Attempt>(
+          `INSERT INTO attempts (session_id, route_id, is_success, note)
+           VALUES ($1, $2, $3, $4)
+           RETURNING *`,
+          [
+            session.session_id,
+            routeRows[0]!.route_id,
+            attempt.is_success ?? false,
+            attempt.note ?? null,
+          ],
+        );
+        createdAttempts.push(attemptRows[0]!);
+      }
+
+      await client.query("COMMIT");
+      return { ...session, attempts: createdAttempts };
+    } catch (err) {
+      // Swallow rollback failures (e.g. the connection died) so the original
+      // error is the one that surfaces.
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   /**

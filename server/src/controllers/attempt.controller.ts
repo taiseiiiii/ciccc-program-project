@@ -49,53 +49,6 @@ export const attemptController = {
     res.json({ data: attempt });
   },
 
-  // POST /api/v1/attempts
-  async create(req: Request, res: Response): Promise<void> {
-    const { session_id, route_id, is_success, note } = req.body ?? {};
-
-    if (!Number.isInteger(session_id) || session_id <= 0) {
-      throw HttpError.badRequest(
-        "session_id is required and must be a positive integer",
-      );
-    }
-    if (!Number.isInteger(route_id) || route_id <= 0) {
-      throw HttpError.badRequest(
-        "route_id is required and must be a positive integer",
-      );
-    }
-    if (is_success !== undefined && typeof is_success !== "boolean") {
-      throw HttpError.badRequest("is_success must be a boolean");
-    }
-    if (note !== undefined && note !== null && typeof note !== "string") {
-      throw HttpError.badRequest("note must be a string");
-    }
-
-    // The parent session must exist AND belong to the caller.
-    const session = await sessionRepository.findById(
-      session_id,
-      req.user!.user_id,
-    );
-    if (!session) {
-      throw HttpError.badRequest(
-        `session_id ${session_id} does not reference one of your sessions`,
-      );
-    }
-    const route = await routeRepository.findById(route_id);
-    if (!route) {
-      throw HttpError.badRequest(
-        `route_id ${route_id} does not reference an existing route`,
-      );
-    }
-
-    const attempt = await attemptRepository.create({
-      session_id,
-      route_id,
-      is_success,
-      note,
-    });
-    res.status(201).json({ data: attempt });
-  },
-
   // PATCH /api/v1/attempts/:id
   async update(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);

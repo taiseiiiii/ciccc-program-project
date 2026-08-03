@@ -11,13 +11,6 @@ export interface Attempt {
   updated_at: string;
 }
 
-export interface CreateAttemptInput {
-  session_id: number;
-  route_id: number;
-  is_success?: boolean;
-  note?: string | null;
-}
-
 export interface UpdateAttemptInput {
   route_id?: number;
   is_success?: boolean;
@@ -66,22 +59,6 @@ export const attemptRepository = {
       [id, userId],
     );
     return rows[0] ?? null;
-  },
-
-  /** The controller must verify the session belongs to the user before calling this. */
-  async create(input: CreateAttemptInput): Promise<Attempt> {
-    const { rows } = await query<Attempt>(
-      `INSERT INTO attempts (session_id, route_id, is_success, note)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [
-        input.session_id,
-        input.route_id,
-        input.is_success ?? false,
-        input.note ?? null,
-      ],
-    );
-    return rows[0]!;
   },
 
   /**

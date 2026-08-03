@@ -124,7 +124,13 @@ paths:
     post:
       tags: [Sessions]
       summary: Create a session
-      description: The session is created for the authenticated user.
+      description: |
+        The session is created for the authenticated user.
+
+        `attempts` may be nested to save a whole gym visit in one call: each
+        entry creates a route (from `grade_id` + `route_name`) plus an attempt
+        on it. Session, routes and attempts are written in a single database
+        transaction, so on any failure nothing is persisted.
       operationId: createSession
       requestBody:
         required: true
@@ -135,9 +141,14 @@ paths:
             example:
               visit_date: '2026-07-07'
               gym_name: The Hive
+              attempts:
+                - grade_id: 3
+                  route_name: Yellow slab by the door
+                  is_success: true
+                  note: Flashed it!
       responses:
         '201':
-          description: Session created.
+          description: Session (and any nested attempts) created.
           content:
             application/json:
               schema:
@@ -145,11 +156,20 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Session'
+                    $ref: '#/components/schemas/SessionWithAttempts'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: An `attempts[].grade_id` does not reference an existing grade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  message: 'Operation conflicts with related data (foreign key constraint)'
 
   /sessions/{id}:
     parameters:
@@ -268,6 +288,9 @@ paths:
     get:
       tags: [Routes]
       summary: List routes
+      description: >-
+        Routes are created through `POST /sessions` (nested `attempts`), never
+        directly.
       operationId: listRoutes
       responses:
         '200':
@@ -282,35 +305,6 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Route'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      tags: [Routes]
-      summary: Create a route
-      description: '`grade_id` must reference an existing grade.'
-      operationId: createRoute
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RouteCreate'
-            example:
-              grade_id: 3
-              route_name: Yellow slab by the door
-      responses:
-        '201':
-          description: Route created.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Route'
-        '400':
-          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -393,7 +387,9 @@ paths:
     get:
       tags: [Attempts]
       summary: List attempts
-      description: All attempts across the authenticated user's sessions.
+      description: >-
+        All attempts across the authenticated user's sessions. Attempts are
+        created through `POST /sessions` (nested `attempts`), never directly.
       operationId: listAttempts
       parameters:
         - name: session_id
@@ -416,39 +412,6 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Attempt'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      tags: [Attempts]
-      summary: Create an attempt
-      description: >-
-        `session_id` must reference one of the authenticated user's sessions and
-        `route_id` an existing route; otherwise the request fails with `400`.
-      operationId: createAttempt
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AttemptCreate'
-            example:
-              session_id: 1
-              route_id: 2
-              is_success: true
-              note: Flashed it!
-      responses:
-        '201':
-          description: Attempt created.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -791,6 +754,42 @@ components:
           type: string
           nullable: true
           maxLength: 150
+        attempts:
+          type: array
+          description: >-
+            Attempts to create atomically with the session. Each entry also
+            creates the route it was climbed on.
+          items:
+            $ref: '#/components/schemas/SessionAttemptCreate'
+
+    SessionAttemptCreate:
+      type: object
+      required: [grade_id]
+      properties:
+        grade_id:
+          type: integer
+          minimum: 1
+        route_name:
+          type: string
+          nullable: true
+          maxLength: 150
+        is_success:
+          type: boolean
+          default: false
+        note:
+          type: string
+          nullable: true
+
+    SessionWithAttempts:
+      allOf:
+        - $ref: '#/components/schemas/Session'
+        - type: object
+          required: [attempts]
+          properties:
+            attempts:
+              type: array
+              items:
+                $ref: '#/components/schemas/Attempt'
 
     SessionUpdate:
       type: object
@@ -852,18 +851,6 @@ components:
           type: string
           format: date-time
 
-    RouteCreate:
-      type: object
-      required: [grade_id]
-      properties:
-        grade_id:
-          type: integer
-          minimum: 1
-        route_name:
-          type: string
-          nullable: true
-          maxLength: 150
-
     RouteUpdate:
       type: object
       properties:
@@ -902,23 +889,6 @@ components:
         updated_at:
           type: string
           format: date-time
-
-    AttemptCreate:
-      type: object
-      required: [session_id, route_id]
-      properties:
-        session_id:
-          type: integer
-          minimum: 1
-        route_id:
-          type: integer
-          minimum: 1
-        is_success:
-          type: boolean
-          default: false
-        note:
-          type: string
-          nullable: true
 
     AttemptUpdate:
       type: object

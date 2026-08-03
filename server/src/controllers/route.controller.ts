@@ -32,21 +32,6 @@ export const routeController = {
     res.json({ data: route });
   },
 
-  // POST /api/v1/routes
-  async create(req: Request, res: Response): Promise<void> {
-    const { grade_id, route_name } = req.body ?? {};
-
-    if (!Number.isInteger(grade_id) || grade_id <= 0) {
-      throw HttpError.badRequest('grade_id is required and must be a positive integer');
-    }
-    if (route_name !== undefined && route_name !== null && typeof route_name !== 'string') {
-      throw HttpError.badRequest('route_name must be a string');
-    }
-
-    const route = await routeRepository.create({ grade_id, route_name });
-    res.status(201).json({ data: route });
-  },
-
   // PATCH /api/v1/routes/:id
   async update(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);

@@ -1,11 +1,11 @@
 import { BrowserRouter } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AuthProvider } from "./context/AuthContext";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
 import AppRoutes from "./routes/AppRoutes";
 import { Toaster } from "react-hot-toast";
-
-export const queryClient = new QueryClient();
 
 const App = () => {
   return (
@@ -20,6 +20,7 @@ const App = () => {
           </div>
         </AuthProvider>
       </ThemeProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 };

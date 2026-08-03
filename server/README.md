@@ -152,12 +152,16 @@ to the authenticated user.
 | GET    | `/health`                    | Liveness + DB connectivity (public)     |
 | GET    | `/users/me`                  | The caller's profile (auto-provisioned) |
 | GET    | `/grades`, `/grades/:id`     | Grades (read-only, V0–V17)              |
-| CRUD   | `/sessions`, `/sessions/:id` | The caller's gym visits                 |
-| CRUD   | `/routes`, `/routes/:id`     | Climbing problems (shared)              |
-| CRUD   | `/attempts`, `/attempts/:id` | Tries at a route (`?session_id=`)       |
+| CRUD   | `/sessions`, `/sessions/:id` | The caller's gym visits; `POST` also takes nested `attempts` |
+| R/U/D  | `/routes`, `/routes/:id`     | Climbing problems (shared)              |
+| R/U/D  | `/attempts`, `/attempts/:id` | Tries at a route (`?session_id=`)       |
 | CRUD   | `/goals`, `/goals/:id`       | The caller's target grades              |
 
-CRUD = `GET` list, `POST`, `GET :id`, `PATCH :id` (partial), `DELETE :id`.
+CRUD = `GET` list, `POST`, `GET :id`, `PATCH :id` (partial), `DELETE :id`;
+R/U/D = the same minus `POST`. Routes and attempts are created only through
+`POST /sessions` (nested `attempts`), which writes session + routes + attempts
+in one database transaction so a mid-save failure can never leave a
+half-saved session behind.
 Responses are JSON: success payloads are wrapped in `{ "data": ... }`, errors in
 `{ "error": { "message": ... } }`.
 
@@ -175,5 +179,5 @@ curl http://localhost:4000/api/v1/health
 curl -X POST http://localhost:4000/api/v1/sessions \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"visit_date":"2026-07-07","gym_name":"The Hive"}'
+  -d '{"visit_date":"2026-07-07","gym_name":"The Hive","attempts":[{"grade_id":3,"route_name":"Yellow slab","is_success":true}]}'
 ```

@@ -1,13 +1,10 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 
-import { queryClient } from "../App";
 import type AttemptType from "../types/AttemptType";
 import type Grade from "../types/GradeType";
-import type Route from "../types/RouteType";
-import type Session from "../types/SessionType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
@@ -26,34 +23,67 @@ const LogSession = () => {
   const [editingAttempt, setEditingAttempt] = useState<null | AttemptType>(
     null,
   );
-  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const { data: gradesData, isPending: isGradesLoading } = useQuery<{
-    data: Grade[];
-  }>({
+  const queryClient = useQueryClient();
+
+  const {
+    data: gradesData,
+    isPending: isGradesLoading,
+    isError: isGradesError,
+    refetch: refetchGrades,
+  } = useQuery({
     queryKey: ["grades"],
-    queryFn: () => api("/grades"),
+    queryFn: () => api<{ data: Grade[] }>("/grades"),
+    // Read-only master data (V0–V17): never stale, no background refetches.
+    staleTime: Infinity,
   });
 
-  const { mutateAsync: createSession, isPending: isSavingSession } =
-    useMutation({
-      mutationFn: async (newSessionData: {
-        visit_date: string;
-        gym_name: string;
-      }) => {
-        const res = await api<{ data: Session }>("/sessions", {
-          method: "POST",
-          body: JSON.stringify(newSessionData),
-        });
-        return res.data;
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      },
-      onError: () => {
-        toast.error("Something went wrong");
-      },
-    });
+  // One request saves the whole visit: POST /sessions accepts the attempts
+  // nested and writes session + routes + attempts in a single database
+  // transaction, so a failure never leaves a half-saved session behind.
+  const { mutate: saveSession, isPending: isSavingSession } = useMutation({
+    mutationFn: async (input: {
+      visit_date: string;
+      gym_name: string;
+      grades: Grade[];
+      attempts: AttemptType[];
+    }) => {
+      const attempts = input.attempts.map((attempt) => {
+        const grade = input.grades.find(
+          (g) => g.grade_name === attempt.grade_name,
+        );
+        if (!grade) throw new Error(`Unknown grade ${attempt.grade_name}`);
+        return {
+          grade_id: grade.grade_id,
+          route_name: attempt.route_name,
+          is_success: attempt.is_success,
+          note: attempt.note,
+        };
+      });
+
+      await api("/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          visit_date: input.visit_date,
+          gym_name: input.gym_name,
+          attempts,
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      resetAttemptForm();
+      setGymName("");
+      setVisitDate(today);
+      setAttemptsList([]);
+      toast.success("Session successfully saved");
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save session",
+      );
+    },
+  });
 
   const resetAttemptForm = () => {
     setRouteName("");
@@ -86,7 +116,10 @@ const LogSession = () => {
     setEditingAttempt(attempt);
   };
 
-  const updateEditingField = (field: keyof AttemptType, value: any) => {
+  const updateEditingField = <K extends keyof AttemptType>(
+    field: K,
+    value: AttemptType[K],
+  ) => {
     if (!editingAttempt) return;
     setEditingAttempt({ ...editingAttempt, [field]: value });
   };
@@ -103,13 +136,11 @@ const LogSession = () => {
     toast.success("Attempt Updated!");
   };
 
-  const handleSaveSession = async () => {
+  const handleSaveSession = () => {
     if (!gymName.trim()) {
       toast.error("Not found Location");
       return;
     }
-
-    setIsSaving(true);
 
     const grades = gradesData?.data;
     if (!grades) {
@@ -117,46 +148,12 @@ const LogSession = () => {
       return;
     }
 
-    try {
-      const session = await createSession({
-        visit_date: visitDate,
-        gym_name: gymName,
-      });
-
-      for (const attempt of attemptsList) {
-        const grade = grades.find((g) => g.grade_name === attempt.grade_name);
-        if (!grade) throw new Error(`Unknown grade ${attempt.grade_name}`);
-
-        const { data: route } = await api<{ data: Route }>("/routes", {
-          method: "POST",
-          body: JSON.stringify({
-            grade_id: grade.grade_id,
-            route_name: attempt.route_name,
-          }),
-        });
-        await api("/attempts", {
-          method: "POST",
-          body: JSON.stringify({
-            session_id: session.session_id,
-            route_id: route.route_id,
-            is_success: attempt.is_success,
-            note: attempt.note,
-          }),
-        });
-      }
-
-      resetAttemptForm();
-      setGymName("");
-      setVisitDate(today);
-      setAttemptsList([]);
-      toast.success("Session successfully saved");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to save session",
-      );
-    } finally {
-      setIsSaving(false);
-    }
+    saveSession({
+      visit_date: visitDate,
+      gym_name: gymName,
+      grades,
+      attempts: attemptsList,
+    });
   };
 
   const handleDeleteAttempt = () => {
@@ -232,10 +229,24 @@ const LogSession = () => {
               Grades (v-Score)
             </p>
             <div className="flex flex-row gap-2 overflow-x-auto py-2">
+              {isGradesLoading && (
+                <p className="text-on-surface-variant py-2">
+                  Loading grades...
+                </p>
+              )}
+              {isGradesError && (
+                <>
+                  <p className="text-error self-center">
+                    Failed to load grades
+                  </p>
+                  <Button variant="secondary" onClick={() => refetchGrades()}>
+                    Retry
+                  </Button>
+                </>
+              )}
               {gradesData?.data?.map((grade: Grade) => (
                 <Button
                   key={grade.grade_id}
-                  // key={grade.id ?? `grade-${index}`}
                   onClick={() => setSelectedGrade(grade.grade_name)}
                   className={
                     selectedGrade === grade.grade_name
@@ -306,7 +317,7 @@ const LogSession = () => {
               onClick={() => handleSaveSession()}
               disabled={isSavingSession}
             >
-              {isSaving ? "Saving..." : "Save Session"}
+              {isSavingSession ? "Saving..." : "Save Session"}
             </Button>
           </div>
         </div>

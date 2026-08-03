@@ -1,7 +1,7 @@
 import Card from "../components/Card";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth, type AuthResult } from "../context/AuthContext";
+import { useAuth, type AuthResult } from "../hooks/useAuth";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import ConfirmEmailNotice from "../components/ConfirmEmailNotice";

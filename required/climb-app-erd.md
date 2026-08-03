@@ -11,8 +11,8 @@ erDiagram
 
     USER {
         int user_id PK
+        uuid auth_user_id UK "Supabase Auth user id (JWT sub)"
         string email UK
-        string password_hash
         datetime created_at
         datetime updated_at
         string first_name

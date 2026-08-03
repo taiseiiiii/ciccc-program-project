@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Dashboard from "../pages/Dashboard";
 import LogSession from "../pages/LogSession";
 import Progress from "../pages/Progress";
