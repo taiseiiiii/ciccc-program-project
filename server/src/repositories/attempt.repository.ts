@@ -11,6 +11,17 @@ export interface Attempt {
   updated_at: string;
 }
 
+/**
+ * An attempt as the /attempts endpoints return it: the row itself plus the
+ * route name and grade joined in, so clients can display an attempt without
+ * fetching routes and grades separately.
+ */
+export interface AttemptWithRoute extends Attempt {
+  route_name: string | null;
+  grade_name: string;
+  grade_level: number;
+}
+
 export interface UpdateAttemptInput {
   route_id?: number;
   is_success?: boolean;
@@ -27,22 +38,26 @@ export interface UpdateAttemptInput {
  */
 export const attemptRepository = {
   /** List the user's attempts, optionally scoped to one of their sessions. */
-  async findAll(userId: number, sessionId?: number): Promise<Attempt[]> {
+  async findAll(userId: number, sessionId?: number): Promise<AttemptWithRoute[]> {
     if (sessionId !== undefined) {
-      const { rows } = await query<Attempt>(
-        `SELECT a.*
+      const { rows } = await query<AttemptWithRoute>(
+        `SELECT a.*, r.route_name, g.grade_name, g.level AS grade_level
          FROM attempts a
          JOIN sessions s USING (session_id)
+         JOIN routes r USING (route_id)
+         JOIN grades g USING (grade_id)
          WHERE s.user_id = $1 AND a.session_id = $2
          ORDER BY a.attempt_id DESC`,
         [userId, sessionId],
       );
       return rows;
     }
-    const { rows } = await query<Attempt>(
-      `SELECT a.*
+    const { rows } = await query<AttemptWithRoute>(
+      `SELECT a.*, r.route_name, g.grade_name, g.level AS grade_level
        FROM attempts a
        JOIN sessions s USING (session_id)
+       JOIN routes r USING (route_id)
+       JOIN grades g USING (grade_id)
        WHERE s.user_id = $1
        ORDER BY a.attempt_id DESC`,
       [userId],
@@ -50,11 +65,13 @@ export const attemptRepository = {
     return rows;
   },
 
-  async findById(id: number, userId: number): Promise<Attempt | null> {
-    const { rows } = await query<Attempt>(
-      `SELECT a.*
+  async findById(id: number, userId: number): Promise<AttemptWithRoute | null> {
+    const { rows } = await query<AttemptWithRoute>(
+      `SELECT a.*, r.route_name, g.grade_name, g.level AS grade_level
        FROM attempts a
        JOIN sessions s USING (session_id)
+       JOIN routes r USING (route_id)
+       JOIN grades g USING (grade_id)
        WHERE a.attempt_id = $1 AND s.user_id = $2`,
       [id, userId],
     );
@@ -69,7 +86,7 @@ export const attemptRepository = {
     id: number,
     userId: number,
     input: UpdateAttemptInput,
-  ): Promise<Attempt | null> {
+  ): Promise<AttemptWithRoute | null> {
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -94,14 +111,18 @@ export const attemptRepository = {
     const idIdx = values.length;
     values.push(userId);
     const userIdx = values.length;
-    const { rows } = await query<Attempt>(
+    // RETURNING * would lack the joined route/grade columns, so re-read the
+    // row through findById to keep the response shape identical to GET.
+    const { rowCount } = await query(
       `UPDATE attempts SET ${fields.join(", ")}
        WHERE attempt_id = $${idIdx}
-         AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $${userIdx})
-       RETURNING *`,
+         AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $${userIdx})`,
       values,
     );
-    return rows[0] ?? null;
+    if ((rowCount ?? 0) === 0) {
+      return null;
+    }
+    return this.findById(id, userId);
   },
 
   async remove(id: number, userId: number): Promise<boolean> {

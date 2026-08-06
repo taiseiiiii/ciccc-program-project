@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type SessionType from "../types/SessionType";
-import type { AttemptInSession } from "../types/SessionType";
+import type { AttemptRecord } from "../types/AttemptType";
+import { useAuth } from "../hooks/useAuth";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import {
@@ -18,29 +19,26 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// Mock data for Recarts
-const visitData = [
-  { month: "Apr", visits: 8 },
-  { month: "May", visits: 12 },
-  { month: "Jun", visits: 10 },
-  { month: "Jul", visits: 15 },
-  { month: "Aug", visits: 14 },
-];
+// The charts cover the current month and the previous four.
+const MONTHS_SHOWN = 5;
 
-const progressData = [
-  { month: "Apr", maxGrade: 3, label: "V3" },
-  { month: "May", maxGrade: 4, label: "V4" },
-  { month: "Jun", maxGrade: 4, label: "V4" },
-  { month: "Jul", maxGrade: 5, label: "V5" },
-  { month: "Aug", maxGrade: 5, label: "V5" },
-];
+/** Local YYYY-MM for the month `offset` months before the current one. */
+const monthKey = (offset: number): string => {
+  const d = new Date();
+  d.setDate(1); // step back from the 1st so month arithmetic can't overflow
+  d.setMonth(d.getMonth() - offset);
+  return d.toLocaleDateString("sv-SE").slice(0, 7);
+};
 
-const successRateData = [
-  { name: "Success", value: 68, color: "var(--color-primary)" },
-  { name: "Failed", value: 32, color: "var(--color-secondary-container)" },
-];
+/** "2026-08" -> "Aug". The T00:00:00 keeps parsing in the local timezone. */
+const monthLabel = (key: string): string =>
+  new Date(`${key}-01T00:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+  });
 
 const Dashboard = () => {
+  const { profile } = useAuth();
+
   // The server answers 503 when its database is down, so an error here means
   // "unreachable or unhealthy" — not only "not found".
   const { isPending: isHealthPending, isError: isHealthError } = useQuery({
@@ -58,7 +56,7 @@ const Dashboard = () => {
     isError: isSessionsError,
   } = useQuery({
     queryKey: ["sessions"],
-    queryFn: () => api<{ data: SessionType[] }>("/sessions?include=attempts"),
+    queryFn: () => api<{ data: SessionType[] }>("/sessions"),
   });
 
   const {
@@ -67,123 +65,142 @@ const Dashboard = () => {
     isError: isAttemptsError,
   } = useQuery({
     queryKey: ["attempts"],
-    queryFn: () => api<{ data: AttemptInSession[] }>("/attempts"),
+    queryFn: () => api<{ data: AttemptRecord[] }>("/attempts"),
   });
 
   const sessions = sessionsData?.data || [];
   const attempts = attemptsData?.data || [];
 
-  // Sessions this month
-  const currentYearMonth = new Date().toLocaleDateString("sv-SE").slice(0, 7);
-  const currentMonthSessions = sessions.filter((session) =>
-    session.visit_date?.startsWith(currentYearMonth),
-  );
-  const currentMonthCount = currentMonthSessions.length;
-
-  // Highest grade
-  // const successfulAttempts = attempts.filter((a) => a.is_success === true);
-  // const successfulAttempts = sessions.flatMap((session) =>
-  //   (session.attempts || []).filter((attempt) => attempt?.is_success === true),
-  // );
-
-  // let highestGrade = "-";
-  // if (successfulAttempts.length > 0) {
-  //   const getGradeNumber = (attempt: AttemptInSession) => {
-  //     // route.grade.grade_name や grade_name など、多層的にフォールバック取得
-  //     const rawGradeName =
-  //       // attempt.route?.grade?.grade_name ||
-  //       attempt.grade_name || "";
-  //     const numericString = rawGradeName.toString().replace("V", "");
-  //     // const numericString = String(rawGradeName).replace(/[^0-9]/g, "");
-  //     return Number(numericString) || 0;
-  //   };
-
-  //   const gradeNumbers = successfulAttempts.map(getGradeNumber);
-  //   const maxGradeNum = Math.max(...gradeNumbers);
-
-  //   if (maxGradeNum > 0) {
-  //     highestGrade = `V${maxGradeNum}`;
-  //   }
-  // }
-  // -------------------------------------------------------
-  // if (successfulAttempts.length > 0) {
-  //   const getGradeNumber = (attempt: any) => {
-  //     const rawGradeName =
-  //       attempt?.grade?.grade_name || attempt?.grade_name || "";
-  //     const numericString = rawGradeName.toString().replace("V", "");
-  //     return Number(numericString) || 0;
-  //   };
-
-  //   const gradeNumbers = successfulAttempts.map(getGradeNumber);
-  //   const maxGradeNum = Math.max(...gradeNumbers);
-
-  //   if (maxGradeNum > 0) {
-  //     highestGrade = `V${maxGradeNum}`;
-  //   }
-  // }
-
-  // Total attempts
-  const totalAttemptsCount = attempts.length;
-  // const totalAttemptsCount = sessions.reduce(
-  //   (acc, session) => acc + (session.attempts?.length || 0),
-  //   0,
-  // );
-
   const isLoading = isSessionsLoading || isAttemptsLoading;
   const isError = isSessionsError || isAttemptsError;
 
+  // Sessions per month, keyed by YYYY-MM of the visit date
+  const monthCounts = new Map<string, number>();
+  for (const session of sessions) {
+    const key = session.visit_date.slice(0, 7);
+    monthCounts.set(key, (monthCounts.get(key) ?? 0) + 1);
+  }
+  const currentMonthCount = monthCounts.get(monthKey(0)) ?? 0;
+  const lastMonthCount = monthCounts.get(monthKey(1)) ?? 0;
+  const monthDelta = currentMonthCount - lastMonthCount;
+
+  // Highest grade ever sent (successful attempts only)
+  const successfulAttempts = attempts.filter((a) => a.is_success);
+  const highestGrade =
+    successfulAttempts.length > 0
+      ? successfulAttempts.reduce((best, a) =>
+          a.grade_level > best.grade_level ? a : best,
+        ).grade_name
+      : "-";
+
+  // Total attempts
+  const totalAttemptsCount = attempts.length;
+
+  // Success rate across all attempts
+  const successRate =
+    attempts.length > 0
+      ? Math.round((successfulAttempts.length / attempts.length) * 100)
+      : 0;
+  const successRateData = [
+    { name: "Success", value: successRate, color: "var(--color-primary)" },
+    {
+      name: "Failed",
+      value: 100 - successRate,
+      color: "var(--color-secondary-container)",
+    },
+  ];
+
+  // Chart rows for the last MONTHS_SHOWN months, oldest first
+  const monthKeys = Array.from({ length: MONTHS_SHOWN }, (_, i) =>
+    monthKey(MONTHS_SHOWN - 1 - i),
+  );
+  const visitData = monthKeys.map((key) => ({
+    month: monthLabel(key),
+    visits: monthCounts.get(key) ?? 0,
+  }));
+
+  // Best successful grade per month. Attempts carry no date of their own, so
+  // each one takes the visit month of its parent session.
+  const sessionMonth = new Map<number, string>();
+  for (const session of sessions) {
+    sessionMonth.set(session.session_id, session.visit_date.slice(0, 7));
+  }
+  const maxGradeByMonth = new Map<string, number>();
+  for (const attempt of successfulAttempts) {
+    const key = sessionMonth.get(attempt.session_id);
+    if (!key) continue;
+    maxGradeByMonth.set(
+      key,
+      Math.max(maxGradeByMonth.get(key) ?? attempt.grade_level, attempt.grade_level),
+    );
+  }
+  // null (not 0) for months without a send, so the line shows a gap instead
+  // of pretending the climber dropped to V0.
+  const progressData = monthKeys.map((key) => ({
+    month: monthLabel(key),
+    maxGrade: maxGradeByMonth.get(key) ?? null,
+  }));
+
+  // Most recent gym visits (the server returns sessions newest first)
+  const recentSessions = sessions.slice(0, 2);
+
   return (
     <div>
-      {isSessionsLoading && <p>Loading stats...</p>}
-      {isSessionsError && (
-        <p className="text-red-500">Failed to load sessions.</p>
+      {isLoading && <p>Loading stats...</p>}
+      {isError && (
+        <p className="text-error">Failed to load dashboard data.</p>
       )}
 
-      {!isSessionsLoading && !isSessionsError && (
+      {!isLoading && !isError && (
         <div>
           <div className="mt-3">
             <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-              Welcome back, Suzu!
+              Welcome back{profile?.first_name ? `, ${profile.first_name}` : ""}!
             </h1>
             <p>You're on track for your best month yet.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
-            <Card className="p-4 bg-card flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-muted-foreground">
+            <Card className="p-4 flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-on-surface-variant">
                 SESSIONS THIS MONTH
               </h3>
-              <div className="gap-3 flex flex-row items-center justify-baseline">
+              <div className="gap-3 flex flex-row items-center">
                 <p className="text-3xl font-bold mt-2">{currentMonthCount}</p>
-                <p className="text-error">- 5 vs last month</p>
+                {monthDelta !== 0 && (
+                  <p className={monthDelta > 0 ? "text-primary" : "text-error"}>
+                    {monthDelta > 0 ? `+${monthDelta}` : monthDelta} vs last
+                    month
+                  </p>
+                )}
               </div>
             </Card>
 
-            <Card className="p-4 bg-card flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-muted-foreground">
+            <Card className="p-4 flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-on-surface-variant">
                 HIGHEST GRADE
               </h3>
-              {/* <p className="text-3xl font-bold mt-2">{highestGrade}</p> */}
+              <p className="text-3xl font-bold mt-2">{highestGrade}</p>
             </Card>
 
-            <Card className="p-4 bg-card flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-muted-foreground">
+            <Card className="p-4 flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-on-surface-variant">
                 TOTAL ATTEMPTS
               </h3>
               <p className="text-3xl font-bold mt-2">{totalAttemptsCount}</p>
             </Card>
 
-            <div className="p-4 bg-card rounded-xl shadow-sm bg-primary-container flex flex-col justify-center">
+            {/* Static placeholder until the AI coach backend exists. */}
+            <div className="p-4 rounded-xl shadow-sm bg-primary-container flex flex-col justify-center">
               <h3 className="text-sm font-medium text-on-primary-container">
                 AI COACH
               </h3>
-              <p className="text-3xl font-bold mt-2 text-on-primary">
+              <p className="text-3xl font-bold mt-2 text-on-primary-container">
                 Focus on slab
               </p>
-              <p className="text-body-sm mt-1 text-on-primary/90">
+              <p className="text-body-sm mt-1 text-on-primary-container/90">
                 Slab success is 15% lower. Focus on footwork.
               </p>
               <Button
-                // to="/AICoach"
                 variant="secondary"
                 className="mt-4 bg-primary-container text-primary hover:opacity-90 font-medium w-full"
               >
@@ -193,8 +210,8 @@ const Dashboard = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 mb-4">
-            <Card className="p-4 bg-card flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-muted-foreground">
+            <Card className="p-4 flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-on-surface-variant">
                 MONTHLY VOLUME
               </h3>
               <div className="h-48 w-full">
@@ -229,8 +246,8 @@ const Dashboard = () => {
               </div>
             </Card>
 
-            <Card className="p-4 bg-card flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-muted-foreground">
+            <Card className="p-4 flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-on-surface-variant">
                 GRADE PROGRESS
               </h3>
               <div className="h-48 w-full">
@@ -244,11 +261,12 @@ const Dashboard = () => {
                     <YAxis
                       stroke="var(--color-outline)"
                       fontSize={12}
-                      domain={[0, 8]}
+                      domain={[0, "auto"]}
+                      allowDecimals={false}
                       tickFormatter={(value) => `V${value}`}
                     />
                     <Tooltip
-                      formatter={(value: number) => [`V${value}`, "Max Grade"]}
+                      formatter={(value) => [`V${Number(value)}`, "Max Grade"]}
                       contentStyle={{
                         backgroundColor:
                           "var(--color-surface-container-highest)",
@@ -269,8 +287,8 @@ const Dashboard = () => {
               </div>
             </Card>
 
-            <Card className="p-4 bg-card flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-muted-foreground">
+            <Card className="p-4 flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-on-surface-variant">
                 SUCCESS RATE
               </h3>
               <div className="h-48 w-full relative flex items-center justify-center">
@@ -285,12 +303,12 @@ const Dashboard = () => {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {successRateData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      {successRateData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => [`${value}%`, "Rate"]}
+                      formatter={(value) => [`${Number(value)}%`, "Rate"]}
                       contentStyle={{
                         backgroundColor:
                           "var(--color-surface-container-highest)",
@@ -303,7 +321,7 @@ const Dashboard = () => {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-headline-sm font-bold text-on-surface">
-                    68%
+                    {successRate}%
                   </span>
                   <span className="text-label-sm text-on-surface-variant">
                     Success
@@ -318,22 +336,25 @@ const Dashboard = () => {
               Recent Activity
             </h1>
             <div className="flex flex-col gap-3 mt-3">
-              <Card className="p-4 flex flex-row items-center justify-between">
-                <div className="flex flex-row gap-4">
-                  <p>2026-08-2</p>
-                  <p className="font-bold">Progression</p>
-                </div>
-                <Button variant="secondary">View</Button>
-              </Card>
-            </div>
-            <div className="flex flex-col gap-3 mt-3">
-              <Card className="p-4 flex flex-row items-center justify-between">
-                <div className="flex flex-row gap-4">
-                  <p>2026-07-31</p>
-                  <p className="font-bold">The Hive</p>
-                </div>
-                <Button variant="secondary">View</Button>
-              </Card>
+              {recentSessions.length === 0 && (
+                <p className="text-on-surface-variant">
+                  No sessions logged yet.
+                </p>
+              )}
+              {recentSessions.map((session) => (
+                <Card
+                  key={session.session_id}
+                  className="p-4 flex flex-row items-center justify-between"
+                >
+                  <div className="flex flex-row gap-4">
+                    <p>{session.visit_date}</p>
+                    <p className="font-bold">
+                      {session.gym_name ?? "Climbing session"}
+                    </p>
+                  </div>
+                  <Button variant="secondary">View</Button>
+                </Card>
+              ))}
             </div>
           </div>
         </div>
