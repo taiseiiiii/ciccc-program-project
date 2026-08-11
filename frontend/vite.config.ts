@@ -13,7 +13,7 @@ export default defineConfig({
       // old build until the user accepts, so a deploy never swaps the bundle out
       // from under someone mid-session. PWAUpdatePrompt renders the offer.
       registerType: "prompt",
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      includeAssets: ["favicon.ico", "apple-touch-icon.png"],
       manifest: {
         name: "ClimbLog AI",
         short_name: "ClimbLog",
