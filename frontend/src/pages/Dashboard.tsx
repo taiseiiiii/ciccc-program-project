@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import type SessionType from "../types/SessionType";
 import type { AttemptRecord } from "../types/AttemptType";
@@ -36,8 +37,17 @@ const monthLabel = (key: string): string =>
     month: "short",
   });
 
+/** Sub-headline under the welcome, phrased to match the month-over-month delta. */
+const paceMessage = (sessionCount: number, delta: number): string => {
+  if (sessionCount === 0) return "Log your first session to start tracking your progress.";
+  if (delta > 0) return "You're ahead of last month — keep it going!";
+  if (delta < 0) return "You're behind last month's pace. Time to get back on the wall.";
+  return "You're matching last month's pace.";
+};
+
 const Dashboard = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
 
   // The server answers 503 when its database is down, so an error here means
   // "unreachable or unhealthy" — not only "not found".
@@ -97,18 +107,28 @@ const Dashboard = () => {
   const totalAttemptsCount = attempts.length;
 
   // Success rate across all attempts
-  const successRate =
-    attempts.length > 0
-      ? Math.round((successfulAttempts.length / attempts.length) * 100)
-      : 0;
-  const successRateData = [
-    { name: "Success", value: successRate, color: "var(--color-primary)" },
-    {
-      name: "Failed",
-      value: 100 - successRate,
-      color: "var(--color-secondary-container)",
-    },
-  ];
+  const hasAttempts = attempts.length > 0;
+  const successRate = hasAttempts
+    ? Math.round((successfulAttempts.length / attempts.length) * 100)
+    : 0;
+  // With no attempts at all a Success/Failed split would render as a fully
+  // "Failed" donut, so an empty ring stands in until there is data to split.
+  const successRateData = hasAttempts
+    ? [
+        { name: "Success", value: successRate, color: "var(--color-primary)" },
+        {
+          name: "Failed",
+          value: 100 - successRate,
+          color: "var(--color-secondary-container)",
+        },
+      ]
+    : [
+        {
+          name: "No data",
+          value: 100,
+          color: "var(--color-surface-container-highest)",
+        },
+      ];
 
   // Chart rows for the last MONTHS_SHOWN months, oldest first
   const monthKeys = Array.from({ length: MONTHS_SHOWN }, (_, i) =>
@@ -157,7 +177,7 @@ const Dashboard = () => {
             <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
               Welcome back{profile?.first_name ? `, ${profile.first_name}` : ""}!
             </h1>
-            <p>You're on track for your best month yet.</p>
+            <p>{paceMessage(sessions.length, monthDelta)}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
             <Card className="p-4 flex flex-col justify-center">
@@ -189,22 +209,27 @@ const Dashboard = () => {
               <p className="text-3xl font-bold mt-2">{totalAttemptsCount}</p>
             </Card>
 
-            {/* Static placeholder until the AI coach backend exists. */}
+            {/*
+              Placeholder until the AI coach backend exists. It deliberately
+              shows no statistics: the schema stores no wall angle or style, so
+              any "focus on X" figure here would be invented.
+            */}
             <div className="p-4 rounded-xl shadow-sm bg-primary-container flex flex-col justify-center">
               <h3 className="text-sm font-medium text-on-primary-container">
                 AI COACH
               </h3>
               <p className="text-3xl font-bold mt-2 text-on-primary-container">
-                Focus on slab
+                Coming soon
               </p>
               <p className="text-body-sm mt-1 text-on-primary-container/90">
-                Slab success is 15% lower. Focus on footwork.
+                Personalized training tips based on your logged sessions.
               </p>
               <Button
                 variant="secondary"
-                className="mt-4 bg-primary-container text-primary hover:opacity-90 font-medium w-full"
+                className="mt-4 font-medium w-full"
+                onClick={() => navigate("/ai-coach")}
               >
-                View Plan
+                Open AI Coach
               </Button>
             </div>
           </div>
@@ -300,32 +325,43 @@ const Dashboard = () => {
                       cy="50%"
                       innerRadius={45}
                       outerRadius={65}
-                      paddingAngle={5}
+                      // A single placeholder slice needs no gap between slices.
+                      paddingAngle={hasAttempts ? 5 : 0}
                       dataKey="value"
                     >
                       {successRateData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(value) => [`${Number(value)}%`, "Rate"]}
-                      contentStyle={{
-                        backgroundColor:
-                          "var(--color-surface-container-highest)",
-                        borderColor: "var(--color-outline-variant)",
-                        borderRadius: "8px",
-                        color: "var(--color-on-surface)",
-                      }}
-                    />
+                    {hasAttempts && (
+                      <Tooltip
+                        formatter={(value) => [`${Number(value)}%`, "Rate"]}
+                        contentStyle={{
+                          backgroundColor:
+                            "var(--color-surface-container-highest)",
+                          borderColor: "var(--color-outline-variant)",
+                          borderRadius: "8px",
+                          color: "var(--color-on-surface)",
+                        }}
+                      />
+                    )}
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-headline-sm font-bold text-on-surface">
-                    {successRate}%
-                  </span>
-                  <span className="text-label-sm text-on-surface-variant">
-                    Success
-                  </span>
+                  {hasAttempts ? (
+                    <>
+                      <span className="text-headline-sm font-bold text-on-surface">
+                        {successRate}%
+                      </span>
+                      <span className="text-label-sm text-on-surface-variant">
+                        Success
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-label-sm text-on-surface-variant">
+                      No attempts yet
+                    </span>
+                  )}
                 </div>
               </div>
             </Card>
@@ -352,7 +388,6 @@ const Dashboard = () => {
                       {session.gym_name ?? "Climbing session"}
                     </p>
                   </div>
-                  <Button variant="secondary">View</Button>
                 </Card>
               ))}
             </div>

@@ -111,18 +111,23 @@ export const attemptRepository = {
     const idIdx = values.length;
     values.push(userId);
     const userIdx = values.length;
-    // RETURNING * would lack the joined route/grade columns, so re-read the
-    // row through findById to keep the response shape identical to GET.
-    const { rowCount } = await query(
-      `UPDATE attempts SET ${fields.join(", ")}
-       WHERE attempt_id = $${idIdx}
-         AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $${userIdx})`,
+    // RETURNING * alone would lack the joined route/grade columns, so the
+    // update feeds a CTE that joins them on. One statement, so a concurrent
+    // delete can't make a committed write look like a 404.
+    const { rows } = await query<AttemptWithRoute>(
+      `WITH updated AS (
+         UPDATE attempts SET ${fields.join(", ")}
+         WHERE attempt_id = $${idIdx}
+           AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $${userIdx})
+         RETURNING *
+       )
+       SELECT a.*, r.route_name, g.grade_name, g.level AS grade_level
+       FROM updated a
+       JOIN routes r USING (route_id)
+       JOIN grades g USING (grade_id)`,
       values,
     );
-    if ((rowCount ?? 0) === 0) {
-      return null;
-    }
-    return this.findById(id, userId);
+    return rows[0] ?? null;
   },
 
   async remove(id: number, userId: number): Promise<boolean> {

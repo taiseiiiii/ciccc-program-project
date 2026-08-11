@@ -71,7 +71,10 @@ const LogSession = () => {
       });
     },
     onSuccess: () => {
+      // The dashboard derives its stats from both lists, so a saved session
+      // has to refresh the attempts it created as well.
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["attempts"] });
       resetAttemptForm();
       setGymName("");
       setVisitDate(today);
