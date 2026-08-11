@@ -423,7 +423,7 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Attempt'
+                      $ref: '#/components/schemas/AttemptWithRoute'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -446,7 +446,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Attempt'
+                    $ref: '#/components/schemas/AttemptWithRoute'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -473,7 +473,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Attempt'
+                    $ref: '#/components/schemas/AttemptWithRoute'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1152,6 +1152,27 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    AttemptWithRoute:
+      description: >-
+        An attempt as the /attempts endpoints return it: the row itself plus
+        the route name and grade joined in, so clients can display an attempt
+        without fetching routes and grades separately.
+      allOf:
+        - $ref: '#/components/schemas/Attempt'
+        - type: object
+          required: [route_name, grade_name, grade_level]
+          properties:
+            route_name:
+              type: string
+              nullable: true
+              example: Blue slab in the corner
+            grade_name:
+              type: string
+              example: V5
+            grade_level:
+              type: integer
+              example: 5
 
     AttemptUpdate:
       type: object
