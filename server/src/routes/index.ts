@@ -8,6 +8,8 @@ import gradeRoutes from "./grade.routes";
 import routeRoutes from "./route.routes";
 import attemptRoutes from "./attempt.routes";
 import goalRoutes from "./goal.routes";
+import performanceRoutes from "./performance.routes";
+import trainingRoutes from "./training.routes";
 
 const router = Router();
 
@@ -35,9 +37,7 @@ router.use("/grades", gradeRoutes); // read-only master data (V0–V17)
 router.use("/routes", routeRoutes);
 router.use("/attempts", attemptRoutes);
 router.use("/goals", goalRoutes);
-
-// Still to build out:
-// router.use('/performances', performanceRoutes); // AI-generated reports
-// router.use('/trainings', trainingRoutes);       // AI-generated reports
+router.use("/performances", performanceRoutes); // AI-generated performance reports
+router.use("/trainings", trainingRoutes); // AI-generated training plans
 
 export default router;
