@@ -71,8 +71,11 @@ const LogSession = () => {
       });
     },
     onSuccess: () => {
+      // The dashboard derives its stats from both lists, so a saved session
+      // has to refresh the attempts it created as well.
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
-      // A new session changes every figure on the Progress screen. The key is
+      queryClient.invalidateQueries({ queryKey: ["attempts"] });
+      // Progress reads its figures from the server instead. The key is
       // ["stats", month], so this refreshes whichever month is on screen.
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       resetAttemptForm();
