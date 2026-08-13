@@ -72,6 +72,9 @@ const LogSession = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      // A new session changes every figure on the Progress screen. The key is
+      // ["stats", month], so this refreshes whichever month is on screen.
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
       resetAttemptForm();
       setGymName("");
       setVisitDate(today);
