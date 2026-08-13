@@ -1,125 +1,644 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../lib/api";
+import { useState } from "react";
+import toast from "react-hot-toast";
+import type SessionType from "../types/SessionType";
+import type { AttemptRecord } from "../types/AttemptType";
+import type Goal from "../types/GoalType";
+import type { GoalCreate } from "../types/GoalType";
+import type { GoalUpdate } from "../types/GoalType";
+import type Grade from "../types/GradeType";
+import Card from "../components/Card";
+import Button from "../components/Button";
+import Input from "../components/Input";
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
-  CartesianGrid,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import Card from "../components/Card";
 
-// Mock data for Recharts
-// AreaCharts
-const monthlySessionFrequencyData = [
-  { date: "Aug 1", sessions: 1, cumulativeSessions: 1 },
-  { date: "Aug 2", sessions: 0, cumulativeSessions: 1 },
-  { date: "Aug 3", sessions: 1, cumulativeSessions: 2 },
-  { date: "Aug 4", sessions: 0, cumulativeSessions: 2 },
-  { date: "Aug 5", sessions: 1, cumulativeSessions: 3 },
-  { date: "Aug 6", sessions: 0, cumulativeSessions: 3 },
-  { date: "Aug 7", sessions: 0, cumulativeSessions: 3 },
-  { date: "Aug 8", sessions: 1, cumulativeSessions: 4 },
-  { date: "Aug 9", sessions: 0, cumulativeSessions: 4 },
-  { date: "Aug 10", sessions: 1, cumulativeSessions: 5 },
-  { date: "Aug 11", sessions: 0, cumulativeSessions: 5 },
-  { date: "Aug 12", sessions: 1, cumulativeSessions: 6 },
-  { date: "Aug 13", sessions: 0, cumulativeSessions: 6 },
-  { date: "Aug 14", sessions: 0, cumulativeSessions: 6 },
-  { date: "Aug 15", sessions: 1, cumulativeSessions: 7 },
-  { date: "Aug 16", sessions: 0, cumulativeSessions: 7 },
-  { date: "Aug 17", sessions: 1, cumulativeSessions: 8 },
-  { date: "Aug 18", sessions: 0, cumulativeSessions: 8 },
-  { date: "Aug 19", sessions: 1, cumulativeSessions: 9 },
-  { date: "Aug 20", sessions: 0, cumulativeSessions: 9 },
-  { date: "Aug 21", sessions: 0, cumulativeSessions: 9 },
-  { date: "Aug 22", sessions: 1, cumulativeSessions: 10 },
-  { date: "Aug 23", sessions: 0, cumulativeSessions: 10 },
-  { date: "Aug 24", sessions: 1, cumulativeSessions: 11 },
-  { date: "Aug 25", sessions: 0, cumulativeSessions: 11 },
-  { date: "Aug 26", sessions: 1, cumulativeSessions: 12 },
-  { date: "Aug 27", sessions: 0, cumulativeSessions: 12 },
-  { date: "Aug 28", sessions: 0, cumulativeSessions: 12 },
-  { date: "Aug 29", sessions: 1, cumulativeSessions: 13 },
-  { date: "Aug 30", sessions: 0, cumulativeSessions: 13 },
-  { date: "Aug 31", sessions: 1, cumulativeSessions: 14 },
-];
-
-// Horizontal BarChart
-const gradeSuccessRateData = [
-  { grade: "V0", successRate: 100, sends: 12, fails: 0 },
-  { grade: "V1", successRate: 95, sends: 18, fails: 1 },
-  { grade: "V2", successRate: 88, sends: 22, fails: 3 },
-  { grade: "V3", successRate: 75, sends: 15, fails: 5 },
-  { grade: "V4", successRate: 50, sends: 10, fails: 10 },
-  { grade: "V5", successRate: 25, sends: 4, fails: 12 },
-  { grade: "V6", successRate: 10, sends: 1, fails: 9 },
-];
-
-// Heatmap
-const sessionHeatmapData = [
-  { day: "Mon", timeSlot: "Morning", value: 0 },
-  { day: "Mon", timeSlot: "Afternoon", value: 1 },
-  { day: "Mon", timeSlot: "Evening", value: 4 },
-
-  { day: "Tue", timeSlot: "Morning", value: 1 },
-  { day: "Tue", timeSlot: "Afternoon", value: 0 },
-  { day: "Tue", timeSlot: "Evening", value: 2 },
-
-  { day: "Wed", timeSlot: "Morning", value: 0 },
-  { day: "Wed", timeSlot: "Afternoon", value: 2 },
-  { day: "Wed", timeSlot: "Evening", value: 5 },
-
-  { day: "Thu", timeSlot: "Morning", value: 0 },
-  { day: "Thu", timeSlot: "Afternoon", value: 1 },
-  { day: "Thu", timeSlot: "Evening", value: 1 },
-
-  { day: "Fri", timeSlot: "Morning", value: 2 },
-  { day: "Fri", timeSlot: "Afternoon", value: 3 },
-  { day: "Fri", timeSlot: "Evening", value: 6 },
-
-  { day: "Sat", timeSlot: "Morning", value: 5 },
-  { day: "Sat", timeSlot: "Afternoon", value: 7 },
-  { day: "Sat", timeSlot: "Evening", value: 2 },
-
-  { day: "Sun", timeSlot: "Morning", value: 4 },
-  { day: "Sun", timeSlot: "Afternoon", value: 5 },
-  { day: "Sun", timeSlot: "Evening", value: 1 },
-];
-const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const timeSlots = ["Morning", "Afternoon", "Evening"];
-
-const getBgColor = (val: number) => {
-  if (val === 0) return "bg-surface-container-high opacity-30";
-  if (val < 3) return "bg-primary-container/40 text-on-surface";
-  if (val < 5) return "bg-primary-container text-on-primary-container";
-  return "bg-primary text-on-primary font-bold";
+/** Local YYYY-MM for the month `offset` months before the current one. */
+const monthKey = (offset: number): string => {
+  const d = new Date();
+  d.setDate(1); // step back from the 1st so month arithmetic can't overflow
+  d.setMonth(d.getMonth() - offset);
+  return d.toLocaleDateString("sv-SE").slice(0, 7);
 };
 
-const gradeAttemptsData = [
-  { grade: "V0", totalAttempts: 12, sends: 12, fails: 0 },
-  { grade: "V1", totalAttempts: 19, sends: 18, fails: 1 },
-  { grade: "V2", totalAttempts: 25, sends: 22, fails: 3 },
-  { grade: "V3", totalAttempts: 20, sends: 15, fails: 5 },
-  { grade: "V4", totalAttempts: 20, sends: 10, fails: 10 },
-  { grade: "V5", totalAttempts: 16, sends: 4, fails: 12 },
-  { grade: "V6", totalAttempts: 10, sends: 1, fails: 9 },
-  { grade: "V7", totalAttempts: 4, sends: 0, fails: 4 },
-];
-
 const Progress = () => {
+  const queryClient = useQueryClient();
+  const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
+  const [goalDescription, setGoalDescription] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<number | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  const {
+    data: sessionsData,
+    isPending: isSessionsLoading,
+    isError: isSessionsError,
+  } = useQuery({
+    queryKey: ["sessions"],
+    queryFn: () => api<{ data: SessionType[] }>("/sessions"),
+  });
+
+  const {
+    data: attemptsData,
+    isPending: isAttemptsLoading,
+    isError: isAttemptsError,
+  } = useQuery({
+    queryKey: ["attempts"],
+    queryFn: () => api<{ data: AttemptRecord[] }>("/attempts"),
+  });
+
+  const {
+    data: goalsData,
+    isPending: isGoalsLoading,
+    isError: isGoalsError,
+  } = useQuery({
+    queryKey: ["goals"],
+    queryFn: () => api<{ data: Goal[] }>("/goals"),
+  });
+
+  const {
+    data: gradesData,
+    isPending: isGradesLoading,
+    isError: isGradesError,
+  } = useQuery({
+    queryKey: ["grades"],
+    queryFn: () => api<{ data: Grade[] }>("/grades"),
+  });
+
+  const sessions = sessionsData?.data || [];
+  const attempts = attemptsData?.data || [];
+  const goals = goalsData?.data || [];
+  const grades = gradesData?.data ?? [];
+
+  const isLoading =
+    isSessionsLoading || isAttemptsLoading || isGoalsLoading || isGradesLoading;
+  const isError =
+    isSessionsError || isAttemptsError || isGoalsError || isGradesError;
+
+  // Goals Update Setting
+  const resetGoalForm = () => {
+    setSelectedGradeId(null);
+    setTargetDate("");
+    setGoalDescription("");
+    setEditingGoalId(null);
+  };
+
+  const createGoalMutation = useMutation<{ data: Goal }, Error, GoalCreate>({
+    mutationFn: (newGoal: GoalCreate) =>
+      api("/goals", { method: "POST", body: JSON.stringify(newGoal) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+
+      toast.success("Goal created successfully!");
+      handleCloseModal();
+    },
+    onError: () => {
+      toast.error("Failed to create goal");
+    },
+  });
+
+  const updateGoalMutation = useMutation<
+    { data: Goal },
+    Error,
+    { goalId: number; updatedGoal: GoalUpdate }
+  >({
+    mutationFn: ({
+      goalId,
+      updatedGoal,
+    }: {
+      goalId: number;
+      updatedGoal: GoalUpdate;
+    }) =>
+      api(`/goals/${goalId}`, {
+        method: "PATCH",
+        body: JSON.stringify(updatedGoal),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      handleCloseModal();
+    },
+    onError: (error) => {
+      console.error("Failed to update goal:", error);
+    },
+  });
+
+  const deleteGoalMutation = useMutation<unknown, Error, number>({
+    mutationFn: (goalId: number) =>
+      api(`/goals/${goalId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      toast.success("Goal deleted successfully!");
+      setIsDeleteConfirmOpen(false);
+      handleCloseModal();
+    },
+    onError: (error) => {
+      console.error("Failed to delete goal:", error);
+      toast.error("Failed to delete goal");
+    },
+  });
+
+  const getGradeName = (gradeId: number) => {
+    const foundGradeName = grades.find((g) => g.grade_id === gradeId);
+    return foundGradeName ? foundGradeName.grade_name : `Grade No.${gradeId}`;
+  };
+
+  const handleSaveGoal = () => {
+    if (!selectedGradeId) {
+      toast.error("Please select a target grade.");
+      return;
+    }
+
+    if (editingGoalId) {
+      const updateGoalData: GoalUpdate = {
+        grade_id: selectedGradeId,
+        goal_description: goalDescription.trim() || null,
+        target_date: targetDate || null,
+      };
+
+      updateGoalMutation.mutate({
+        goalId: editingGoalId,
+        updatedGoal: updateGoalData,
+      });
+    } else {
+      const newGoalData: GoalCreate = {
+        grade_id: selectedGradeId,
+        goal_description: goalDescription.trim() || null,
+        target_date: targetDate || null,
+      };
+
+      createGoalMutation.mutate(newGoalData);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsGoalModalOpen(false);
+    resetGoalForm();
+  };
+
+  const handleOpenEditModal = (goal: Goal) => {
+    setEditingGoalId(goal.goal_id);
+    setSelectedGradeId(goal.grade_id);
+    setTargetDate(goal.target_date ?? "");
+    setGoalDescription(goal.goal_description ?? "");
+    setIsGoalModalOpen(true);
+  };
+
+  const handleDeleteGoal = () => {
+    if (!editingGoalId) return;
+    deleteGoalMutation.mutate(editingGoalId);
+  };
+
+  const activeGoals = goals.filter((g) => g.is_achieved === false);
+  const sortedActiveGoals = [...activeGoals].sort((a, b) => {
+    if (!a.target_date && !b.target_date) return 0;
+    if (!a.target_date) return 1;
+    if (!b.target_date) return -1;
+    return a.target_date.localeCompare(b.target_date);
+  });
+
+  // Sends This month
+  const currentMonth = monthKey(0);
+  const lastMonth = monthKey(1);
+
+  const sendsThisMonth = attempts.filter((attempt) => {
+    const isSent = attempt.is_success;
+    const isThisMonth = attempt.created_at?.slice(0, 7) === currentMonth;
+
+    return isSent && isThisMonth;
+  });
+
+  const sendsLastMonth = attempts.filter((attempt) => {
+    const isSent = attempt.is_success;
+    const isLastMonth = attempt.created_at?.slice(0, 7) === lastMonth;
+
+    return isSent && isLastMonth;
+  });
+  const currentMonthSendsCont = sendsThisMonth.length;
+  const lastMonthSendsCont = sendsLastMonth.length;
+  const monthSendsDelta = currentMonthSendsCont - lastMonthSendsCont;
+
+  // Highest grade ever sent in this month (successful attempts only)
+  const highestGradeThisMonth =
+    sendsThisMonth.length > 0
+      ? sendsThisMonth.reduce((best, a) =>
+          a.grade_level > best.grade_level ? a : best,
+        ).grade_name
+      : "-";
+
+  // Total attempts
+  const totalAttemptsThisMonth = attempts.filter(
+    (attempt) => attempt.created_at?.slice(0, 7) === currentMonth,
+  );
+  const totalAttemptThisMonthCount = totalAttemptsThisMonth.length;
+
+  // Climbing days per month
+  const climbingDaysThisMonth = new Set(
+    sessions
+      .filter((session) => session.visit_date?.slice(0, 7) === currentMonth)
+      .map((session) => session.visit_date),
+  );
+  const climbingDaysLastMonth = new Set(
+    sessions
+      .filter((session) => session.visit_date?.slice(0, 7) === lastMonth)
+      .map((session) => session.visit_date),
+  );
+  const climbingDaysLastMonthCont = climbingDaysLastMonth.size;
+  const climbingDaysThisMonthCont = climbingDaysThisMonth.size;
+  const climbingDaysDelta =
+    climbingDaysThisMonthCont - climbingDaysLastMonthCont;
+
+  // Monthly session frequency
+  const dailyCounts = new Map<string, number>();
+  for (const session of sessions) {
+    const dateKey = session.visit_date.slice(0, 10);
+    dailyCounts.set(dateKey, (dailyCounts.get(dateKey) ?? 0) + 1);
+  }
+
+  const today = new Date();
+  const year = parseInt(currentMonth.split("-")[0]);
+  const month = parseInt(currentMonth.split("-")[1]);
+
+  const isCurrentMonth =
+    today.getFullYear() === year && today.getMonth() + 1 === month;
+  const daysToDisplay = isCurrentMonth
+    ? today.getDate()
+    : new Date(year, month, 0).getDate();
+
+  let cumulativeSessions = 0;
+
+  const monthlySessionFrequencyData = Array.from(
+    { length: daysToDisplay },
+    (_, i) => {
+      const dayNumber = i + 1;
+
+      const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+
+      const dateLabel = new Date(year, month - 1, dayNumber).toLocaleDateString(
+        "en-US",
+        {
+          month: "short",
+          day: "numeric",
+        },
+      );
+
+      const sessionsCount = dailyCounts.get(dateKey) ?? 0;
+
+      cumulativeSessions += sessionsCount;
+
+      return {
+        date: dateLabel,
+        sessions: sessionsCount,
+        cumulativeSessions: cumulativeSessions,
+      };
+    },
+  );
+
+  // Success rate by grade
+  type GradeStat = { sends: number; fails: number };
+  const statsMap = new Map<string, GradeStat>();
+
+  for (const attempt of totalAttemptsThisMonth) {
+    const grade = attempt.grade_name;
+    const current = statsMap.get(grade) ?? { sends: 0, fails: 0 };
+
+    if (attempt.is_success) {
+      current.sends += 1;
+    } else {
+      current.fails += 1;
+    }
+
+    statsMap.set(grade, current);
+  }
+  const gradeSuccessRateData = Array.from(statsMap.entries())
+    .map(([grade, { sends, fails }]) => {
+      const total = sends + fails;
+      const successRate = total > 0 ? Math.round((sends / total) * 100) : 0;
+
+      return {
+        grade,
+        successRate,
+        sends,
+        fails,
+      };
+    })
+    .sort((a, b) =>
+      a.grade.localeCompare(b.grade, undefined, { numeric: true }),
+    );
+
+  // Session activity heatmap
+  const calendarDays = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date();
+    d.setDate(today.getDate() - (29 - i));
+
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const dateKey = `${y}-${m}-${day}`;
+
+    const dateLabel = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+
+    return {
+      dateKey,
+      dateLabel,
+      dayNumber: day,
+      count: dailyCounts.get(dateKey) ?? 0,
+    };
+  });
+
+  const getTileColor = (count: number) => {
+    if (count === 0)
+      return "bg-surface-container-high/30 text-muted-foreground/50";
+    if (count === 1) return "bg-primary/50 text-on-primary font-medium";
+    if (count === 2) return "bg-primary/80 text-on-primary font-bold";
+    return "bg-primary text-on-primary font-bold shadow-sm";
+  };
+
+  // Personal record top 3
+  const personalRecordTop3 = (() => {
+    const successfulAttempts = attempts.filter((a) => a.is_success);
+    const sessionMap = new Map(sessions.map((s) => [s.session_id, s.gym_name]));
+
+    const attemptsWithDetails = successfulAttempts.map((attempt) => {
+      const dateStr = attempt.created_at
+        ? new Date(attempt.created_at).toLocaleDateString("ja-JP")
+        : "-";
+      const location = sessionMap.get(attempt.session_id) || "No location name";
+
+      return {
+        id: attempt.attempt_id,
+        grade_name: attempt.grade_name,
+        grade_level: attempt.grade_level,
+        route_name: attempt.route_name || "Unnamed Route",
+        location: location,
+        date: dateStr,
+      };
+    });
+
+    return attemptsWithDetails
+      .sort((a, b) => b.grade_level - a.grade_level)
+      .slice(0, 3);
+  })();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-sm text-muted-foreground animate-pulse">
+          Loading analytics data...
+        </p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-sm text-error font-medium">
+          Failed to load performance analytics.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h1 className="text-primary text-headline-md font-bold tracking-tight">
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl border border-border space-y-4 text-center">
+            <h3 className="text-base font-bold text-text-primary">
+              Delete Goal
+            </h3>
+            <p className="text-sm text-text-secondary">
+              Are you sure you want to delete this goal?
+            </p>
+
+            <div className="flex justify-center gap-3 pt-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                disabled={deleteGoalMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="error"
+                onClick={handleDeleteGoal}
+                disabled={deleteGoalMutation.isPending}
+              >
+                {deleteGoalMutation.isPending ? "Deleting..." : "Yes, Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isGoalModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-border space-y-5">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h2 className="text-lg font-bold text-text-primary">
+                Set New Goal
+              </h2>
+              <Button
+                variant="error"
+                onClick={handleCloseModal}
+                className="text-text-secondary hover:text-text-primary text-sm p-1"
+              >
+                ✕
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Target Grade
+                </label>
+                {isGradesLoading ? (
+                  <div className="text-xs text-text-muted p-2">
+                    Loading grades...
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                    {grades.map((grade) => {
+                      const isSelected = selectedGradeId === grade.grade_id;
+                      return (
+                        <button
+                          key={grade.grade_id}
+                          type="button"
+                          onClick={() => setSelectedGradeId(grade.grade_id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            isSelected
+                              ? "bg-primary text-black font-bold"
+                              : "bg-background border border-border text-text-secondary hover:text-text-primary"
+                          }`}
+                        >
+                          {grade.grade_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Target Date
+                </label>
+                <Input
+                  type="date"
+                  value={targetDate}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Description / Memo
+                </label>
+                <textarea
+                  value={goalDescription}
+                  onChange={(e) => setGoalDescription(e.target.value)}
+                  placeholder="Send V5 in one month!!"
+                  rows={3}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between gap-2 pt-2">
+              {editingGoalId ? (
+                <Button
+                  variant="error"
+                  onClick={() => setIsDeleteConfirmOpen(true)}
+                  disabled={deleteGoalMutation.isPending}
+                >
+                  Delete
+                </Button>
+              ) : (
+                <div></div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="secondary" onClick={handleCloseModal}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveGoal}
+                  disabled={createGoalMutation.isPending}
+                >
+                  {createGoalMutation.isPending ? "Saving..." : "Save Goal"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <h1 className="text-primary text-headline-md font-bold tracking-tight mb-4">
         Performance Analytics
       </h1>
+      <div>
+        <Card className="p-4 bg-card mb-6 border border-outline-variant/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold tracking-wider text-muted-foreground uppercase">
+                Active Goals
+              </h3>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
+                {sortedActiveGoals.length}
+              </span>
+            </div>
+
+            <Button
+              variant="primary"
+              onClick={() => setIsGoalModalOpen(true)}
+              className="text-xs"
+            >
+              + Add Goal
+            </Button>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {sortedActiveGoals.length > 0 ? (
+              sortedActiveGoals.map((goal) => (
+                <div
+                  key={goal.goal_id}
+                  className="flex items-center justify-between p-3 rounded-xl bg-surface-container-high/40 border border-outline-variant/20 hover:border-outline-variant/50 transition-all"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                    <div className="shrink-0 w-11 h-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base">
+                      {getGradeName(goal.grade_id)}
+                    </div>
+
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-semibold text-sm text-foreground truncate">
+                        {goal.goal_description}
+                      </span>
+                      {goal.target_date && (
+                        <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
+                          Due: {goal.target_date}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleOpenEditModal(goal)}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      Edit
+                    </Button>
+
+                    <Button
+                      variant="primary"
+                      className="shrink-0 text-xs gap-1 hover:bg-primary hover:text-on-primary border-primary/30"
+                      onClick={() => {
+                        updateGoalMutation.mutate({
+                          goalId: goal.goal_id,
+                          updatedGoal: {
+                            is_achieved: true,
+                          },
+                        });
+                      }}
+                    >
+                      Complete
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-6 px-4 border border-dashed border-outline-variant/40 rounded-xl flex flex-col items-center justify-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  No active goals set yet.
+                </p>
+                <Button
+                  variant="secondary"
+                  className="text-xs text-primary underline"
+                  onClick={() => setIsGoalModalOpen(true)}
+                >
+                  Set your first climbing goal!
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 mb-4">
         <Card className="p-4 bg-card flex flex-col justify-center">
@@ -127,28 +646,53 @@ const Progress = () => {
             TOTAL SENDS / MONTH
           </h3>
           <div className="flex flex-col gap-3 justify-baseline">
-            <p className="text-4xl font-bold mt-2 text-primary">60</p>
-            <p className="text-primary">+ 10 from last month</p>
+            <p className="text-4xl font-bold mt-2 text-primary">
+              {currentMonthSendsCont}{" "}
+              <span className="text-sm font-bold mt-2 text-primary">
+                / {totalAttemptThisMonthCount} attempts
+              </span>
+            </p>
+            {monthSendsDelta !== 0 && (
+              <p
+                className={monthSendsDelta > 0 ? "text-primary" : "text-error"}
+              >
+                {monthSendsDelta > 0 ? `+${monthSendsDelta}` : monthSendsDelta}{" "}
+                from last month
+              </p>
+            )}
           </div>
         </Card>
 
         <Card className="p-4 bg-card flex flex-col justify-center">
           <h3 className="text-sm font-medium text-muted-foreground">
-            HIGHEST GRADE
+            HIGHEST GRADE / MONTH
           </h3>
           <div className="flex flex-col gap-3 justify-baseline">
-            <p className="text-4xl font-bold mt-2 text-error">V4</p>
-            <p>Projecting V5</p>
+            <p className="text-4xl font-bold mt-2 text-error">
+              {highestGradeThisMonth}
+            </p>
+            {/* <p>Projecting V5</p> */}
           </div>
         </Card>
 
         <Card className="p-4 bg-card flex flex-col justify-center">
           <h3 className="text-sm font-medium text-muted-foreground">
-            CLIMBING HOURS / MONTH
+            CLIMBING DAYS / MONTH
           </h3>
           <div className="flex flex-col gap-3 justify-baseline">
-            <p className="text-4xl font-bold mt-2 text-secondary">15h</p>
-            <p>Arg 3h / session</p>
+            <p className="text-4xl font-bold mt-2 text-secondary">
+              {climbingDaysThisMonthCont === 1
+                ? "1 day"
+                : `${climbingDaysThisMonthCont} days`}
+            </p>
+            <p
+              className={climbingDaysDelta > 0 ? "text-primary" : "text-error"}
+            >
+              {climbingDaysDelta > 0
+                ? `+${climbingDaysDelta}`
+                : climbingDaysDelta}{" "}
+              from last month
+            </p>
           </div>
         </Card>
       </div>
@@ -230,7 +774,7 @@ const Progress = () => {
                   fontSize={12}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value}%`, "Success Rate"]}
+                  formatter={(value) => [`${value}%`, "Success Rate"]}
                   contentStyle={{
                     backgroundColor: "var(--color-surface-container-highest)",
                     borderColor: "var(--color-outline-variant)",
@@ -250,88 +794,79 @@ const Progress = () => {
         </Card>
 
         <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Session Activity Heatmap
-          </h3>
-          <div className="space-y-2">
-            {/* Header (by the time) */}
-            <div className="grid grid-cols-4 gap-1.5 text-center text-label-sm text-on-surface-variant font-medium">
-              <div></div>
-              <div>Morning</div>
-              <div>Afternoon</div>
-              <div>Evening</div>
-            </div>
-
-            {/*  Date of a week */}
-            {days.map((day) => (
-              <div key={day} className="grid grid-cols-4 gap-1.5 items-center">
-                <div className="text-label-sm font-semibold text-on-surface-variant text-center">
-                  {day}
-                </div>
-                {timeSlots.map((slot) => {
-                  const item = sessionHeatmapData.find(
-                    (d) => d.day === day && d.timeSlot === slot,
-                  );
-                  const val = item ? item.value : 0;
-                  return (
-                    <div
-                      key={slot}
-                      className={`h-8 rounded-md flex items-center justify-center text-xs transition-colors ${getBgColor(
-                        val,
-                      )}`}
-                      title={`${day} ${slot}: ${val} sessions`}
-                    >
-                      {val > 0 ? val : ""}
-                    </div>
-                  );
-                })}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Session Activity Heatmap
+            </h3>
+            <span className="text-xs text-muted-foreground font-normal">
+              Last 30 days
+            </span>
+          </div>
+          <div className="grid grid-cols-7  gap-1.5 my-auto">
+            {calendarDays.map((item) => (
+              <div
+                key={item.dateKey}
+                className={`aspect-square rounded-md flex flex-col items-center justify-center text-[10px] transition-all ${getTileColor(
+                  item.count,
+                )}`}
+                title={`${item.dateLabel}: ${item.count} session${item.count > 1 ? "s" : ""}`}
+              >
+                <span>{parseInt(item.dayNumber, 10)}</span>
+                {item.count > 1 && (
+                  <span className="text-[8px] font-extrabold leading-none">
+                    x{item.count}
+                  </span>
+                )}
               </div>
             ))}
           </div>
+
+          <div className="flex items-center justify-end gap-1.5 mt-3 text-[10px] text-muted-foreground">
+            <span>Rest</span>
+            <div className="w-2.5 h-2.5 rounded bg-surface-container-high/30" />
+            <div className="w-2.5 h-2.5 rounded bg-primary/50" />
+            <div className="w-2.5 h-2.5 rounded bg-primary/80" />
+            <div className="w-2.5 h-2.5 rounded bg-primary" />
+            <span>Multi-session</span>
+          </div>
         </Card>
 
-        <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Attempts Breakdown by Grade
+        <Card className="p-4 bg-card mb-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">
+            PERSONAL RECORDS (TOP 3)
           </h3>
-          <div className="h-60 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={gradeAttemptsData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke="var(--color-outline-variant)"
-                />
-                <XAxis
-                  dataKey="grade"
-                  stroke="var(--color-outline)"
-                  fontSize={12}
-                />
-                <YAxis stroke="var(--color-outline)" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--color-surface-container-highest)",
-                    borderColor: "var(--color-outline-variant)",
-                    borderRadius: "8px",
-                    color: "var(--color-on-surface)",
-                  }}
-                />
-                {/* Stacked Bar Chart: stackId="a" */}
-                <Bar
-                  dataKey="sends"
-                  stackId="a"
-                  fill="var(--color-primary)"
-                  name="Sends (Success)"
-                />
-                <Bar
-                  dataKey="fails"
-                  stackId="a"
-                  fill="var(--color-secondary-container)"
-                  radius={[4, 4, 0, 0]}
-                  name="Fails"
-                />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="flex flex-col gap-3">
+            {personalRecordTop3.length > 0 ? (
+              personalRecordTop3.map((item, index) => (
+                <div
+                  key={item.id || index}
+                  className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-high/40 border border-outline-variant/20 hover:border-outline-variant/50 transition-colors"
+                >
+                  <div className="px-3 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-black text-xl">
+                    {item.grade_name}
+                  </div>
+
+                  <div className="flex-1 mx-4 flex flex-col justify-center min-w-0">
+                    <span className="font-semibold text-sm text-foreground truncate">
+                      {item.route_name}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {item.location}
+                    </span>
+                  </div>
+
+                  <div className="text-right whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {item.date}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-outline-variant/40 rounded-xl">
+                No sends recorded yet. Keep climbing!
+              </div>
+            )}
           </div>
         </Card>
       </div>
