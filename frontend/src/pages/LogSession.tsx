@@ -75,6 +75,9 @@ const LogSession = () => {
       // has to refresh the attempts it created as well.
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["attempts"] });
+      // Progress reads its figures from the server instead. The key is
+      // ["stats", month], so this refreshes whichever month is on screen.
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
       resetAttemptForm();
       setGymName("");
       setVisitDate(today);
