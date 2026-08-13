@@ -1,12 +1,18 @@
+import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Dashboard from "../pages/Dashboard";
 import LogSession from "../pages/LogSession";
-import Progress from "../pages/Progress";
 import AICoach from "../pages/AICoach";
 import AppLayout from "../layouts/AppLayout";
 import Profile from "../pages/Profile";
 import AuthLayout from "../layouts/AuthLayout";
+
+// Progress is the only screen that needs a charting library, and recharts (with
+// its d3 dependencies) is by far the heaviest thing in the bundle. Loading it
+// on demand keeps it out of the initial download for everyone who never opens
+// the page — which matters most on the mobile/PWA path.
+const Progress = lazy(() => import("../pages/Progress"));
 
 const RequireAuth = () => {
   const { session, loading } = useAuth();
@@ -41,7 +47,20 @@ const AppRoutes = () => {
         <Route element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="log-session" element={<LogSession />} />
-          <Route path="progress" element={<Progress />} />
+          <Route
+            path="progress"
+            element={
+              <Suspense
+                fallback={
+                  <p className="text-on-surface-variant">
+                    Loading your analytics...
+                  </p>
+                }
+              >
+                <Progress />
+              </Suspense>
+            }
+          />
           <Route path="ai-coach" element={<AICoach />} />
           <Route path="profile" element={<Profile />} />
         </Route>
