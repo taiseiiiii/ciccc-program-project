@@ -24,6 +24,10 @@ export const env = {
   // access tokens with HS256.
   supabaseUrl: required("SUPABASE_URL").replace(/\/+$/, ""),
   supabaseJwtSecret: process.env.SUPABASE_JWT_SECRET || undefined,
+  // OpenAI (AI analysis). Optional so the server still boots without a key —
+  // the AI endpoints then answer 503 instead of taking the whole API down.
+  openaiApiKey: process.env.OPENAI_API_KEY || undefined,
+  openaiModel: process.env.OPENAI_MODEL || "gpt-4o",
 } as const;
 
 export const isProduction = env.nodeEnv === "production";

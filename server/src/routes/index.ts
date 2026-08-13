@@ -9,6 +9,8 @@ import routeRoutes from "./route.routes";
 import attemptRoutes from "./attempt.routes";
 import goalRoutes from "./goal.routes";
 import statsRoutes from "./stats.routes";
+import performanceRoutes from "./performance.routes";
+import trainingRoutes from "./training.routes";
 
 const router = Router();
 
@@ -37,9 +39,7 @@ router.use("/routes", routeRoutes);
 router.use("/attempts", attemptRoutes);
 router.use("/goals", goalRoutes);
 router.use("/stats", statsRoutes); // read-only aggregates for the Progress screen
-
-// Still to build out:
-// router.use('/performances', performanceRoutes); // AI-generated reports
-// router.use('/trainings', trainingRoutes);       // AI-generated reports
+router.use("/performances", performanceRoutes); // AI-generated performance reports
+router.use("/trainings", trainingRoutes); // AI-generated training plans
 
 export default router;

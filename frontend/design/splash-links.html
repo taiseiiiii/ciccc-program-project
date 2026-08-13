@@ -1,22 +1,3 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#0f5640" />
-    <meta
-      name="description"
-      content="Log your climbs, track progress, and get AI coaching."
-    />
-    <!-- iOS ignores the manifest's display mode; these two are what make an
-         added-to-home-screen launch open without Safari chrome. -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="ClimbLog" />
-
-    <!-- iOS launch images. Unlike Android, Safari builds no splash from the
-         manifest: each device resolution needs its own exact media query or
-         it gets a blank launch screen. Regenerate with design/generate-splash.py. -->
     <!-- iPhone SE (1st gen), 5s -->
     <link
       rel="apple-touch-startup-image"
@@ -131,17 +112,3 @@
       media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
       href="/splash/apple-splash-2048x2732.png"
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ClimbLog AI</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>

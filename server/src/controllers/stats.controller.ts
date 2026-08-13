@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import {
   statsRepository,
-  type GradeBreakdown,
+  type MonthlyGradeBreakdown,
 } from "../repositories/stats.repository";
 import { HttpError } from "../utils/HttpError";
 
@@ -56,7 +56,7 @@ function parseMonth(raw: unknown): string {
 }
 
 /** The hardest grade the user actually sent, or null if they sent nothing. */
-function highestSentGrade(byGrade: GradeBreakdown[]): GradeRef | null {
+function highestSentGrade(byGrade: MonthlyGradeBreakdown[]): GradeRef | null {
   const sent = byGrade.filter((g) => g.sends > 0);
   const hardest = sent[sent.length - 1]; // findGradeBreakdown orders by level
   return hardest ? { grade_name: hardest.grade_name, level: hardest.level } : null;
@@ -68,7 +68,7 @@ function highestSentGrade(byGrade: GradeBreakdown[]): GradeRef | null {
  * touched (or logged nothing at all).
  */
 function nextProjectGrade(
-  byGrade: GradeBreakdown[],
+  byGrade: MonthlyGradeBreakdown[],
   highest: GradeRef | null,
 ): GradeRef | null {
   const floor = highest ? highest.level : -1;

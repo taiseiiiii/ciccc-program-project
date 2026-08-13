@@ -28,4 +28,20 @@ export class HttpError extends Error {
   static notFound(message = "Not Found"): HttpError {
     return new HttpError(404, message);
   }
+
+  static unprocessable(message = "Unprocessable Entity", details?: unknown): HttpError {
+    return new HttpError(422, message, details);
+  }
+
+  static badGateway(message = "Bad Gateway"): HttpError {
+    return new HttpError(502, message);
+  }
+
+  static serviceUnavailable(message = "Service Unavailable"): HttpError {
+    return new HttpError(503, message);
+  }
+
+  static gatewayTimeout(message = "Gateway Timeout"): HttpError {
+    return new HttpError(504, message);
+  }
 }
