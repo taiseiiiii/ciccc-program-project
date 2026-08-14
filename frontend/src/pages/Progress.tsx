@@ -5,8 +5,7 @@ import toast from "react-hot-toast";
 import type SessionType from "../types/SessionType";
 import type { AttemptRecord } from "../types/AttemptType";
 import type Goal from "../types/GoalType";
-import type { GoalCreate } from "../types/GoalType";
-import type { GoalUpdate } from "../types/GoalType";
+import type { GoalCreate, GoalUpdate } from "../types/GoalType";
 import type Grade from "../types/GradeType";
 import Card from "../components/Card";
 import Button from "../components/Button";
@@ -125,10 +124,12 @@ const Progress = () => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals"] });
+      toast.success("Goal updated successfully!");
       handleCloseModal();
     },
     onError: (error) => {
       console.error("Failed to update goal:", error);
+      toast.error("Failed to update goal");
     },
   });
 
@@ -445,12 +446,13 @@ const Progress = () => {
           </div>
         </div>
       )}
+
       {isGoalModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-border space-y-5">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h2 className="text-lg font-bold text-text-primary">
-                Set New Goal
+                {editingGoalId ? "Edit Goal" : "Set New Goal"}
               </h2>
               <Button
                 variant="error"
@@ -519,7 +521,7 @@ const Progress = () => {
               </div>
             </div>
 
-            <div className="flex justify-between gap-2 pt-2">
+            <div className="flex justify-between items-center pt-2">
               {editingGoalId ? (
                 <Button
                   variant="error"
@@ -531,16 +533,22 @@ const Progress = () => {
               ) : (
                 <div></div>
               )}
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={handleCloseModal}>
                   Cancel
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleSaveGoal}
-                  disabled={createGoalMutation.isPending}
+                  disabled={
+                    createGoalMutation.isPending || updateGoalMutation.isPending
+                  }
                 >
-                  {createGoalMutation.isPending ? "Saving..." : "Save Goal"}
+                  {createGoalMutation.isPending || updateGoalMutation.isPending
+                    ? "Saving..."
+                    : editingGoalId
+                      ? "Update Goal"
+                      : "Save Goal"}
                 </Button>
               </div>
             </div>
@@ -551,6 +559,7 @@ const Progress = () => {
       <h1 className="text-primary text-headline-md font-bold tracking-tight mb-4">
         Performance Analytics
       </h1>
+
       <div>
         <Card className="p-4 bg-card mb-6 border border-outline-variant/30">
           <div className="flex items-center justify-between mb-3">
@@ -697,9 +706,9 @@ const Progress = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">
             Monthly Session Frequency
           </h3>
           <div className="h-52 w-full">
@@ -754,7 +763,7 @@ const Progress = () => {
         </Card>
 
         <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">
             Success Rate by Grade (%)
           </h3>
           <div className="h-60 w-full">
@@ -774,7 +783,7 @@ const Progress = () => {
                   fontSize={12}
                 />
                 <Tooltip
-                  formatter={(value) => [`${value}%`, "Success Rate"]}
+                  formatter={(value) => [`${value ?? 0}%`, "Success Rate"]}
                   contentStyle={{
                     backgroundColor: "var(--color-surface-container-highest)",
                     borderColor: "var(--color-outline-variant)",
@@ -802,7 +811,7 @@ const Progress = () => {
               Last 30 days
             </span>
           </div>
-          <div className="grid grid-cols-7  gap-1.5 my-auto">
+          <div className="grid grid-cols-7 gap-1.5 my-auto">
             {calendarDays.map((item) => (
               <div
                 key={item.dateKey}
