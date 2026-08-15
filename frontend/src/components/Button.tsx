@@ -13,7 +13,10 @@ export default function Button({
 }: ButtonProps) {
   // Setting on the baseStyle and styles"
   const baseStyle =
-    "px-4 py-2 rounded-lg font-sans text-label-md transition-all active:scale-95 cursor-pointer";
+    "px-4 py-2 rounded-lg font-sans text-label-md transition-all active:scale-95 cursor-pointer " +
+    // A pending mutation should look pending: drop the affordances that say
+    // "clickable" rather than leaving the button fully lit but inert.
+    "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100";
   const styles = {
     primary: "bg-primary text-on-primary hover:bg-primary-container",
     secondary:

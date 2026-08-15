@@ -8,10 +8,9 @@ import AppLayout from "../layouts/AppLayout";
 import Profile from "../pages/Profile";
 import AuthLayout from "../layouts/AuthLayout";
 
-// Progress is the only screen that needs a charting library, and recharts (with
-// its d3 dependencies) is by far the heaviest thing in the bundle. Loading it
-// on demand keeps it out of the initial download for everyone who never opens
-// the page — which matters most on the mobile/PWA path.
+// Progress is the largest screen in the app, so it is loaded on demand. Note
+// that this does not keep recharts out of the initial download: Dashboard is
+// eagerly imported above and pulls the same charting library in with it.
 const Progress = lazy(() => import("../pages/Progress"));
 
 const RequireAuth = () => {

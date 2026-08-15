@@ -38,7 +38,10 @@ export interface UpdateAttemptInput {
  */
 export const attemptRepository = {
   /** List the user's attempts, optionally scoped to one of their sessions. */
-  async findAll(userId: number, sessionId?: number): Promise<AttemptWithRoute[]> {
+  async findAll(
+    userId: number,
+    sessionId?: number,
+  ): Promise<AttemptWithRoute[]> {
     if (sessionId !== undefined) {
       const { rows } = await query<AttemptWithRoute>(
         `SELECT a.*, r.route_name, g.grade_name, g.level AS grade_level
