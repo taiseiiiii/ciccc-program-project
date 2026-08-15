@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useTheme } from "../hooks/useTheme";
@@ -45,12 +46,16 @@ export default function Header({
     subtitle: "Elite Climbing Progression",
   };
 
+  useEffect(() => {
+    document.title = `${currentPage.title} | ClimbLog AI`;
+  }, [currentPage.title]);
+
   const getSideNavLinkClass = ({ isActive }: { isActive: boolean }) => {
     const baseClass = "flex flex-row items-center px-3 gap-3 text-body-lg";
     const activeClass = "text-primary font-bold";
     const inactiveClass = "text-on-surface-variant hover:text-primary";
 
-    return `${baseClass} ${isActive ? activeClass : inactiveClass} ${className}`;
+    return `${baseClass} ${isActive ? activeClass : inactiveClass}`;
   };
   return (
     <div className={`${className}`}>
@@ -68,12 +73,12 @@ export default function Header({
         </div>
 
         <div className="hidden md:flex flex-col justify-center min-w-0 pr-4">
-          <div className="flex items-baseline gap-2.5">
-            <h1 className="text-base text-primary font-bold text-foreground tracking-tight whitespace-nowrap">
+          <div className="flex items-baseline gap-2.5 min-w-0">
+            <p className="text-base text-primary font-bold tracking-tight whitespace-nowrap">
               {currentPage.title}
-            </h1>
+            </p>
             {currentPage.subtitle && (
-              <span className="text-xs text-secondary text-muted-foreground truncate font-normal">
+              <span className="text-xs text-on-surface-variant truncate font-normal min-w-0">
                 — {currentPage.subtitle}
               </span>
             )}
@@ -83,10 +88,17 @@ export default function Header({
           <button
             className="text-body-lg text-on-surface-variant hover:text-primary"
             onClick={toggleTheme}
+            aria-label={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
           >
             {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
           </button>
-          <NavLink to="/profile" className={getSideNavLinkClass}>
+          <NavLink
+            to="/profile"
+            className={getSideNavLinkClass}
+            aria-label="Profile"
+          >
             <CgProfile size={24} />
           </NavLink>
         </div>
