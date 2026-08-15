@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import type SessionType from "../types/SessionType";
 import type { AttemptRecord } from "../types/AttemptType";
@@ -27,6 +27,14 @@ const monthKey = (offset: number): string => {
   d.setDate(1); // step back from the 1st so month arithmetic can't overflow
   d.setMonth(d.getMonth() - offset);
   return d.toLocaleDateString("sv-SE").slice(0, 7);
+};
+
+const getTileColor = (count: number) => {
+  if (count === 0)
+    return "bg-surface-container-high/30 text-on-surface-variant/50";
+  if (count === 1) return "bg-primary/50 text-on-primary font-medium";
+  if (count === 2) return "bg-primary/80 text-on-primary font-bold";
+  return "bg-primary text-on-primary font-bold shadow-sm";
 };
 
 const Progress = () => {
@@ -72,10 +80,11 @@ const Progress = () => {
   } = useQuery({
     queryKey: ["grades"],
     queryFn: () => api<{ data: Grade[] }>("/grades"),
+    // Read-only master data (V0–V17). It never changes while the app is open,
+    // so never refetch it — same treatment as the LogSession copy.
+    staleTime: Infinity,
   });
 
-  const sessions = sessionsData?.data || [];
-  const attempts = attemptsData?.data || [];
   const goals = goalsData?.data || [];
   const grades = gradesData?.data ?? [];
 
@@ -209,196 +218,193 @@ const Progress = () => {
     return a.target_date.localeCompare(b.target_date);
   });
 
-  // Sends This month
-  const currentMonth = monthKey(0);
-  const lastMonth = monthKey(1);
+  // Every figure on the page is derived from the two lists and is pure, so it is
+  // memoised: the goal modal's form state lives in this component, and without
+  // this each keystroke would re-run every pass over the whole history.
+  const {
+    currentMonthSendsCount,
+    monthSendsDelta,
+    highestGradeThisMonth,
+    totalAttemptThisMonthCount,
+    climbingDaysThisMonthCount,
+    climbingDaysDelta,
+    monthlySessionFrequencyData,
+    gradeSuccessRateData,
+    calendarDays,
+    personalRecordTop3,
+  } = useMemo(() => {
+    const sessions = sessionsData?.data ?? [];
+    const attempts = attemptsData?.data ?? [];
 
-  const sendsThisMonth = attempts.filter((attempt) => {
-    const isSent = attempt.is_success;
-    const isThisMonth = attempt.created_at?.slice(0, 7) === currentMonth;
+    const currentMonth = monthKey(0);
+    const lastMonth = monthKey(1);
 
-    return isSent && isThisMonth;
-  });
+    // An attempt row only carries its insert timestamp, so the month it belongs
+    // to comes from its session's visit_date — the day the user says they
+    // climbed, which they may backdate, and the basis the climbing-day figures
+    // and the server's own aggregates both use.
+    const visitDateBySession = new Map(
+      sessions.map((session) => [session.session_id, session.visit_date]),
+    );
+    const monthOf = (attempt: AttemptRecord) =>
+      visitDateBySession.get(attempt.session_id)?.slice(0, 7);
 
-  const sendsLastMonth = attempts.filter((attempt) => {
-    const isSent = attempt.is_success;
-    const isLastMonth = attempt.created_at?.slice(0, 7) === lastMonth;
+    const sendsIn = (month: string) =>
+      attempts.filter((a) => a.is_success && monthOf(a) === month);
 
-    return isSent && isLastMonth;
-  });
-  const currentMonthSendsCont = sendsThisMonth.length;
-  const lastMonthSendsCont = sendsLastMonth.length;
-  const monthSendsDelta = currentMonthSendsCont - lastMonthSendsCont;
+    const sendsThisMonth = sendsIn(currentMonth);
+    const currentMonthSendsCount = sendsThisMonth.length;
+    const monthSendsDelta = currentMonthSendsCount - sendsIn(lastMonth).length;
 
-  // Highest grade ever sent in this month (successful attempts only)
-  const highestGradeThisMonth =
-    sendsThisMonth.length > 0
-      ? sendsThisMonth.reduce((best, a) =>
-          a.grade_level > best.grade_level ? a : best,
-        ).grade_name
-      : "-";
+    // Highest grade sent this month (successful attempts only)
+    const highestGradeThisMonth =
+      sendsThisMonth.length > 0
+        ? sendsThisMonth.reduce((best, a) =>
+            a.grade_level > best.grade_level ? a : best,
+          ).grade_name
+        : "-";
 
-  // Total attempts
-  const totalAttemptsThisMonth = attempts.filter(
-    (attempt) => attempt.created_at?.slice(0, 7) === currentMonth,
-  );
-  const totalAttemptThisMonthCount = totalAttemptsThisMonth.length;
+    const totalAttemptsThisMonth = attempts.filter(
+      (a) => monthOf(a) === currentMonth,
+    );
+    const totalAttemptThisMonthCount = totalAttemptsThisMonth.length;
 
-  // Climbing days per month
-  const climbingDaysThisMonth = new Set(
-    sessions
-      .filter((session) => session.visit_date?.slice(0, 7) === currentMonth)
-      .map((session) => session.visit_date),
-  );
-  const climbingDaysLastMonth = new Set(
-    sessions
-      .filter((session) => session.visit_date?.slice(0, 7) === lastMonth)
-      .map((session) => session.visit_date),
-  );
-  const climbingDaysLastMonthCont = climbingDaysLastMonth.size;
-  const climbingDaysThisMonthCont = climbingDaysThisMonth.size;
-  const climbingDaysDelta =
-    climbingDaysThisMonthCont - climbingDaysLastMonthCont;
+    // Climbing days per month
+    const climbingDaysIn = (month: string) =>
+      new Set(
+        sessions
+          .filter((s) => s.visit_date?.slice(0, 7) === month)
+          .map((s) => s.visit_date),
+      ).size;
+    const climbingDaysThisMonthCount = climbingDaysIn(currentMonth);
+    const climbingDaysDelta =
+      climbingDaysThisMonthCount - climbingDaysIn(lastMonth);
 
-  // Monthly session frequency
-  const dailyCounts = new Map<string, number>();
-  for (const session of sessions) {
-    const dateKey = session.visit_date.slice(0, 10);
-    dailyCounts.set(dateKey, (dailyCounts.get(dateKey) ?? 0) + 1);
-  }
-
-  const today = new Date();
-  const year = parseInt(currentMonth.split("-")[0]);
-  const month = parseInt(currentMonth.split("-")[1]);
-
-  const isCurrentMonth =
-    today.getFullYear() === year && today.getMonth() + 1 === month;
-  const daysToDisplay = isCurrentMonth
-    ? today.getDate()
-    : new Date(year, month, 0).getDate();
-
-  let cumulativeSessions = 0;
-
-  const monthlySessionFrequencyData = Array.from(
-    { length: daysToDisplay },
-    (_, i) => {
-      const dayNumber = i + 1;
-
-      const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
-
-      const dateLabel = new Date(year, month - 1, dayNumber).toLocaleDateString(
-        "en-US",
-        {
-          month: "short",
-          day: "numeric",
-        },
-      );
-
-      const sessionsCount = dailyCounts.get(dateKey) ?? 0;
-
-      cumulativeSessions += sessionsCount;
-
-      return {
-        date: dateLabel,
-        sessions: sessionsCount,
-        cumulativeSessions: cumulativeSessions,
-      };
-    },
-  );
-
-  // Success rate by grade
-  type GradeStat = { sends: number; fails: number };
-  const statsMap = new Map<string, GradeStat>();
-
-  for (const attempt of totalAttemptsThisMonth) {
-    const grade = attempt.grade_name;
-    const current = statsMap.get(grade) ?? { sends: 0, fails: 0 };
-
-    if (attempt.is_success) {
-      current.sends += 1;
-    } else {
-      current.fails += 1;
+    // Monthly session frequency
+    const dailyCounts = new Map<string, number>();
+    for (const session of sessions) {
+      const dateKey = session.visit_date.slice(0, 10);
+      dailyCounts.set(dateKey, (dailyCounts.get(dateKey) ?? 0) + 1);
     }
 
-    statsMap.set(grade, current);
-  }
-  const gradeSuccessRateData = Array.from(statsMap.entries())
-    .map(([grade, { sends, fails }]) => {
-      const total = sends + fails;
-      const successRate = total > 0 ? Math.round((sends / total) * 100) : 0;
+    // The page always shows the current month, so the chart runs up to today.
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+
+    const monthlySessionFrequencyData = Array.from(
+      { length: today.getDate() },
+      (_, i) => {
+        const dayNumber = i + 1;
+        const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+        const dateLabel = new Date(
+          year,
+          month - 1,
+          dayNumber,
+        ).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+        return {
+          date: dateLabel,
+          sessions: dailyCounts.get(dateKey) ?? 0,
+        };
+      },
+    ).reduce<
+      Array<{ date: string; sessions: number; cumulativeSessions: number }>
+    >((days, day) => {
+      const previous = days[days.length - 1]?.cumulativeSessions ?? 0;
+      days.push({ ...day, cumulativeSessions: previous + day.sessions });
+      return days;
+    }, []);
+
+    // Success rate by grade
+    type GradeStat = { sends: number; fails: number };
+    const statsMap = new Map<string, GradeStat>();
+
+    for (const attempt of totalAttemptsThisMonth) {
+      const grade = attempt.grade_name;
+      const current = statsMap.get(grade) ?? { sends: 0, fails: 0 };
+
+      if (attempt.is_success) {
+        current.sends += 1;
+      } else {
+        current.fails += 1;
+      }
+
+      statsMap.set(grade, current);
+    }
+    const gradeSuccessRateData = Array.from(statsMap.entries())
+      .map(([grade, { sends, fails }]) => {
+        const total = sends + fails;
+        const successRate = total > 0 ? Math.round((sends / total) * 100) : 0;
+
+        return { grade, successRate, sends, fails };
+      })
+      .sort((a, b) =>
+        a.grade.localeCompare(b.grade, undefined, { numeric: true }),
+      );
+
+    // Session activity heatmap. Every cell is offset from the same `today`, so a
+    // render spanning local midnight cannot emit two cells for the same day.
+    const calendarDays = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() - (29 - i));
+      const dateKey = d.toLocaleDateString("sv-SE");
 
       return {
-        grade,
-        successRate,
-        sends,
-        fails,
+        dateKey,
+        dateLabel: d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
+        dayNumber: d.getDate(),
+        count: dailyCounts.get(dateKey) ?? 0,
       };
-    })
-    .sort((a, b) =>
-      a.grade.localeCompare(b.grade, undefined, { numeric: true }),
-    );
-
-  // Session activity heatmap
-  const calendarDays = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date();
-    d.setDate(today.getDate() - (29 - i));
-
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const dateKey = `${y}-${m}-${day}`;
-
-    const dateLabel = d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
     });
+
+    // Personal records. Only the surviving three are date-formatted.
+    const sessionById = new Map(sessions.map((s) => [s.session_id, s]));
+    const personalRecordTop3 = attempts
+      .filter((a) => a.is_success)
+      .sort((a, b) => b.grade_level - a.grade_level)
+      .slice(0, 3)
+      .map((attempt) => {
+        const session = sessionById.get(attempt.session_id);
+
+        return {
+          id: attempt.attempt_id,
+          grade_name: attempt.grade_name,
+          grade_level: attempt.grade_level,
+          route_name: attempt.route_name || "Unnamed Route",
+          location: session?.gym_name || "No location name",
+          // The day it was climbed, not the day it happened to be logged.
+          // A bare YYYY-MM-DD parses as UTC, so pin it to local midnight.
+          date: session
+            ? new Date(`${session.visit_date}T00:00:00`).toLocaleDateString(
+                "en-US",
+                { month: "short", day: "numeric", year: "numeric" },
+              )
+            : "-",
+        };
+      });
 
     return {
-      dateKey,
-      dateLabel,
-      dayNumber: day,
-      count: dailyCounts.get(dateKey) ?? 0,
+      currentMonthSendsCount,
+      monthSendsDelta,
+      highestGradeThisMonth,
+      totalAttemptThisMonthCount,
+      climbingDaysThisMonthCount,
+      climbingDaysDelta,
+      monthlySessionFrequencyData,
+      gradeSuccessRateData,
+      calendarDays,
+      personalRecordTop3,
     };
-  });
-
-  const getTileColor = (count: number) => {
-    if (count === 0)
-      return "bg-surface-container-high/30 text-muted-foreground/50";
-    if (count === 1) return "bg-primary/50 text-on-primary font-medium";
-    if (count === 2) return "bg-primary/80 text-on-primary font-bold";
-    return "bg-primary text-on-primary font-bold shadow-sm";
-  };
-
-  // Personal record top 3
-  const personalRecordTop3 = (() => {
-    const successfulAttempts = attempts.filter((a) => a.is_success);
-    const sessionMap = new Map(sessions.map((s) => [s.session_id, s.gym_name]));
-
-    const attemptsWithDetails = successfulAttempts.map((attempt) => {
-      const dateStr = attempt.created_at
-        ? new Date(attempt.created_at).toLocaleDateString("ja-JP")
-        : "-";
-      const location = sessionMap.get(attempt.session_id) || "No location name";
-
-      return {
-        id: attempt.attempt_id,
-        grade_name: attempt.grade_name,
-        grade_level: attempt.grade_level,
-        route_name: attempt.route_name || "Unnamed Route",
-        location: location,
-        date: dateStr,
-      };
-    });
-
-    return attemptsWithDetails
-      .sort((a, b) => b.grade_level - a.grade_level)
-      .slice(0, 3);
-  })();
+  }, [sessionsData, attemptsData]);
 
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <p className="text-sm text-muted-foreground animate-pulse">
+        <p className="text-sm text-on-surface-variant animate-pulse">
           Loading analytics data...
         </p>
       </div>
@@ -419,11 +425,11 @@ const Progress = () => {
     <div>
       {isDeleteConfirmOpen && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl border border-border space-y-4 text-center">
-            <h3 className="text-base font-bold text-text-primary">
+          <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl border border-outline-variant space-y-4 text-center">
+            <h3 className="text-base font-bold text-on-surface">
               Delete Goal
             </h3>
-            <p className="text-sm text-text-secondary">
+            <p className="text-sm text-on-surface-variant">
               Are you sure you want to delete this goal?
             </p>
 
@@ -449,27 +455,28 @@ const Progress = () => {
 
       {isGoalModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-border space-y-5">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-lg font-bold text-text-primary">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-outline-variant space-y-5">
+            <div className="flex items-center justify-between border-b border-outline-variant pb-3">
+              <h2 className="text-lg font-bold text-on-surface">
                 {editingGoalId ? "Edit Goal" : "Set New Goal"}
               </h2>
-              <Button
-                variant="error"
+              <button
+                type="button"
+                aria-label="Close"
                 onClick={handleCloseModal}
-                className="text-text-secondary hover:text-text-primary text-sm p-1"
+                className="text-on-surface-variant hover:text-on-surface cursor-pointer rounded-lg p-1 text-sm"
               >
                 ✕
-              </Button>
+              </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">
                   Target Grade
                 </label>
                 {isGradesLoading ? (
-                  <div className="text-xs text-text-muted p-2">
+                  <div className="text-xs text-on-surface-variant p-2">
                     Loading grades...
                   </div>
                 ) : (
@@ -484,7 +491,7 @@ const Progress = () => {
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                             isSelected
                               ? "bg-primary text-black font-bold"
-                              : "bg-background border border-border text-text-secondary hover:text-text-primary"
+                              : "bg-background border border-outline-variant text-on-surface-variant hover:text-on-surface"
                           }`}
                         >
                           {grade.grade_name}
@@ -496,19 +503,19 @@ const Progress = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">
                   Target Date
                 </label>
                 <Input
                   type="date"
                   value={targetDate}
                   onChange={(e) => setTargetDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-2 bg-background border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
+                <label className="block text-xs font-medium text-on-surface-variant mb-1">
                   Description / Memo
                 </label>
                 <textarea
@@ -516,7 +523,7 @@ const Progress = () => {
                   onChange={(e) => setGoalDescription(e.target.value)}
                   placeholder="Send V5 in one month!!"
                   rows={3}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-primary resize-none"
+                  className="w-full px-3 py-2 bg-background border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary resize-none"
                 />
               </div>
             </div>
@@ -561,10 +568,10 @@ const Progress = () => {
       </h1>
 
       <div>
-        <Card className="p-4 bg-card mb-6 border border-outline-variant/30">
+        <Card className="p-4 mb-6 border border-outline-variant/30">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold tracking-wider text-muted-foreground uppercase">
+              <h3 className="text-sm font-bold tracking-wider text-on-surface-variant uppercase">
                 Active Goals
               </h3>
               <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
@@ -594,11 +601,11 @@ const Progress = () => {
                     </div>
 
                     <div className="flex flex-col min-w-0">
-                      <span className="font-semibold text-sm text-foreground truncate">
+                      <span className="font-semibold text-sm text-on-surface truncate">
                         {goal.goal_description}
                       </span>
                       {goal.target_date && (
-                        <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
+                        <span className="text-xs text-on-surface-variant font-mono flex items-center gap-1">
                           Due: {goal.target_date}
                         </span>
                       )}
@@ -633,7 +640,7 @@ const Progress = () => {
               ))
             ) : (
               <div className="text-center py-6 px-4 border border-dashed border-outline-variant/40 rounded-xl flex flex-col items-center justify-center gap-2">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-on-surface-variant">
                   No active goals set yet.
                 </p>
                 <Button
@@ -650,13 +657,13 @@ const Progress = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 mb-4">
-        <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
+        <Card className="p-4 flex flex-col justify-center">
+          <h3 className="text-sm font-medium text-on-surface-variant">
             TOTAL SENDS / MONTH
           </h3>
-          <div className="flex flex-col gap-3 justify-baseline">
+          <div className="flex flex-col gap-3">
             <p className="text-4xl font-bold mt-2 text-primary">
-              {currentMonthSendsCont}{" "}
+              {currentMonthSendsCount}{" "}
               <span className="text-sm font-bold mt-2 text-primary">
                 / {totalAttemptThisMonthCount} attempts
               </span>
@@ -672,43 +679,43 @@ const Progress = () => {
           </div>
         </Card>
 
-        <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
+        <Card className="p-4 flex flex-col justify-center">
+          <h3 className="text-sm font-medium text-on-surface-variant">
             HIGHEST GRADE / MONTH
           </h3>
-          <div className="flex flex-col gap-3 justify-baseline">
+          <div className="flex flex-col gap-3">
             <p className="text-4xl font-bold mt-2 text-error">
               {highestGradeThisMonth}
             </p>
-            {/* <p>Projecting V5</p> */}
           </div>
         </Card>
 
-        <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground">
+        <Card className="p-4 flex flex-col justify-center">
+          <h3 className="text-sm font-medium text-on-surface-variant">
             CLIMBING DAYS / MONTH
           </h3>
-          <div className="flex flex-col gap-3 justify-baseline">
+          <div className="flex flex-col gap-3">
             <p className="text-4xl font-bold mt-2 text-secondary">
-              {climbingDaysThisMonthCont === 1
-                ? "1 day"
-                : `${climbingDaysThisMonthCont} days`}
+              {climbingDaysThisMonthCount} day
+              {climbingDaysThisMonthCount === 1 ? "" : "s"}
             </p>
-            <p
-              className={climbingDaysDelta > 0 ? "text-primary" : "text-error"}
-            >
-              {climbingDaysDelta > 0
-                ? `+${climbingDaysDelta}`
-                : climbingDaysDelta}{" "}
-              from last month
-            </p>
+            {climbingDaysDelta !== 0 && (
+              <p
+                className={climbingDaysDelta > 0 ? "text-primary" : "text-error"}
+              >
+                {climbingDaysDelta > 0
+                  ? `+${climbingDaysDelta}`
+                  : climbingDaysDelta}{" "}
+                from last month
+              </p>
+            )}
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">
+        <Card className="p-4 flex flex-col justify-center">
+          <h3 className="text-sm font-medium text-on-surface-variant mb-3">
             Monthly Session Frequency
           </h3>
           <div className="h-52 w-full">
@@ -762,8 +769,8 @@ const Progress = () => {
           </div>
         </Card>
 
-        <Card className="p-4 bg-card flex flex-col justify-center">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">
+        <Card className="p-4 flex flex-col justify-center">
+          <h3 className="text-sm font-medium text-on-surface-variant mb-3">
             Success Rate by Grade (%)
           </h3>
           <div className="h-60 w-full">
@@ -802,12 +809,12 @@ const Progress = () => {
           </div>
         </Card>
 
-        <Card className="p-4 bg-card flex flex-col justify-center">
+        <Card className="p-4 flex flex-col justify-center">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3 className="text-sm font-medium text-on-surface-variant">
               Session Activity Heatmap
             </h3>
-            <span className="text-xs text-muted-foreground font-normal">
+            <span className="text-xs text-on-surface-variant font-normal">
               Last 30 days
             </span>
           </div>
@@ -818,9 +825,9 @@ const Progress = () => {
                 className={`aspect-square rounded-md flex flex-col items-center justify-center text-[10px] transition-all ${getTileColor(
                   item.count,
                 )}`}
-                title={`${item.dateLabel}: ${item.count} session${item.count > 1 ? "s" : ""}`}
+                title={`${item.dateLabel}: ${item.count} session${item.count === 1 ? "" : "s"}`}
               >
-                <span>{parseInt(item.dayNumber, 10)}</span>
+                <span>{item.dayNumber}</span>
                 {item.count > 1 && (
                   <span className="text-[8px] font-extrabold leading-none">
                     x{item.count}
@@ -830,7 +837,7 @@ const Progress = () => {
             ))}
           </div>
 
-          <div className="flex items-center justify-end gap-1.5 mt-3 text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-end gap-1.5 mt-3 text-[10px] text-on-surface-variant">
             <span>Rest</span>
             <div className="w-2.5 h-2.5 rounded bg-surface-container-high/30" />
             <div className="w-2.5 h-2.5 rounded bg-primary/50" />
@@ -840,8 +847,8 @@ const Progress = () => {
           </div>
         </Card>
 
-        <Card className="p-4 bg-card mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-medium text-on-surface-variant mb-3">
             PERSONAL RECORDS (TOP 3)
           </h3>
           <div className="flex flex-col gap-3">
@@ -856,23 +863,23 @@ const Progress = () => {
                   </div>
 
                   <div className="flex-1 mx-4 flex flex-col justify-center min-w-0">
-                    <span className="font-semibold text-sm text-foreground truncate">
+                    <span className="font-semibold text-sm text-on-surface truncate">
                       {item.route_name}
                     </span>
-                    <span className="text-xs text-muted-foreground truncate">
+                    <span className="text-xs text-on-surface-variant truncate">
                       {item.location}
                     </span>
                   </div>
 
                   <div className="text-right whitespace-nowrap">
-                    <span className="text-xs text-muted-foreground font-mono">
+                    <span className="text-xs text-on-surface-variant font-mono">
                       {item.date}
                     </span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-outline-variant/40 rounded-xl">
+              <div className="text-center py-6 text-sm text-on-surface-variant border border-dashed border-outline-variant/40 rounded-xl">
                 No sends recorded yet. Keep climbing!
               </div>
             )}

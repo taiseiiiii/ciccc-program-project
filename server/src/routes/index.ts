@@ -8,7 +8,6 @@ import gradeRoutes from "./grade.routes";
 import routeRoutes from "./route.routes";
 import attemptRoutes from "./attempt.routes";
 import goalRoutes from "./goal.routes";
-import statsRoutes from "./stats.routes";
 
 const router = Router();
 
@@ -36,7 +35,6 @@ router.use("/grades", gradeRoutes); // read-only master data (V0–V17)
 router.use("/routes", routeRoutes);
 router.use("/attempts", attemptRoutes);
 router.use("/goals", goalRoutes);
-router.use("/stats", statsRoutes); // read-only aggregates for the Progress screen
 
 // Still to build out:
 // router.use('/performances', performanceRoutes); // AI-generated reports
