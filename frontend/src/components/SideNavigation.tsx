@@ -19,7 +19,7 @@ export default function SideNavigation({
   className = "",
   ...props
 }: SideNavigationProps) {
-  const { theme, toggleTheme } = useTheme();
+  // const { theme, toggleTheme } = useTheme();
   const getSideNavLinkClass = ({ isActive }: { isActive: boolean }) => {
     const baseClass = "flex flex-row items-center px-3 gap-3 text-body-lg";
     const activeClass = "text-primary font-bold";
@@ -51,17 +51,17 @@ export default function SideNavigation({
       <NavLink to="/ai-coach" className={getSideNavLinkClass}>
         <LuBotMessageSquare size={24} /> AI coach
       </NavLink>
-      <NavLink to={"/profile"} className={getSideNavLinkClass}>
+      {/* <NavLink to={"/profile"} className={getSideNavLinkClass}>
         <CgProfile size={24} /> Profile
-      </NavLink>
+      </NavLink> */}
       <div className="mt-auto">
-        <button
+        {/* <button
           className="flex flex-row items-center px-3 gap-3 text-body-lg text-on-surface-variant hover:text-primary"
           onClick={toggleTheme}
         >
           {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
           Theme
-        </button>
+        </button> */}
         <SignoutButton
           variant="error"
           className="flex items-center mt-8 mx-3 px-3 gap-3 hover:text-error"
