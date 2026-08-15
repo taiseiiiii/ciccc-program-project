@@ -194,6 +194,25 @@ partial-failure state to handle. The `201` response is the session with an
 
 `PATCH` also accepts `is_achieved`.
 
+### Performances & Trainings — AI coach reports, per-user
+
+| Method | Path | Body |
+| --- | --- | --- |
+| C/R/D | `/performances`, `/performances/:id` | `POST`: `{ period_type: "daily" \| "monthly", date? }` |
+| C/R/D | `/trainings`, `/trainings/:id` | `POST`: `{ date? }` |
+
+- `POST` aggregates the logged sessions (the period for performances, the last
+  30 days for trainings), generates a report with GPT-4o and stores it —
+  synchronous, so expect a few seconds; disable the button while pending.
+- Always send `date` (the client's local `YYYY-MM-DD`): the server defaults to
+  *its* today, which can be a different day in your timezone.
+- `422` = no climbing data in the period; `502`/`503`/`504` = AI service
+  failed / not configured / timed out. The error `message` is user-presentable.
+- No `PATCH` — reports are immutable snapshots; regenerating adds a new row.
+- Types already exist: `src/types/PerformanceType.ts`,
+  `src/types/TrainingType.ts`, `src/types/ClimbingStatsType.ts`, and
+  `AICoach.tsx` is fully wired to these endpoints.
+
 ## 6. TypeScript types to add
 
 `src/types/UserType.ts` exists. Add the rest to match the server rows:
@@ -353,9 +372,11 @@ them silently:
    needs `?limit`/`?offset` before the data grows.
 3. **Attempts carry no grade/route names.** Join client-side against `/routes`
    and `/grades`, or ask for an expanded response.
-4. **`/performances` and `/trainings` (the AI reports) do not exist yet** — the
-   tables are in the schema and the routes are commented out in
-   `server/src/routes/index.ts`. AICoach has no backend to call.
+4. **AI generation is unthrottled.** Every `POST /performances` /
+   `POST /trainings` is one paid GPT-4o call; nothing stops a user from
+   spamming the button beyond the disabled-while-pending state. Fine for the
+   team demo, but add a cooldown or reuse-same-period logic before opening it
+   to real users.
 
 ## Running the backend locally
 

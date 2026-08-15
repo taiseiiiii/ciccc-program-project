@@ -23,6 +23,14 @@ info:
     - `TIMESTAMPTZ` columns (`created_at`, `updated_at`, `achieved_at`) are ISO 8601 date-time strings.
     - All `PATCH` endpoints accept partial bodies: omitted fields are left untouched.
     - Deleting a row still referenced by others (`ON DELETE RESTRICT`) returns `409`.
+
+    ## AI reports
+    `POST /performances` and `POST /trainings` generate coaching reports with
+    OpenAI (GPT-4o) synchronously — expect a few seconds of latency. They
+    answer `422` when the analyzed period contains no climbing data, and
+    `502` / `503` / `504` when the AI service fails, is not configured, or
+    times out. Generated reports are immutable snapshots: regenerating adds a
+    new row instead of updating an old one.
   license:
     name: MIT
 
@@ -48,6 +56,10 @@ tags:
     description: One try at a route within a session.
   - name: Goals
     description: A user's target grade, with optional deadline.
+  - name: Performances
+    description: AI-generated performance analysis of one day or month of climbing.
+  - name: Trainings
+    description: AI-generated training plans based on the last 30 days of climbing.
 
 paths:
   /health:
@@ -605,6 +617,236 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /performances:
+    get:
+      tags: [Performances]
+      summary: List performance reports
+      description: The authenticated user's AI performance reports, newest first.
+      operationId: listPerformances
+      parameters:
+        - name: period_type
+          in: query
+          required: false
+          description: Only reports of this period type.
+          schema:
+            type: string
+            enum: [daily, monthly]
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of reports to return (default 20).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: The user's performance reports.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Performance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Performances]
+      summary: Generate a performance report
+      description: >-
+        Aggregates the period's sessions/attempts, has the AI coach analyze
+        them, and stores the result. `date` anchors the period — any day of the
+        target day/month, defaulting to today. Synchronous; expect a few
+        seconds of latency.
+      operationId: createPerformance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerformanceCreate'
+            example:
+              period_type: monthly
+              date: '2026-08-06'
+      responses:
+        '201':
+          description: Report generated and stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Performance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/NoClimbingData'
+        '502':
+          $ref: '#/components/responses/AIFailure'
+        '503':
+          $ref: '#/components/responses/AIFailure'
+        '504':
+          $ref: '#/components/responses/AIFailure'
+
+  /performances/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Performances]
+      summary: Get a performance report
+      operationId: getPerformance
+      responses:
+        '200':
+          description: The performance report.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Performance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Performances]
+      summary: Delete a performance report
+      operationId: deletePerformance
+      responses:
+        '204':
+          description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /trainings:
+    get:
+      tags: [Trainings]
+      summary: List training plans
+      description: The authenticated user's AI training plans, newest first.
+      operationId: listTrainings
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of plans to return (default 20).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: The user's training plans.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Training'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Trainings]
+      summary: Generate a training plan
+      description: >-
+        Aggregates the last 30 days of climbing (ending at `date`, defaulting
+        to today), has the AI coach design a plan targeting the visible
+        weaknesses and the user's goals, and stores the result. Synchronous;
+        expect a few seconds of latency.
+      operationId: createTraining
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingCreate'
+            example:
+              date: '2026-08-06'
+      responses:
+        '201':
+          description: Plan generated and stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Training'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/NoClimbingData'
+        '502':
+          $ref: '#/components/responses/AIFailure'
+        '503':
+          $ref: '#/components/responses/AIFailure'
+        '504':
+          $ref: '#/components/responses/AIFailure'
+
+  /trainings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Trainings]
+      summary: Get a training plan
+      operationId: getTraining
+      responses:
+        '200':
+          description: The training plan.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Training'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Trainings]
+      summary: Delete a training plan
+      operationId: deleteTraining
+      responses:
+        '204':
+          description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -653,6 +895,27 @@ components:
           example:
             error:
               message: 'Session 42 not found'
+    NoClimbingData:
+      description: The request is valid but the analyzed period contains no climbing data.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: 'No climbing data between 2026-08-01 and 2026-08-31 — log a session first'
+    AIFailure:
+      description: >-
+        The AI service failed — `502` upstream error, `503` not configured or
+        rate-limited, `504` timed out. Safe to retry after a moment (except
+        when the server has no API key configured).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: 'AI analysis is not configured on this server (missing OPENAI_API_KEY)'
 
   schemas:
     Error:
@@ -1007,3 +1270,228 @@ components:
           type: integer
           description: Position on the V0–V17 scale, used for ordering.
           example: 4
+    ClimbingStats:
+      type: object
+      description: >-
+        The aggregated numbers a report was computed from — stored with the
+        report so it stays interpretable after sessions are edited or deleted.
+      required:
+        [period_start, period_end, total_sessions, total_attempts, total_sends,
+         success_rate, highest_sent_grade, highest_attempted_grade,
+         grade_breakdown, gyms, notes]
+      properties:
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        total_sessions:
+          type: integer
+          example: 6
+        total_attempts:
+          type: integer
+          example: 42
+        total_sends:
+          type: integer
+          example: 25
+        success_rate:
+          type: number
+          description: Sends / attempts as a percentage (0–100, one decimal).
+          example: 59.5
+        highest_sent_grade:
+          type: string
+          nullable: true
+          example: V4
+        highest_attempted_grade:
+          type: string
+          nullable: true
+          example: V6
+        grade_breakdown:
+          type: array
+          description: Attempts vs. sends per grade, ordered easiest first.
+          items:
+            type: object
+            required: [grade_name, level, attempts, sends]
+            properties:
+              grade_name:
+                type: string
+                example: V3
+              level:
+                type: integer
+                example: 3
+              attempts:
+                type: integer
+                example: 12
+              sends:
+                type: integer
+                example: 8
+        gyms:
+          type: array
+          items:
+            type: string
+          example: [The Hive]
+        notes:
+          type: array
+          description: The climber's own attempt notes from the period (capped at 20).
+          items:
+            type: object
+            required: [visit_date, grade_name, route_name, is_success, note]
+            properties:
+              visit_date:
+                type: string
+                format: date
+              grade_name:
+                type: string
+              route_name:
+                type: string
+                nullable: true
+              is_success:
+                type: boolean
+              note:
+                type: string
+
+    Performance:
+      type: object
+      description: An immutable AI-generated performance report.
+      required:
+        [performance_id, user_id, period_type, period_start, period_end,
+         performance_report, ai_model, analysis_data, created_at, updated_at]
+      properties:
+        performance_id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        period_type:
+          type: string
+          enum: [daily, monthly]
+        period_start:
+          type: string
+          format: date
+          example: '2026-08-01'
+        period_end:
+          type: string
+          format: date
+          example: '2026-08-31'
+        performance_report:
+          type: string
+          nullable: true
+          description: The full report text (plain-text paragraphs).
+        ai_model:
+          type: string
+          nullable: true
+          example: gpt-4o
+        analysis_data:
+          type: object
+          description: Structured analysis plus the stats snapshot it was computed from.
+          required: [headline, grade_projection, strengths, weaknesses, focus_advice, stats]
+          properties:
+            headline:
+              type: string
+              example: Your slab game is peaking.
+            grade_projection:
+              type: string
+              description: The V-grade the climber is trending toward.
+              example: V5
+            strengths:
+              type: array
+              items:
+                type: string
+            weaknesses:
+              type: array
+              items:
+                type: string
+            focus_advice:
+              type: string
+            stats:
+              $ref: '#/components/schemas/ClimbingStats'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PerformanceCreate:
+      type: object
+      required: [period_type]
+      properties:
+        period_type:
+          type: string
+          enum: [daily, monthly]
+        date:
+          type: string
+          format: date
+          description: >-
+            Anchors the period — any day of the target day/month. Defaults to
+            today (server time), so clients in other timezones should send it.
+
+    Training:
+      type: object
+      description: An immutable AI-generated training plan.
+      required:
+        [training_id, user_id, training_report, ai_model, analysis_data,
+         created_at, updated_at]
+      properties:
+        training_id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        training_report:
+          type: string
+          nullable: true
+          description: The narrative tying the plan together (plain-text paragraphs).
+        ai_model:
+          type: string
+          nullable: true
+          example: gpt-4o
+        analysis_data:
+          type: object
+          description: The structured plan plus the stats snapshot it was based on.
+          required: [headline, focus, drills, stats]
+          properties:
+            headline:
+              type: string
+              example: A block built around finishing what you start.
+            focus:
+              type: string
+            drills:
+              type: array
+              description: Recommended exercises, most important first.
+              items:
+                type: object
+                required: [title, description, priority, frequency]
+                properties:
+                  title:
+                    type: string
+                    example: Slab Technique Drills
+                  description:
+                    type: string
+                  priority:
+                    type: string
+                    enum: [high, medium, low]
+                  frequency:
+                    type: string
+                    example: 2x per week, 20 min
+            stats:
+              $ref: '#/components/schemas/ClimbingStats'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TrainingCreate:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: >-
+            End of the 30-day window the plan is based on. Defaults to today
+            (server time), so clients in other timezones should send it.

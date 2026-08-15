@@ -20,6 +20,11 @@ export interface CreateGoalInput {
   target_date?: string | null;
 }
 
+/** A goal joined with its target grade's label. */
+export interface GoalWithGrade extends Goal {
+  grade_name: string;
+}
+
 export interface UpdateGoalInput {
   grade_id?: number;
   goal_description?: string | null;
@@ -38,6 +43,19 @@ export const goalRepository = {
   async findAll(userId: number): Promise<Goal[]> {
     const { rows } = await query<Goal>(
       `SELECT * FROM goals WHERE user_id = $1 ORDER BY goal_id DESC`,
+      [userId],
+    );
+    return rows;
+  },
+
+  /** Goals with the target grade's label joined in (for the AI coach prompt). */
+  async findAllWithGrade(userId: number): Promise<GoalWithGrade[]> {
+    const { rows } = await query<GoalWithGrade>(
+      `SELECT g.*, gr.grade_name
+       FROM goals g
+       JOIN grades gr USING (grade_id)
+       WHERE g.user_id = $1
+       ORDER BY g.goal_id DESC`,
       [userId],
     );
     return rows;

@@ -5,6 +5,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { AuthProvider } from "./context/AuthContext";
 import { queryClient } from "./lib/queryClient";
 import AppRoutes from "./routes/AppRoutes";
+import PWAUpdatePrompt from "./components/PWAUpdatePrompt";
 import { Toaster } from "react-hot-toast";
 
 const App = () => {
@@ -15,6 +16,7 @@ const App = () => {
           <div className={`min-h-screen bg-background text-on-background`}>
             <BrowserRouter>
               <Toaster />
+              <PWAUpdatePrompt />
               <AppRoutes />
             </BrowserRouter>
           </div>

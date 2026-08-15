@@ -144,8 +144,8 @@ also served at `/api/v1/openapi.yaml` for import into Postman/Insomnia or
 client codegen (e.g. `openapi-typescript`).
 
 All endpoints except `/health` require `Authorization: Bearer <supabase-jwt>`
-and return `401` without one. Sessions, attempts, and goals are always scoped
-to the authenticated user.
+and return `401` without one. Sessions, attempts, goals, and AI reports are
+always scoped to the authenticated user.
 
 | Method | Path                         | Description                             |
 | ------ | ---------------------------- | --------------------------------------- |
@@ -156,12 +156,19 @@ to the authenticated user.
 | R/U/D  | `/routes`, `/routes/:id`     | Climbing problems (shared)              |
 | R/U/D  | `/attempts`, `/attempts/:id` | Tries at a route (`?session_id=`)       |
 | CRUD   | `/goals`, `/goals/:id`       | The caller's target grades              |
+| C/R/D  | `/performances`, `/performances/:id` | AI performance reports — `POST` generates one with GPT-4o |
+| C/R/D  | `/trainings`, `/trainings/:id` | AI training plans — `POST` generates one with GPT-4o |
 
 CRUD = `GET` list, `POST`, `GET :id`, `PATCH :id` (partial), `DELETE :id`;
-R/U/D = the same minus `POST`. Routes and attempts are created only through
-`POST /sessions` (nested `attempts`), which writes session + routes + attempts
-in one database transaction so a mid-save failure can never leave a
-half-saved session behind.
+R/U/D = the same minus `POST`; C/R/D = the same minus `PATCH`. Routes and
+attempts are created only through `POST /sessions` (nested `attempts`), which
+writes session + routes + attempts in one database transaction so a mid-save
+failure can never leave a half-saved session behind.
+
+The AI endpoints call OpenAI synchronously (a few seconds per `POST`) and need
+`OPENAI_API_KEY` in `.env` (see `.env.example`); without it they answer `503`
+while the rest of the API keeps working. Reports are immutable snapshots —
+regenerating a period inserts a new row, so there is no `PATCH`.
 Responses are JSON: success payloads are wrapped in `{ "data": ... }`, errors in
 `{ "error": { "message": ... } }`.
 
