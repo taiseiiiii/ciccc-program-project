@@ -9,6 +9,20 @@ erDiagram
     GOAL }o--|| USER : belongs_to
     GOAL }o--|| GRADE : targets
 
+    ROUTE ||--o{ ROUTE_WALL_TYPE : tagged_with
+    WALL_TYPE ||--o{ ROUTE_WALL_TYPE : tags
+    ROUTE ||--o{ ROUTE_HOLD_TYPE : tagged_with
+    HOLD_TYPE ||--o{ ROUTE_HOLD_TYPE : tags
+    ATTEMPT ||--o{ ATTEMPT_WEAKNESS : cites
+    WEAKNESS_TYPE ||--o{ ATTEMPT_WEAKNESS : cited_by
+    USER ||--o{ WEAKNESS_TYPE : owns_custom
+    SESSION ||--o{ MEDIA : shows
+    ATTEMPT ||--o{ MEDIA : shows
+    USER ||--o{ MEDIA : owns
+    USER ||--o{ INJURY : reports
+    INJURY }o--|| BODY_PART : affects
+    INJURY ||--o{ INJURY_LOG : tracked_by
+
     USER {
         int user_id PK
         uuid auth_user_id UK "Supabase Auth user id (JWT sub)"
@@ -25,14 +39,17 @@ erDiagram
         int user_id FK
         date visit_date
         string gym_name
+        int duration_minutes "time on the wall (NULL if not recorded)"
         datetime created_at
         datetime updated_at
     }
 
     ATTEMPT {
         int attempt_id PK
+        int attempt_count "tries at this route this session (>= 1)"
+        int send_count "tries that topped out (0 .. attempt_count)"
+        boolean is_success "GENERATED: send_count > 0"
         text note
-        boolean is_success
         datetime created_at
         datetime updated_at
         int route_id FK
@@ -89,4 +106,121 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+
+    WALL_TYPE {
+        int wall_type_id PK
+        string code "slab / vertical / overhang / roof / arete / dihedral"
+        string label
+        int sort_order
+    }
+
+    HOLD_TYPE {
+        int hold_type_id PK
+        string code "jug / crimp / sloper / pinch / pocket / sidepull / undercling / volume"
+        string label
+        int sort_order
+    }
+
+    ROUTE_WALL_TYPE {
+        int route_id FK
+        int wall_type_id FK
+    }
+
+    ROUTE_HOLD_TYPE {
+        int route_id FK
+        int hold_type_id FK
+    }
+
+    WEAKNESS_TYPE {
+        int weakness_type_id PK
+        int user_id FK "NULL = shared preset, set = the climber's own label"
+        string label
+        int sort_order
+        datetime created_at
+        datetime updated_at
+    }
+
+    ATTEMPT_WEAKNESS {
+        int attempt_id FK
+        int weakness_type_id FK
+    }
+
+    MEDIA {
+        int media_id PK
+        int user_id FK
+        int session_id FK "one of session_id / attempt_id is required"
+        int attempt_id FK
+        text storage_path "object key in the climb-media bucket"
+        string kind "enum: photo / video"
+        string mime_type
+        bigint byte_size
+        int duration_seconds "video only"
+        datetime created_at
+        datetime updated_at
+    }
+
+    BODY_PART {
+        int body_part_id PK
+        string code "finger / wrist / elbow / shoulder / back / hip / knee / ankle / other"
+        string label
+        int sort_order
+    }
+
+    INJURY {
+        int injury_id PK
+        int user_id FK
+        int body_part_id FK
+        string side "enum: left / right / both (optional)"
+        date occurred_on
+        string status "enum: active / recovering / healed"
+        smallint severity "1-5 (optional)"
+        text description "what happened, in the climber's words"
+        date resolved_on "set when status becomes healed"
+        datetime created_at
+        datetime updated_at
+    }
+
+    INJURY_LOG {
+        int injury_log_id PK
+        int injury_id FK
+        date logged_on "UNIQUE with injury_id: one check-in per day"
+        smallint pain_level "0-10"
+        text note
+        datetime created_at
+        datetime updated_at
+    }
 ```
+
+## Notes on the model
+
+**An ATTEMPT row is one route, not one try.** `attempt_count` records how many
+times a route was pulled on during a session and `send_count` how many of those
+topped out, so working a project eight times before it goes is one row with an
+8. `is_success` is a generated column (`send_count > 0`), which is what let the
+change land without rewriting every query that already filtered on it. It also
+makes two figures expressible that the old model could not hold at all: the
+flash rate (`attempt_count = 1 AND send_count = 1`) and average tries-to-send.
+
+**Three many-to-many relationships, three join tables.** Wall angles and hold
+types describe the ROUTE — they are properties of the problem, not of the
+climber's day — so they hang off ROUTE. Weaknesses describe the ATTEMPT: they
+are the climber's read on why *that session* went the way it did. Master tables
+rather than text columns because the question they exist to answer is an
+aggregate one ("success rate on overhang vs slab at V4"), which is one
+`GROUP BY` against a join table and an unbounded string-matching mess against
+free text.
+
+**WEAKNESS_TYPE holds two kinds of row.** `user_id IS NULL` is a shared preset;
+a set `user_id` is a label that climber typed in themselves. A typed word is
+promoted to a row on save, so it is a dropdown option next time — free text for
+the climber, structured data for the aggregates.
+
+**MEDIA stores no bytes.** The file lives in Supabase Storage and is uploaded
+by the browser directly with the climber's own token; this table holds the
+object key, and the API server never handles a file body.
+
+**INJURY carries no diagnosis and no treatment.** The app records injuries and
+manages load — an unhealed injury is an input to training-plan generation so
+the plan routes around the affected body part. Storing a diagnosis or a rehab
+protocol would be medical advice, which this project is not in a position to
+give.

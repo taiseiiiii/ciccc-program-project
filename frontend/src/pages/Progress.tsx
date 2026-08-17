@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import type SessionType from "../types/SessionType";
 import type { AttemptRecord } from "../types/AttemptType";
+import { isFlash } from "../types/AttemptType";
 import type Goal from "../types/GoalType";
 import type { GoalCreate, GoalUpdate } from "../types/GoalType";
 import type Grade from "../types/GradeType";
@@ -29,6 +30,19 @@ const monthKey = (offset: number): string => {
   return d.toLocaleDateString("sv-SE").slice(0, 7);
 };
 
+// Active goals shown before "View all" is pressed. Three is what fits above
+// the fold on a phone — a longer list turns the page's opening into a backlog.
+const GOALS_PREVIEW_COUNT = 3;
+
+/** 135 -> "2h 15m". Minutes alone stop being readable past an hour or two. */
+const formatMinutes = (minutes: number): string => {
+  if (minutes <= 0) return "-";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest}m`;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+};
+
 const getTileColor = (count: number) => {
   if (count === 0)
     return "bg-surface-container-high/30 text-on-surface-variant/50";
@@ -45,6 +59,7 @@ const Progress = () => {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<number | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [showAllGoals, setShowAllGoals] = useState(false);
 
   const {
     data: sessionsData,
@@ -217,6 +232,11 @@ const Progress = () => {
     if (!b.target_date) return -1;
     return a.target_date.localeCompare(b.target_date);
   });
+  // Soonest deadlines first, so the three that show are the three that matter.
+  const visibleGoals = showAllGoals
+    ? sortedActiveGoals
+    : sortedActiveGoals.slice(0, GOALS_PREVIEW_COUNT);
+  const hiddenGoalCount = sortedActiveGoals.length - visibleGoals.length;
 
   // Every figure on the page is derived from the two lists and is pure, so it is
   // memoised: the goal modal's form state lives in this component, and without
@@ -226,10 +246,14 @@ const Progress = () => {
     monthSendsDelta,
     highestGradeThisMonth,
     totalAttemptThisMonthCount,
+    flashCountThisMonth,
+    minutesThisMonth,
+    minutesDelta,
     climbingDaysThisMonthCount,
     climbingDaysDelta,
     monthlySessionFrequencyData,
     gradeSuccessRateData,
+    wallSuccessRateData,
     calendarDays,
     personalRecordTop3,
   } = useMemo(() => {
@@ -249,14 +273,20 @@ const Progress = () => {
     const monthOf = (attempt: AttemptRecord) =>
       visitDateBySession.get(attempt.session_id)?.slice(0, 7);
 
+    // A row is one route, so "sends" is the sum of send_count and "attempts"
+    // the sum of attempt_count — counting rows would report routes touched.
     const sendsIn = (month: string) =>
       attempts.filter((a) => a.is_success && monthOf(a) === month);
+    const sendCountIn = (month: string) =>
+      attempts
+        .filter((a) => monthOf(a) === month)
+        .reduce((sum, a) => sum + a.send_count, 0);
 
     const sendsThisMonth = sendsIn(currentMonth);
-    const currentMonthSendsCount = sendsThisMonth.length;
-    const monthSendsDelta = currentMonthSendsCount - sendsIn(lastMonth).length;
+    const currentMonthSendsCount = sendCountIn(currentMonth);
+    const monthSendsDelta = currentMonthSendsCount - sendCountIn(lastMonth);
 
-    // Highest grade sent this month (successful attempts only)
+    // Highest grade sent this month (routes that went at least once)
     const highestGradeThisMonth =
       sendsThisMonth.length > 0
         ? sendsThisMonth.reduce((best, a) =>
@@ -267,7 +297,24 @@ const Progress = () => {
     const totalAttemptsThisMonth = attempts.filter(
       (a) => monthOf(a) === currentMonth,
     );
-    const totalAttemptThisMonthCount = totalAttemptsThisMonth.length;
+    const totalAttemptThisMonthCount = totalAttemptsThisMonth.reduce(
+      (sum, a) => sum + a.attempt_count,
+      0,
+    );
+
+    // Routes sent first try. The figure climbers actually celebrate, and one
+    // the old one-row-per-try model could not express at all.
+    const flashCountThisMonth = totalAttemptsThisMonth.filter((a) =>
+      isFlash(a),
+    ).length;
+
+    // Minutes on the wall, from the sessions themselves.
+    const minutesIn = (month: string) =>
+      sessions
+        .filter((s) => s.visit_date?.slice(0, 7) === month)
+        .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+    const minutesThisMonth = minutesIn(currentMonth);
+    const minutesDelta = minutesThisMonth - minutesIn(lastMonth);
 
     // Climbing days per month
     const climbingDaysIn = (month: string) =>
@@ -316,32 +363,48 @@ const Progress = () => {
       return days;
     }, []);
 
-    // Success rate by grade
-    type GradeStat = { sends: number; fails: number };
+    // Success rate by grade. Tries and sends, not rows: a route worked eight
+    // times and sent once is 1/8, which is the number that means something.
+    type GradeStat = { sends: number; tries: number };
     const statsMap = new Map<string, GradeStat>();
 
     for (const attempt of totalAttemptsThisMonth) {
       const grade = attempt.grade_name;
-      const current = statsMap.get(grade) ?? { sends: 0, fails: 0 };
-
-      if (attempt.is_success) {
-        current.sends += 1;
-      } else {
-        current.fails += 1;
-      }
-
+      const current = statsMap.get(grade) ?? { sends: 0, tries: 0 };
+      current.sends += attempt.send_count;
+      current.tries += attempt.attempt_count;
       statsMap.set(grade, current);
     }
     const gradeSuccessRateData = Array.from(statsMap.entries())
-      .map(([grade, { sends, fails }]) => {
-        const total = sends + fails;
-        const successRate = total > 0 ? Math.round((sends / total) * 100) : 0;
-
-        return { grade, successRate, sends, fails };
-      })
+      .map(([grade, { sends, tries }]) => ({
+        grade,
+        successRate: tries > 0 ? Math.round((sends / tries) * 100) : 0,
+        sends,
+        fails: tries - sends,
+      }))
       .sort((a, b) =>
         a.grade.localeCompare(b.grade, undefined, { numeric: true }),
       );
+
+    // Success rate by wall angle — the chart the wall tags exist to produce.
+    // Only shown once there is something tagged, so it stays absent rather
+    // than rendering an empty axis for climbers who skip the tags.
+    const wallStats = new Map<string, GradeStat>();
+    for (const attempt of totalAttemptsThisMonth) {
+      for (const wall of attempt.wall_types) {
+        const current = wallStats.get(wall.label) ?? { sends: 0, tries: 0 };
+        current.sends += attempt.send_count;
+        current.tries += attempt.attempt_count;
+        wallStats.set(wall.label, current);
+      }
+    }
+    const wallSuccessRateData = Array.from(wallStats.entries())
+      .map(([wall, { sends, tries }]) => ({
+        wall,
+        successRate: tries > 0 ? Math.round((sends / tries) * 100) : 0,
+        tries,
+      }))
+      .sort((a, b) => b.successRate - a.successRate);
 
     // Session activity heatmap. Every cell is offset from the same `today`, so a
     // render spanning local midnight cannot emit two cells for the same day.
@@ -392,10 +455,14 @@ const Progress = () => {
       monthSendsDelta,
       highestGradeThisMonth,
       totalAttemptThisMonthCount,
+      flashCountThisMonth,
+      minutesThisMonth,
+      minutesDelta,
       climbingDaysThisMonthCount,
       climbingDaysDelta,
       monthlySessionFrequencyData,
       gradeSuccessRateData,
+      wallSuccessRateData,
       calendarDays,
       personalRecordTop3,
     };
@@ -590,7 +657,7 @@ const Progress = () => {
 
           <div className="flex flex-col gap-2.5">
             {sortedActiveGoals.length > 0 ? (
-              sortedActiveGoals.map((goal) => (
+              visibleGoals.map((goal) => (
                 <div
                   key={goal.goal_id}
                   className="flex items-center justify-between p-3 rounded-xl bg-surface-container-high/40 border border-outline-variant/20 hover:border-outline-variant/50 transition-all"
@@ -653,10 +720,22 @@ const Progress = () => {
               </div>
             )}
           </div>
+
+          {sortedActiveGoals.length > GOALS_PREVIEW_COUNT && (
+            <button
+              type="button"
+              onClick={() => setShowAllGoals((shown) => !shown)}
+              className="w-full mt-3 py-2 text-xs font-medium text-primary hover:underline cursor-pointer"
+            >
+              {showAllGoals
+                ? "Show less"
+                : `View all ${sortedActiveGoals.length} goals (${hiddenGoalCount} more)`}
+            </button>
+          )}
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
             TOTAL SENDS / MONTH
@@ -665,17 +744,24 @@ const Progress = () => {
             <p className="text-4xl font-bold mt-2 text-primary">
               {currentMonthSendsCount}{" "}
               <span className="text-sm font-bold mt-2 text-primary">
-                / {totalAttemptThisMonthCount} attempts
+                / {totalAttemptThisMonthCount} tries
               </span>
             </p>
-            {monthSendsDelta !== 0 && (
-              <p
-                className={monthSendsDelta > 0 ? "text-primary" : "text-error"}
-              >
-                {monthSendsDelta > 0 ? `+${monthSendsDelta}` : monthSendsDelta}{" "}
-                from last month
-              </p>
-            )}
+            <div className="flex flex-col gap-1">
+              {monthSendsDelta !== 0 && (
+                <p
+                  className={monthSendsDelta > 0 ? "text-primary" : "text-error"}
+                >
+                  {monthSendsDelta > 0 ? `+${monthSendsDelta}` : monthSendsDelta}{" "}
+                  from last month
+                </p>
+              )}
+              {flashCountThisMonth > 0 && (
+                <p className="text-xs text-on-surface-variant">
+                  {flashCountThisMonth} flashed first try
+                </p>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -708,6 +794,31 @@ const Progress = () => {
                   : climbingDaysDelta}{" "}
                 from last month
               </p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-4 flex flex-col justify-center">
+          <h3 className="text-sm font-medium text-on-surface-variant">
+            TIME ON THE WALL
+          </h3>
+          <div className="flex flex-col gap-3">
+            <p className="text-4xl font-bold mt-2 text-tertiary">
+              {formatMinutes(minutesThisMonth)}
+            </p>
+            {minutesThisMonth === 0 ? (
+              // Not a zero — it means nobody typed a duration. Saying "0h"
+              // would read as "you did not climb", which is a different claim.
+              <p className="text-xs text-on-surface-variant">
+                Add a session length when you log
+              </p>
+            ) : (
+              minutesDelta !== 0 && (
+                <p className={minutesDelta > 0 ? "text-primary" : "text-error"}>
+                  {minutesDelta > 0 ? "+" : "−"}
+                  {formatMinutes(Math.abs(minutesDelta))} from last month
+                </p>
+              )
             )}
           </div>
         </Card>
@@ -808,6 +919,57 @@ const Progress = () => {
             </ResponsiveContainer>
           </div>
         </Card>
+
+        {/*
+          The chart the wall tags exist to produce. Hidden until something is
+          tagged rather than rendered as an empty axis — a climber who skips
+          the tags should not be shown a broken-looking card.
+        */}
+        {wallSuccessRateData.length > 0 && (
+          <Card className="p-4 flex flex-col justify-center">
+            <h3 className="text-sm font-medium text-on-surface-variant mb-3">
+              Success Rate by Wall Angle (%)
+            </h3>
+            <div className="h-60 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={wallSuccessRateData} layout="vertical">
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    stroke="var(--color-outline)"
+                    fontSize={11}
+                    unit="%"
+                  />
+                  <YAxis
+                    dataKey="wall"
+                    type="category"
+                    width={80}
+                    stroke="var(--color-outline)"
+                    fontSize={12}
+                  />
+                  <Tooltip
+                    formatter={(value, _name, item) => [
+                      `${value ?? 0}% of ${item?.payload?.tries ?? 0} tries`,
+                      "Success Rate",
+                    ]}
+                    contentStyle={{
+                      backgroundColor: "var(--color-surface-container-highest)",
+                      borderColor: "var(--color-outline-variant)",
+                      borderRadius: "8px",
+                      color: "var(--color-on-surface)",
+                    }}
+                  />
+                  <Bar
+                    dataKey="successRate"
+                    fill="var(--color-tertiary)"
+                    radius={[0, 4, 4, 0]}
+                    name="Success Rate"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        )}
 
         <Card className="p-4 flex flex-col justify-center">
           <div className="flex items-center justify-between mb-3">

@@ -13,6 +13,10 @@ import AuthLayout from "../layouts/AuthLayout";
 // eagerly imported above and pulls the same charting library in with it.
 const Progress = lazy(() => import("../pages/Progress"));
 
+// Injuries is loaded on demand for a different reason: most climbers, most of
+// the time, never open it.
+const Injuries = lazy(() => import("../pages/Injuries"));
+
 const RequireAuth = () => {
   const { session, loading } = useAuth();
   if (loading) return null;
@@ -61,6 +65,18 @@ const AppRoutes = () => {
             }
           />
           <Route path="ai-coach" element={<AICoach />} />
+          <Route
+            path="injuries"
+            element={
+              <Suspense
+                fallback={
+                  <p className="text-on-surface-variant">Loading...</p>
+                }
+              >
+                <Injuries />
+              </Suspense>
+            }
+          />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Route>

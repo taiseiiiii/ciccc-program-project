@@ -4,7 +4,7 @@ import SignoutButton from "./SignoutButton";
 import { LuLayoutDashboard } from "react-icons/lu";
 import { MdOutlineAddToPhotos } from "react-icons/md";
 import { BsGraphUpArrow } from "react-icons/bs";
-import { LuBotMessageSquare } from "react-icons/lu";
+import { LuBotMessageSquare, LuBandage } from "react-icons/lu";
 
 interface SideNavigationProps extends ComponentPropsWithoutRef<"div"> {
   children?: ReactNode;
@@ -45,6 +45,11 @@ export default function SideNavigation({
       </NavLink>
       <NavLink to="/ai-coach" className={getSideNavLinkClass}>
         <LuBotMessageSquare size={24} /> AI coach
+      </NavLink>
+      {/* Not in the bottom bar: four items is what fits on a phone, and this
+          is the one most climbers open least. */}
+      <NavLink to="/injuries" className={getSideNavLinkClass}>
+        <LuBandage size={24} /> Injuries
       </NavLink>
       <div className="mt-auto">
         <SignoutButton

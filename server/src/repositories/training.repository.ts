@@ -8,8 +8,23 @@ export interface Training {
   ai_model: string | null;
   /** Structured plan (drills etc.) + the stats snapshot it was based on (JSONB). */
   analysis_data: unknown;
+  /** The climber's own layer — the only part of a plan that is editable. */
+  title: string | null;
+  user_note: string | null;
+  is_pinned: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * What a climber may change on a saved plan. Excludes training_report and
+ * analysis_data on purpose: a plan is worth reviewing only if it still says
+ * what it prescribed at the time.
+ */
+export interface UpdateTrainingInput {
+  title?: string | null;
+  user_note?: string | null;
+  is_pinned?: boolean;
 }
 
 export interface CreateTrainingInput {
@@ -31,10 +46,12 @@ export interface CreateTrainingInput {
  */
 export const trainingRepository = {
   async findAll(userId: number, limit = 20): Promise<Training[]> {
+    // Pinned plans lead, same as performances — the review screen is for the
+    // handful a climber is actually working through.
     const { rows } = await query<Training>(
       `SELECT * FROM trainings
        WHERE user_id = $1
-       ORDER BY created_at DESC, training_id DESC
+       ORDER BY is_pinned DESC, created_at DESC, training_id DESC
        LIMIT $2`,
       [userId, limit],
     );
@@ -62,6 +79,44 @@ export const trainingRepository = {
       ],
     );
     return rows[0]!;
+  },
+
+  /**
+   * Update the climber's own layer on a saved plan. Builds the SET clause only
+   * from the fields provided so a missing field is left untouched.
+   */
+  async update(
+    id: number,
+    userId: number,
+    input: UpdateTrainingInput,
+  ): Promise<Training | null> {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    const push = (column: string, value: unknown) => {
+      values.push(value);
+      fields.push(`${column} = $${values.length}`);
+    };
+
+    if (input.title !== undefined) push("title", input.title);
+    if (input.user_note !== undefined) push("user_note", input.user_note);
+    if (input.is_pinned !== undefined) push("is_pinned", input.is_pinned);
+
+    if (fields.length === 0) {
+      return this.findById(id, userId);
+    }
+
+    values.push(id);
+    const idIdx = values.length;
+    values.push(userId);
+    const userIdx = values.length;
+    const { rows } = await query<Training>(
+      `UPDATE trainings SET ${fields.join(", ")}
+       WHERE training_id = $${idIdx} AND user_id = $${userIdx}
+       RETURNING *`,
+      values,
+    );
+    return rows[0] ?? null;
   },
 
   async remove(id: number, userId: number): Promise<boolean> {

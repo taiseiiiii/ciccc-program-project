@@ -6,15 +6,7 @@ import { aiService, type GoalSummary } from "../services/ai.service";
 import { env } from "../config/env";
 import { HttpError } from "../utils/HttpError";
 import { isDateString, monthBounds, todayString } from "../utils/period";
-
-/** Parse and validate a numeric route param (e.g. :id). */
-function parseId(raw: string): number {
-  const id = Number(raw);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw HttpError.badRequest(`Invalid id: ${raw}`);
-  }
-  return id;
-}
+import { optionalBoolean, optionalString, parseId } from "../utils/validate";
 
 function toGoalSummaries(goals: GoalWithGrade[]): GoalSummary[] {
   return goals.map((g) => ({
@@ -104,7 +96,10 @@ export const performanceController = {
     }
 
     const goals = toGoalSummaries(await goalRepository.findAllWithGrade(userId));
-    const { report, ...analysis } = await aiService.generatePerformanceAnalysis(
+    // `detail` is the long-form text and lands in the TEXT column; everything
+    // else — including the two-line `summary` the screen leads with — is
+    // structured and lands in analysis_data.
+    const { detail, ...analysis } = await aiService.generatePerformanceAnalysis(
       period_type,
       stats,
       goals,
@@ -115,13 +110,42 @@ export const performanceController = {
       period_type,
       period_start: start,
       period_end: end,
-      performance_report: report,
+      performance_report: detail,
       ai_model: env.openaiModel,
       // The structured analysis plus the exact stats it was computed from, so
       // the report stays interpretable even after sessions are edited.
       analysis_data: { ...analysis, stats },
     });
     res.status(201).json({ data: performance });
+  },
+
+  // PATCH /api/v1/performances/:id
+  // Body: { title?, user_note?, is_pinned? }
+  //
+  // Only the climber's own layer. The AI text and the stats snapshot are not
+  // editable: a report is worth reviewing precisely because it still says what
+  // it said when it was generated.
+  async update(req: Request, res: Response): Promise<void> {
+    const id = parseId(req.params.id!);
+    const { title, user_note, is_pinned } = req.body ?? {};
+
+    for (const frozen of ["performance_report", "analysis_data", "period_type"]) {
+      if (req.body?.[frozen] !== undefined) {
+        throw HttpError.badRequest(
+          `${frozen} cannot be edited — it is the generated snapshot`,
+        );
+      }
+    }
+
+    const performance = await performanceRepository.update(id, req.user!.user_id, {
+      title: optionalString(title, "title", 120),
+      user_note: optionalString(user_note, "user_note", 4000),
+      is_pinned: optionalBoolean(is_pinned, "is_pinned"),
+    });
+    if (!performance) {
+      throw HttpError.notFound(`Performance ${id} not found`);
+    }
+    res.json({ data: performance });
   },
 
   // DELETE /api/v1/performances/:id

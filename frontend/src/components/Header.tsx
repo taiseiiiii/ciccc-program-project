@@ -27,6 +27,10 @@ const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
     title: "AI Coaching Intelligence",
     subtitle: "Personalized insights and drill recommendations",
   },
+  "/injuries": {
+    title: "Injuries",
+    subtitle: "Track what hurts and keep training away from it",
+  },
   "/profile": {
     title: "Profile & Settings",
     subtitle: "Manage your climbing grades and account preferences",

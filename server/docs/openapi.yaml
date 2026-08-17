@@ -53,9 +53,27 @@ tags:
   - name: Routes
     description: Climbing problems, each tied to a grade.
   - name: Attempts
-    description: One try at a route within a session.
+    description: >-
+      One route as logged within a session — how many times it was tried and
+      how many of those tries were sent.
   - name: Goals
     description: A user's target grade, with optional deadline.
+  - name: Taxonomy
+    description: >-
+      Read-only master data for the tag pickers — wall angles, hold types and
+      body parts. Created by migrations, so safe to cache indefinitely.
+  - name: Weaknesses
+    description: >-
+      Self-reported reasons a climb did not go. Shared presets plus labels the
+      climber typed in themselves.
+  - name: Media
+    description: >-
+      Photo/video metadata. Files live in Supabase Storage and are uploaded by
+      the browser directly; this API only ever handles the object key.
+  - name: Injuries
+    description: >-
+      Injury records and daily pain check-ins. Recording and load management
+      only — the API stores no diagnosis or treatment.
   - name: Performances
     description: AI-generated performance analysis of one day or month of climbing.
   - name: Trainings
@@ -722,6 +740,42 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Performances]
+      summary: Edit your notes on a report
+      description: >-
+        Reaches only `title`, `user_note` and `is_pinned`. The generated report
+        and its stats snapshot are immutable — sending them is a 400. That is
+        deliberate: comparing what the coach predicted with what actually
+        happened only works if the prediction is untouched.
+      operationId: updatePerformance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportUpdate'
+            example:
+              title: The month I finally got V5
+              user_note: The coach was right about my feet.
+              is_pinned: true
+      responses:
+        '200':
+          description: The updated report.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Performance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [Performances]
       summary: Delete a performance report
@@ -833,6 +887,36 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Trainings]
+      summary: Edit your notes on a plan
+      description: >-
+        Reaches only `title`, `user_note` and `is_pinned`. The generated plan
+        and its stats snapshot are immutable — sending them is a 400.
+      operationId: updateTraining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportUpdate'
+      responses:
+        '200':
+          description: The updated plan.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Training'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [Trainings]
       summary: Delete a training plan
@@ -840,6 +924,476 @@ paths:
       responses:
         '204':
           description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Tag vocabularies (read-only master data) ----------------------------
+
+  /wall-types:
+    get:
+      tags: [Taxonomy]
+      summary: List wall angles
+      description: >-
+        Slab through dihedral, created by migration 0005. Only ever changes
+        when a migration changes it, so clients cache it for the life of the
+        page.
+      operationId: listWallTypes
+      responses:
+        '200':
+          description: The wall angles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaxonomyTerm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /hold-types:
+    get:
+      tags: [Taxonomy]
+      summary: List hold types
+      description: Jug through volume, created by migration 0005.
+      operationId: listHoldTypes
+      responses:
+        '200':
+          description: The hold types.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaxonomyTerm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /body-parts:
+    get:
+      tags: [Taxonomy]
+      summary: List body parts
+      description: Finger through ankle, created by migration 0010.
+      operationId: listBodyParts
+      responses:
+        '200':
+          description: The body parts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaxonomyTerm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---- Weaknesses -----------------------------------------------------------
+
+  /weaknesses:
+    get:
+      tags: [Weaknesses]
+      summary: List weaknesses
+      description: >-
+        The shared presets plus this climber's own labels, presets first.
+      operationId: listWeaknesses
+      responses:
+        '200':
+          description: The available weaknesses.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WeaknessType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Weaknesses]
+      summary: Add a weakness label
+      description: >-
+        Idempotent: a label matching an existing preset or one of the climber's
+        own is returned rather than duplicated. This is what makes the
+        "dropdown you can type into" produce aggregatable data.
+      operationId: createWeakness
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeaknessCreate'
+            example:
+              label: Heel hooks
+      responses:
+        '201':
+          description: The created — or matched — weakness.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WeaknessType'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /weaknesses/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    delete:
+      tags: [Weaknesses]
+      summary: Delete one of your own labels
+      description: >-
+        Presets belong to nobody and answer 404 here — they are not "yours but
+        forbidden", they are simply not one of your rows. There is no PATCH:
+        renaming a label would rewrite the history of every climb tagged with
+        it.
+      operationId: deleteWeakness
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Media ----------------------------------------------------------------
+
+  /media:
+    get:
+      tags: [Media]
+      summary: List attachments
+      operationId: listMedia
+      parameters:
+        - name: session_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: attempt_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: The climber's attachments, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Media'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Media]
+      summary: Record an uploaded file
+      description: |
+        Called **after** the browser has uploaded the file straight to Supabase
+        Storage with its own access token. This API never receives a file body.
+
+        `storage_path` must begin with the caller's `auth_user_id`, matching
+        the bucket's RLS policy — a key outside that prefix could not have been
+        written by this caller.
+
+        The path is UNIQUE, so a retried POST after a dropped response returns
+        the existing row instead of attaching the same file twice.
+      operationId: createMedia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaCreate'
+      responses:
+        '201':
+          description: Attachment recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Media'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: File too large, or the account's storage limit is reached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  message: 'Videos must be 50 MB or smaller'
+
+  /media/usage:
+    get:
+      tags: [Media]
+      summary: Storage usage and limits
+      description: What the upload UI needs to warn before a climber hits the ceiling.
+      operationId: getMediaUsage
+      responses:
+        '200':
+          description: Usage and the current limits.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MediaUsage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /media/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    delete:
+      tags: [Media]
+      summary: Delete an attachment
+      description: >-
+        Answers 200 with the object key rather than 204: the server holds no
+        service-role key by design and cannot reach into the bucket, so the
+        client removes the stored file itself.
+      operationId: deleteMedia
+      responses:
+        '200':
+          description: Row deleted. Remove the object at `storage_path` next.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [media_id, storage_path]
+                    properties:
+                      media_id:
+                        type: integer
+                      storage_path:
+                        type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Injuries -------------------------------------------------------------
+
+  /injuries:
+    get:
+      tags: [Injuries]
+      summary: List injuries
+      description: Open injuries first, then healed ones, most recent first within each.
+      operationId: listInjuries
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, recovering, healed]
+      responses:
+        '200':
+          description: The climber's injuries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Injury'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Injuries]
+      summary: Record an injury
+      operationId: createInjury
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjuryCreate'
+            example:
+              body_part_id: 1
+              side: right
+              occurred_on: '2026-08-02'
+              severity: 3
+              description: Felt a pop on a small crimp on an overhang.
+      responses:
+        '201':
+          description: Injury recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Injury'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /injuries/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Injuries]
+      summary: Get an injury
+      operationId: getInjury
+      responses:
+        '200':
+          description: The injury.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Injury'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Injuries]
+      summary: Update an injury
+      description: >-
+        Setting `status` to `healed` fills in `resolved_on` automatically;
+        reopening clears it.
+      operationId: updateInjury
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjuryUpdate'
+      responses:
+        '200':
+          description: The updated injury.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Injury'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Injuries]
+      summary: Delete an injury
+      description: Its check-ins go with it.
+      operationId: deleteInjury
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /injuries/{id}/logs:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Injuries]
+      summary: List check-ins
+      description: Oldest first, so the pain-trend chart can plot them as-is.
+      operationId: listInjuryLogs
+      responses:
+        '200':
+          description: The check-ins for this injury.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InjuryLog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Injuries]
+      summary: Check in for a day
+      description: >-
+        One entry per injury per day — re-posting the same date corrects that
+        day rather than adding a second reading.
+      operationId: createInjuryLog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjuryLogCreate'
+            example:
+              pain_level: 3
+              logged_on: '2026-08-15'
+              note: Better than yesterday. No pain opening doors.
+      responses:
+        '201':
+          description: Check-in recorded (or corrected).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InjuryLog'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -981,7 +1535,9 @@ components:
     Session:
       type: object
       description: A gym visit.
-      required: [session_id, user_id, visit_date, gym_name, created_at, updated_at]
+      required:
+        [session_id, user_id, visit_date, gym_name, duration_minutes,
+         created_at, updated_at]
       properties:
         session_id:
           type: integer
@@ -998,6 +1554,13 @@ components:
           nullable: true
           maxLength: 150
           example: The Hive
+        duration_minutes:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1440
+          description: Time on the wall. Null when the climber did not record it.
+          example: 90
         created_at:
           type: string
           format: date-time
@@ -1017,16 +1580,24 @@ components:
           type: string
           nullable: true
           maxLength: 150
+        duration_minutes:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1440
         attempts:
           type: array
           description: >-
-            Attempts to create atomically with the session. Each entry also
-            creates the route it was climbed on.
+            Climbs to create atomically with the session. Each entry also
+            creates the route it was climbed on, and its tags.
           items:
             $ref: '#/components/schemas/SessionAttemptCreate'
 
     SessionAttemptCreate:
       type: object
+      description: >-
+        One route as climbed during the visit. `is_success` is not accepted —
+        it is derived from `send_count`.
       required: [grade_id]
       properties:
         grade_id:
@@ -1036,12 +1607,53 @@ components:
           type: string
           nullable: true
           maxLength: 150
-        is_success:
-          type: boolean
-          default: false
+        attempt_count:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 1
+          description: How many times the route was tried in this session.
+        send_count:
+          type: integer
+          minimum: 0
+          maximum: 200
+          default: 0
+          description: >-
+            How many of those tries topped out. Must not exceed
+            `attempt_count`.
         note:
           type: string
           nullable: true
+          maxLength: 2000
+        wall_type_ids:
+          type: array
+          description: Wall angles, tagged on the route. Unknown ids are rejected.
+          items:
+            type: integer
+            minimum: 1
+        hold_type_ids:
+          type: array
+          description: Hold types, tagged on the route. Unknown ids are rejected.
+          items:
+            type: integer
+            minimum: 1
+        weakness_type_ids:
+          type: array
+          description: >-
+            Existing weaknesses (presets or the climber's own) cited for this
+            climb.
+          items:
+            type: integer
+            minimum: 1
+        weakness_labels:
+          type: array
+          description: >-
+            Free-text weaknesses. Each is resolved to a `weakness_types` row —
+            reusing a matching preset or existing label, otherwise creating one
+            the climber owns — so it is a dropdown option next time.
+          items:
+            type: string
+            maxLength: 60
 
     SessionWithAttempts:
       allOf:
@@ -1065,6 +1677,11 @@ components:
           type: string
           nullable: true
           maxLength: 150
+        duration_minutes:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1440
 
     Grade:
       type: object
@@ -1127,8 +1744,13 @@ components:
 
     Attempt:
       type: object
-      description: One try at a route within a session.
-      required: [attempt_id, session_id, route_id, is_success, note, created_at, updated_at]
+      description: >-
+        One route as logged within a session: `attempt_count` tries of which
+        `send_count` topped out. A route worked eight times before it went is
+        one row with an 8, not eight rows.
+      required:
+        [attempt_id, session_id, route_id, attempt_count, send_count,
+         is_success, note, created_at, updated_at]
       properties:
         attempt_id:
           type: integer
@@ -1139,8 +1761,21 @@ components:
         route_id:
           type: integer
           example: 2
+        attempt_count:
+          type: integer
+          minimum: 1
+          example: 4
+        send_count:
+          type: integer
+          minimum: 0
+          description: Never greater than `attempt_count`.
+          example: 1
         is_success:
           type: boolean
+          readOnly: true
+          description: >-
+            Generated by the database as `send_count > 0`. Read-only —
+            PATCHing it is rejected with 400.
           example: true
         note:
           type: string
@@ -1155,13 +1790,15 @@ components:
 
     AttemptWithRoute:
       description: >-
-        An attempt as the /attempts endpoints return it: the row itself plus
-        the route name and grade joined in, so clients can display an attempt
-        without fetching routes and grades separately.
+        A logged climb as the /attempts endpoints return it: the row itself
+        plus the route name, grade and tags joined in, so clients can display
+        it without fetching four more collections.
       allOf:
         - $ref: '#/components/schemas/Attempt'
         - type: object
-          required: [route_name, grade_name, grade_level]
+          required:
+            [route_name, grade_name, grade_level, wall_types, hold_types,
+             weaknesses]
           properties:
             route_name:
               type: string
@@ -1173,18 +1810,63 @@ components:
             grade_level:
               type: integer
               example: 5
+            wall_types:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaxonomyTerm'
+            hold_types:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaxonomyTerm'
+            weaknesses:
+              type: array
+              items:
+                type: object
+                required: [weakness_type_id, label]
+                properties:
+                  weakness_type_id:
+                    type: integer
+                  label:
+                    type: string
 
     AttemptUpdate:
       type: object
+      description: >-
+        `is_success` is rejected — send `send_count` instead. Tag arrays
+        replace in full, so `[]` clears them.
       properties:
         route_id:
           type: integer
           minimum: 1
-        is_success:
-          type: boolean
+        attempt_count:
+          type: integer
+          minimum: 1
+          maximum: 200
+        send_count:
+          type: integer
+          minimum: 0
+          maximum: 200
         note:
           type: string
           nullable: true
+          maxLength: 2000
+        wall_type_ids:
+          type: array
+          items:
+            type: integer
+        hold_type_ids:
+          type: array
+          items:
+            type: integer
+        weakness_type_ids:
+          type: array
+          items:
+            type: integer
+        weakness_labels:
+          type: array
+          items:
+            type: string
+            maxLength: 60
 
     Goal:
       type: object
@@ -1407,6 +2089,12 @@ components:
               type: string
             stats:
               $ref: '#/components/schemas/ClimbingStats'
+        title:
+          $ref: '#/components/schemas/ReportTitle'
+        user_note:
+          $ref: '#/components/schemas/ReportUserNote'
+        is_pinned:
+          $ref: '#/components/schemas/ReportIsPinned'
         created_at:
           type: string
           format: date-time
@@ -1477,8 +2165,21 @@ components:
                   frequency:
                     type: string
                     example: 2x per week, 20 min
+            removed_for_injury:
+              type: array
+              description: >-
+                Drills the server dropped because they would have loaded an
+                unhealed body part. Surfaced in the UI, not hidden.
+              items:
+                type: string
             stats:
               $ref: '#/components/schemas/ClimbingStats'
+        title:
+          $ref: '#/components/schemas/ReportTitle'
+        user_note:
+          $ref: '#/components/schemas/ReportUserNote'
+        is_pinned:
+          $ref: '#/components/schemas/ReportIsPinned'
         created_at:
           type: string
           format: date-time
@@ -1495,3 +2196,369 @@ components:
           description: >-
             End of the 30-day window the plan is based on. Defaults to today
             (server time), so clients in other timezones should send it.
+
+    # ---- The climber's own layer on a saved report --------------------------
+    # Shared by Performance and Training. The generated text next to these is
+    # never editable: a report is only worth reviewing if it still says what it
+    # said when it was generated.
+
+    ReportTitle:
+      type: string
+      nullable: true
+      maxLength: 120
+      description: A name the climber gave this report.
+      example: The month I finally got V5
+
+    ReportUserNote:
+      type: string
+      nullable: true
+      maxLength: 4000
+      description: The climber's own reflection, written after the fact.
+      example: The coach was right about my feet. Fixed it and V4 went in two weeks.
+
+    ReportIsPinned:
+      type: boolean
+      description: Pinned reports sort to the top of the list.
+      default: false
+
+    ReportUpdate:
+      type: object
+      description: >-
+        The only editable fields on a saved report. Sending
+        `performance_report`, `training_report` or `analysis_data` is rejected
+        with 400.
+      properties:
+        title:
+          $ref: '#/components/schemas/ReportTitle'
+        user_note:
+          $ref: '#/components/schemas/ReportUserNote'
+        is_pinned:
+          type: boolean
+
+    # ---- Tag vocabularies ---------------------------------------------------
+
+    TaxonomyTerm:
+      type: object
+      description: >-
+        One term from a master vocabulary — a wall angle, a hold type or a body
+        part. All three have this shape.
+      required: [id, code, label, sort_order]
+      properties:
+        id:
+          type: integer
+          example: 3
+        code:
+          type: string
+          description: Stable key, safe to branch on in code.
+          example: overhang
+        label:
+          type: string
+          description: What the button says.
+          example: Overhang
+        sort_order:
+          type: integer
+          example: 30
+
+    WeaknessType:
+      type: object
+      description: >-
+        A self-reported reason a climb did not go. `user_id` is null for the
+        shared presets and set for labels this climber typed in.
+      required: [weakness_type_id, user_id, label, sort_order, created_at, updated_at]
+      properties:
+        weakness_type_id:
+          type: integer
+          example: 3
+        user_id:
+          type: integer
+          nullable: true
+          description: Null for a shared preset.
+          example: null
+        label:
+          type: string
+          maxLength: 60
+          example: Footwork
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WeaknessCreate:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          maxLength: 60
+          description: >-
+            Matched case-insensitively against the presets and the climber's
+            own labels first, so submitting an existing one returns it rather
+            than creating a duplicate.
+
+    # ---- Media --------------------------------------------------------------
+
+    Media:
+      type: object
+      description: >-
+        Metadata for one attachment. The file itself lives in the private
+        `climb-media` Supabase Storage bucket.
+      required:
+        [media_id, user_id, session_id, attempt_id, storage_path, kind,
+         mime_type, byte_size, duration_seconds, created_at, updated_at]
+      properties:
+        media_id:
+          type: integer
+        user_id:
+          type: integer
+        session_id:
+          type: integer
+          nullable: true
+        attempt_id:
+          type: integer
+          nullable: true
+        storage_path:
+          type: string
+          description: >-
+            Object key in the bucket. Always begins with the uploader's
+            `auth_user_id`, matching the bucket's RLS policy.
+          example: 8f1c.../2026/08/2b7e....jpg
+        kind:
+          type: string
+          enum: [photo, video]
+        mime_type:
+          type: string
+          example: image/jpeg
+        byte_size:
+          type: integer
+          format: int64
+        duration_seconds:
+          type: integer
+          nullable: true
+          description: Videos only.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MediaCreate:
+      type: object
+      description: >-
+        Posted after the browser has uploaded the file to Storage. At least one
+        of `session_id` / `attempt_id` is required, and it must belong to the
+        caller.
+      required: [storage_path, kind, mime_type, byte_size]
+      properties:
+        storage_path:
+          type: string
+        kind:
+          type: string
+          enum: [photo, video]
+        mime_type:
+          type: string
+          description: >-
+            Photos: image/jpeg, image/png, image/webp, image/heic.
+            Videos: video/mp4, video/quicktime, video/webm.
+        byte_size:
+          type: integer
+          format: int64
+          description: 'Max 8 MB for photos, 50 MB for videos.'
+        duration_seconds:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: Required for videos.
+        session_id:
+          type: integer
+        attempt_id:
+          type: integer
+
+    MediaUsage:
+      type: object
+      required:
+        [used_bytes, limit_bytes, max_photo_bytes, max_video_bytes,
+         max_video_seconds]
+      properties:
+        used_bytes:
+          type: integer
+          format: int64
+        limit_bytes:
+          type: integer
+          format: int64
+          description: Per-account ceiling. The bucket is one shared free-tier gigabyte.
+        max_photo_bytes:
+          type: integer
+        max_video_bytes:
+          type: integer
+        max_video_seconds:
+          type: integer
+
+    # ---- Injuries -----------------------------------------------------------
+
+    Injury:
+      type: object
+      description: >-
+        An injury being tracked. Carries no diagnosis and no treatment: the API
+        records what the climber can observe and what the AI coach needs in
+        order to route training around it.
+      required:
+        [injury_id, user_id, body_part_id, side, occurred_on, status, severity,
+         description, resolved_on, body_part_code, body_part_label,
+         latest_pain_level, latest_logged_on, created_at, updated_at]
+      properties:
+        injury_id:
+          type: integer
+        user_id:
+          type: integer
+        body_part_id:
+          type: integer
+        side:
+          type: string
+          nullable: true
+          enum: [left, right, both, null]
+        occurred_on:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [active, recovering, healed]
+          description: >-
+            `active` and `recovering` both constrain training plans; `healed`
+            is history only.
+        severity:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        description:
+          type: string
+          nullable: true
+        resolved_on:
+          type: string
+          format: date
+          nullable: true
+          description: >-
+            Set automatically when status becomes `healed`, cleared when it is
+            reopened.
+        body_part_code:
+          type: string
+          example: finger
+        body_part_label:
+          type: string
+          example: Finger / pulley
+        latest_pain_level:
+          type: integer
+          nullable: true
+          description: Most recent check-in, joined in so a list needs no extra request.
+        latest_logged_on:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InjuryCreate:
+      type: object
+      required: [body_part_id, occurred_on]
+      properties:
+        body_part_id:
+          type: integer
+          minimum: 1
+        occurred_on:
+          type: string
+          format: date
+          description: Cannot be in the future.
+        side:
+          type: string
+          nullable: true
+          enum: [left, right, both, null]
+        severity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+
+    InjuryUpdate:
+      type: object
+      properties:
+        body_part_id:
+          type: integer
+          minimum: 1
+        occurred_on:
+          type: string
+          format: date
+        side:
+          type: string
+          nullable: true
+          enum: [left, right, both, null]
+        status:
+          type: string
+          enum: [active, recovering, healed]
+        severity:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+
+    InjuryLog:
+      type: object
+      description: One daily pain check-in. At most one per injury per day.
+      required:
+        [injury_log_id, injury_id, logged_on, pain_level, note, created_at,
+         updated_at]
+      properties:
+        injury_log_id:
+          type: integer
+        injury_id:
+          type: integer
+        logged_on:
+          type: string
+          format: date
+        pain_level:
+          type: integer
+          minimum: 0
+          maximum: 10
+        note:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InjuryLogCreate:
+      type: object
+      required: [pain_level]
+      properties:
+        pain_level:
+          type: integer
+          minimum: 0
+          maximum: 10
+        logged_on:
+          type: string
+          format: date
+          description: >-
+            Defaults to the server's today. Clients should send their own local
+            date.
+        note:
+          type: string
+          nullable: true
+          maxLength: 1000

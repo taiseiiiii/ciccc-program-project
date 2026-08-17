@@ -1,5 +1,7 @@
 import { pool, query } from "../db/pool";
 import type { Attempt } from "./attempt.repository";
+import { attemptRepository } from "./attempt.repository";
+import { weaknessRepository } from "./weakness.repository";
 
 /** Shape of a row in the `sessions` table. */
 export interface Session {
@@ -7,6 +9,8 @@ export interface Session {
   user_id: number;
   visit_date: string; // 'YYYY-MM-DD'
   gym_name: string | null;
+  /** Time on the wall in minutes. NULL when the climber did not record it. */
+  duration_minutes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -15,14 +19,31 @@ export interface CreateSessionInput {
   user_id: number;
   visit_date: string;
   gym_name?: string | null;
+  duration_minutes?: number | null;
 }
 
-/** One attempt nested in a bulk session create. The route is created with it. */
+/**
+ * One route nested in a bulk session create. The route row is created with it.
+ *
+ * Since migration 0007 this describes a whole route rather than a single try:
+ * `attempt_count` tries of which `send_count` topped out. Wall and hold tags
+ * belong to the route; weaknesses belong to the attempt (they are the
+ * climber's read on that particular session, not a property of the problem).
+ *
+ * `weakness_labels` carries anything typed into the "other" box — each label
+ * is resolved to a weakness_types row (reusing a preset or the climber's own
+ * earlier label where one matches) inside the same transaction.
+ */
 export interface CreateSessionAttemptInput {
   grade_id: number;
   route_name?: string | null;
-  is_success?: boolean;
+  attempt_count?: number;
+  send_count?: number;
   note?: string | null;
+  wall_type_ids?: number[];
+  hold_type_ids?: number[];
+  weakness_type_ids?: number[];
+  weakness_labels?: string[];
 }
 
 export interface SessionWithAttempts extends Session {
@@ -32,6 +53,7 @@ export interface SessionWithAttempts extends Session {
 export interface UpdateSessionInput {
   visit_date?: string;
   gym_name?: string | null;
+  duration_minutes?: number | null;
 }
 
 /**
@@ -62,20 +84,29 @@ export const sessionRepository = {
 
   async create(input: CreateSessionInput): Promise<Session> {
     const { rows } = await query<Session>(
-      `INSERT INTO sessions (user_id, visit_date, gym_name)
-       VALUES ($1, $2, $3)
+      `INSERT INTO sessions (user_id, visit_date, gym_name, duration_minutes)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [input.user_id, input.visit_date, input.gym_name ?? null],
+      [
+        input.user_id,
+        input.visit_date,
+        input.gym_name ?? null,
+        input.duration_minutes ?? null,
+      ],
     );
     return rows[0]!;
   },
 
   /**
-   * Create a session together with its routes and attempts in one database
-   * transaction: either everything is persisted or nothing is. This is what
-   * the log-session form uses — creating the pieces via separate requests
-   * would leave a half-saved session behind whenever a later request failed,
-   * and retrying would then duplicate it.
+   * Create a session together with its routes, attempts and every tag in one
+   * database transaction: either everything is persisted or nothing is. This
+   * is what the log-session form uses — creating the pieces via separate
+   * requests would leave a half-saved session behind whenever a later request
+   * failed, and retrying would then duplicate it.
+   *
+   * The tag writes are part of the same transaction for the same reason: a
+   * climb saved without the wall angle the climber selected is a silent data
+   * loss, not a partial success.
    */
   async createWithAttempts(
     input: CreateSessionInput,
@@ -86,10 +117,15 @@ export const sessionRepository = {
       await client.query("BEGIN");
 
       const { rows: sessionRows } = await client.query<Session>(
-        `INSERT INTO sessions (user_id, visit_date, gym_name)
-         VALUES ($1, $2, $3)
+        `INSERT INTO sessions (user_id, visit_date, gym_name, duration_minutes)
+         VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [input.user_id, input.visit_date, input.gym_name ?? null],
+        [
+          input.user_id,
+          input.visit_date,
+          input.gym_name ?? null,
+          input.duration_minutes ?? null,
+        ],
       );
       const session = sessionRows[0]!;
 
@@ -101,18 +137,50 @@ export const sessionRepository = {
            RETURNING route_id`,
           [attempt.grade_id, attempt.route_name ?? null],
         );
+        const routeId = routeRows[0]!.route_id;
+
         const { rows: attemptRows } = await client.query<Attempt>(
-          `INSERT INTO attempts (session_id, route_id, is_success, note)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO attempts (session_id, route_id, attempt_count, send_count, note)
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING *`,
           [
             session.session_id,
-            routeRows[0]!.route_id,
-            attempt.is_success ?? false,
+            routeId,
+            attempt.attempt_count ?? 1,
+            attempt.send_count ?? 0,
             attempt.note ?? null,
           ],
         );
-        createdAttempts.push(attemptRows[0]!);
+        const created = attemptRows[0]!;
+
+        await attemptRepository.setRouteTags(
+          routeId,
+          {
+            wallTypeIds: attempt.wall_type_ids ?? [],
+            holdTypeIds: attempt.hold_type_ids ?? [],
+          },
+          client,
+        );
+
+        // Typed-in weaknesses become rows the climber owns, so the same word
+        // is a dropdown option next time instead of a new near-duplicate.
+        const weaknessIds = [...(attempt.weakness_type_ids ?? [])];
+        for (const label of attempt.weakness_labels ?? []) {
+          if (label.trim() === "") continue;
+          const row = await weaknessRepository.findOrCreateByLabel(
+            input.user_id,
+            label,
+            client,
+          );
+          weaknessIds.push(row.weakness_type_id);
+        }
+        await weaknessRepository.setForAttempt(
+          created.attempt_id,
+          [...new Set(weaknessIds)],
+          client,
+        );
+
+        createdAttempts.push(created);
       }
 
       await client.query("COMMIT");
@@ -139,13 +207,15 @@ export const sessionRepository = {
     const fields: string[] = [];
     const values: unknown[] = [];
 
-    if (input.visit_date !== undefined) {
-      values.push(input.visit_date);
-      fields.push(`visit_date = $${values.length}`);
-    }
-    if (input.gym_name !== undefined) {
-      values.push(input.gym_name);
-      fields.push(`gym_name = $${values.length}`);
+    const push = (column: string, value: unknown) => {
+      values.push(value);
+      fields.push(`${column} = $${values.length}`);
+    };
+
+    if (input.visit_date !== undefined) push("visit_date", input.visit_date);
+    if (input.gym_name !== undefined) push("gym_name", input.gym_name);
+    if (input.duration_minutes !== undefined) {
+      push("duration_minutes", input.duration_minutes);
     }
 
     if (fields.length === 0) {

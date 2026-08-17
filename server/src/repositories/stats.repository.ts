@@ -7,10 +7,15 @@ import { query } from "../db/pool";
  *   * the AI coach        — `forPeriod`, one snapshot over an arbitrary range
  *   * the Progress screen — `find*`, one calendar month broken down for charts
  *
- * They ask different questions of the same four tables, so the queries live
+ * They ask different questions of the same tables, so the queries live
  * together but stay separate: the coach wants a single narrative summary
  * (including the climber's own notes), the charts want per-day and per-grade
  * series.
+ *
+ * Counting note, since migration 0007: an `attempts` row is one ROUTE, not one
+ * try, so "how many attempts" is `SUM(attempt_count)` and "how many sends" is
+ * `SUM(send_count)`. Anywhere those read `COUNT(*)` the figure would silently
+ * become "routes touched" instead.
  *
  * Same ownership rule as everywhere else: every query is scoped to the user_id
  * taken from the verified token, and all values are passed as parameters
@@ -29,13 +34,30 @@ export interface GradeBreakdown {
   sends: number;
 }
 
-/** A note the climber left on an attempt, with just enough context to read it. */
+/** Attempts vs. sends grouped by a route tag (wall angle or hold type). */
+export interface TagBreakdown {
+  code: string;
+  label: string;
+  attempts: number;
+  sends: number;
+  /** Sends / attempts as a percentage (0–100, one decimal). */
+  success_rate: number;
+}
+
+/** A note the climber left on a logged climb, with just enough context to read it. */
 export interface AttemptNote {
   visit_date: string;
   grade_name: string;
   route_name: string | null;
   is_success: boolean;
   note: string;
+}
+
+/** A body part the climber currently cannot load. */
+export interface ActiveInjurySummary {
+  body_part: string;
+  status: string;
+  severity: number | null;
 }
 
 /**
@@ -48,13 +70,28 @@ export interface ClimbingStats {
   period_start: string;
   period_end: string;
   total_sessions: number;
+  /** Distinct routes logged. Rows in `attempts`. */
+  total_routes: number;
+  /** Tries across every route. SUM(attempt_count). */
   total_attempts: number;
   total_sends: number;
   /** Sends / attempts as a percentage (0–100, one decimal). 0 when no attempts. */
   success_rate: number;
+  /** Routes sent first try. The figure climbers actually brag about. */
+  flash_count: number;
+  /** Mean tries taken on the routes that were sent, one decimal. Null if none. */
+  avg_tries_to_send: number | null;
+  /** Total minutes on the wall across the period. 0 when nothing was recorded. */
+  total_minutes: number;
   highest_sent_grade: string | null;
   highest_attempted_grade: string | null;
   grade_breakdown: GradeBreakdown[];
+  wall_breakdown: TagBreakdown[];
+  hold_breakdown: TagBreakdown[];
+  /** What the climber themselves blamed, most cited first. */
+  self_reported_weaknesses: Array<{ label: string; count: number }>;
+  /** Body parts that are off-limits. Empty unless something is unhealed. */
+  active_injuries: ActiveInjurySummary[];
   gyms: string[];
   notes: AttemptNote[];
 }
@@ -97,9 +134,53 @@ export interface PeriodTotals {
   sessions: number;
   attempts: number;
   sends: number;
+  minutes: number;
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Attempts/sends grouped by one of the route tag tables. The two tag
+ * vocabularies are structurally identical, so the query is written once and
+ * the table/column names come from this whitelist — never from a request.
+ */
+const TAG_SOURCES = {
+  wall: { join: "route_wall_types", master: "wall_types", key: "wall_type_id" },
+  hold: { join: "route_hold_types", master: "hold_types", key: "hold_type_id" },
+} as const;
+
+async function tagBreakdown(
+  kind: keyof typeof TAG_SOURCES,
+  userId: number,
+  start: string,
+  end: string,
+): Promise<TagBreakdown[]> {
+  const { join, master, key } = TAG_SOURCES[kind];
+  const { rows } = await query<{
+    code: string;
+    label: string;
+    attempts: number;
+    sends: number;
+  }>(
+    `SELECT m.code,
+            m.label,
+            COALESCE(SUM(a.attempt_count), 0)::int AS attempts,
+            COALESCE(SUM(a.send_count), 0)::int    AS sends
+       FROM attempts a
+       JOIN sessions s USING (session_id)
+       JOIN ${join} j ON j.route_id = a.route_id
+       JOIN ${master} m USING (${key})
+      WHERE s.user_id = $1 AND s.visit_date BETWEEN $2 AND $3
+      GROUP BY m.code, m.label, m.sort_order
+      ORDER BY m.sort_order`,
+    [userId, start, end],
+  );
+  return rows.map((r) => ({
+    ...r,
+    success_rate:
+      r.attempts === 0 ? 0 : Math.round((r.sends / r.attempts) * 1000) / 10,
+  }));
+}
 
 export const statsRepository = {
   /**
@@ -112,9 +193,23 @@ export const statsRepository = {
     periodStart: string,
     periodEnd: string,
   ): Promise<ClimbingStats> {
-    const [sessionsResult, breakdownResult, notesResult] = await Promise.all([
-      query<{ total_sessions: number; gyms: string[] | null }>(
+    const [
+      sessionsResult,
+      breakdownResult,
+      shapeResult,
+      notesResult,
+      weaknessResult,
+      injuryResult,
+      wallBreakdown,
+      holdBreakdown,
+    ] = await Promise.all([
+      query<{
+        total_sessions: number;
+        total_minutes: number;
+        gyms: string[] | null;
+      }>(
         `SELECT COUNT(*)::int AS total_sessions,
+                COALESCE(SUM(duration_minutes), 0)::int AS total_minutes,
                 ARRAY_AGG(DISTINCT gym_name) FILTER (WHERE gym_name IS NOT NULL) AS gyms
          FROM sessions
          WHERE user_id = $1 AND visit_date BETWEEN $2 AND $3`,
@@ -123,8 +218,8 @@ export const statsRepository = {
       query<GradeBreakdown>(
         `SELECT g.grade_name,
                 g.level,
-                COUNT(*)::int AS attempts,
-                COUNT(*) FILTER (WHERE a.is_success)::int AS sends
+                COALESCE(SUM(a.attempt_count), 0)::int AS attempts,
+                COALESCE(SUM(a.send_count), 0)::int    AS sends
          FROM attempts a
          JOIN sessions s USING (session_id)
          JOIN routes r USING (route_id)
@@ -132,6 +227,24 @@ export const statsRepository = {
          WHERE s.user_id = $1 AND s.visit_date BETWEEN $2 AND $3
          GROUP BY g.grade_name, g.level
          ORDER BY g.level`,
+        [userId, periodStart, periodEnd],
+      ),
+      // Figures that need per-row shape rather than a plain sum: a flash is a
+      // route sent on its only try, and tries-to-send only averages over the
+      // routes that were actually sent.
+      query<{
+        total_routes: number;
+        flash_count: number;
+        avg_tries_to_send: string | null;
+      }>(
+        `SELECT COUNT(*)::int AS total_routes,
+                COUNT(*) FILTER (WHERE a.attempt_count = 1 AND a.send_count = 1)::int
+                  AS flash_count,
+                AVG(a.attempt_count) FILTER (WHERE a.send_count > 0)::text
+                  AS avg_tries_to_send
+         FROM attempts a
+         JOIN sessions s USING (session_id)
+         WHERE s.user_id = $1 AND s.visit_date BETWEEN $2 AND $3`,
         [userId, periodStart, periodEnd],
       ),
       query<AttemptNote>(
@@ -151,37 +264,75 @@ export const statsRepository = {
          LIMIT $4`,
         [userId, periodStart, periodEnd, MAX_NOTES],
       ),
+      query<{ label: string; count: number }>(
+        `SELECT w.label, COUNT(*)::int AS count
+           FROM attempt_weaknesses aw
+           JOIN weakness_types w USING (weakness_type_id)
+           JOIN attempts a       USING (attempt_id)
+           JOIN sessions s       USING (session_id)
+          WHERE s.user_id = $1 AND s.visit_date BETWEEN $2 AND $3
+          GROUP BY w.label
+          ORDER BY count DESC, w.label ASC`,
+        [userId, periodStart, periodEnd],
+      ),
+      // Not period-scoped on purpose: an injury that is unhealed *right now*
+      // constrains the plan regardless of when the analyzed month was.
+      query<ActiveInjurySummary>(
+        `SELECT bp.label AS body_part, i.status, i.severity
+           FROM injuries i
+           JOIN body_parts bp USING (body_part_id)
+          WHERE i.user_id = $1 AND i.status <> 'healed'
+          ORDER BY i.severity DESC NULLS LAST, bp.sort_order`,
+        [userId],
+      ),
+      tagBreakdown("wall", userId, periodStart, periodEnd),
+      tagBreakdown("hold", userId, periodStart, periodEnd),
     ]);
 
     const breakdown = breakdownResult.rows;
     const totalAttempts = breakdown.reduce((sum, g) => sum + g.attempts, 0);
     const totalSends = breakdown.reduce((sum, g) => sum + g.sends, 0);
     const sentGrades = breakdown.filter((g) => g.sends > 0);
+    const shape = shapeResult.rows[0];
+    const avgTries = shape?.avg_tries_to_send;
 
     return {
       period_start: periodStart,
       period_end: periodEnd,
       total_sessions: sessionsResult.rows[0]?.total_sessions ?? 0,
+      total_routes: shape?.total_routes ?? 0,
       total_attempts: totalAttempts,
       total_sends: totalSends,
       success_rate:
         totalAttempts === 0
           ? 0
           : Math.round((totalSends / totalAttempts) * 1000) / 10,
+      flash_count: shape?.flash_count ?? 0,
+      // AVG comes back as a numeric string (pg keeps arbitrary precision), so
+      // it is parsed here rather than trusted to coerce.
+      avg_tries_to_send:
+        avgTries === null || avgTries === undefined
+          ? null
+          : Math.round(Number(avgTries) * 10) / 10,
+      total_minutes: sessionsResult.rows[0]?.total_minutes ?? 0,
       // Breakdown is ordered by level, so the last entries are the hardest.
       highest_sent_grade: sentGrades.at(-1)?.grade_name ?? null,
       highest_attempted_grade: breakdown.at(-1)?.grade_name ?? null,
       grade_breakdown: breakdown,
+      wall_breakdown: wallBreakdown,
+      hold_breakdown: holdBreakdown,
+      self_reported_weaknesses: weaknessResult.rows,
+      active_injuries: injuryResult.rows,
       gyms: sessionsResult.rows[0]?.gyms ?? [],
       notes: notesResult.rows,
     };
   },
 
   /**
-   * Sessions and attempts per day over `[start, end)`. `attempts` counts rows
-   * in `attempts`, while `sessions` counts DISTINCT sessions — the join fans
-   * out one row per attempt, so a plain COUNT would report a session once per
-   * attempt it contains.
+   * Sessions and attempts per day over `[start, end)`. `attempts` sums
+   * attempt_count, while `sessions` counts DISTINCT sessions — the join fans
+   * out one row per logged route, so a plain COUNT would report a session once
+   * per route it contains.
    */
   async findDailyActivity(
     userId: number,
@@ -189,9 +340,9 @@ export const statsRepository = {
     end: string,
   ): Promise<DailyActivity[]> {
     const { rows } = await query<DailyActivity>(
-      `SELECT to_char(d.day, 'YYYY-MM-DD')      AS date,
-              COUNT(DISTINCT s.session_id)::int AS sessions,
-              COUNT(a.attempt_id)::int          AS attempts
+      `SELECT to_char(d.day, 'YYYY-MM-DD')          AS date,
+              COUNT(DISTINCT s.session_id)::int     AS sessions,
+              COALESCE(SUM(a.attempt_count), 0)::int AS attempts
          FROM generate_series($2::date, $3::date - INTERVAL '1 day', INTERVAL '1 day') AS d(day)
          LEFT JOIN sessions s ON s.user_id = $1 AND s.visit_date = d.day
          LEFT JOIN attempts a ON a.session_id = s.session_id
@@ -212,9 +363,9 @@ export const statsRepository = {
       `SELECT g.grade_id,
               g.grade_name,
               g.level,
-              COUNT(*)::int                                     AS attempts,
-              (COUNT(*) FILTER (WHERE a.is_success))::int       AS sends,
-              (COUNT(*) FILTER (WHERE NOT a.is_success))::int   AS fails
+              COALESCE(SUM(a.attempt_count), 0)::int                     AS attempts,
+              COALESCE(SUM(a.send_count), 0)::int                        AS sends,
+              COALESCE(SUM(a.attempt_count - a.send_count), 0)::int      AS fails
          FROM attempts a
          JOIN sessions s ON s.session_id = a.session_id
          JOIN routes   r ON r.route_id   = a.route_id
@@ -229,6 +380,16 @@ export const statsRepository = {
     return rows;
   },
 
+  /** Attempts/sends by wall angle over `[start, end]`, both ends inclusive. */
+  findWallBreakdown(userId: number, start: string, end: string) {
+    return tagBreakdown("wall", userId, start, end);
+  },
+
+  /** Attempts/sends by hold type over `[start, end]`, both ends inclusive. */
+  findHoldBreakdown(userId: number, start: string, end: string) {
+    return tagBreakdown("hold", userId, start, end);
+  },
+
   /**
    * Whole-period totals over `[start, end)`. Used for the previous month,
    * whose per-day and per-grade detail the screen never shows — only the
@@ -240,9 +401,16 @@ export const statsRepository = {
     end: string,
   ): Promise<PeriodTotals> {
     const { rows } = await query<PeriodTotals>(
-      `SELECT COUNT(DISTINCT s.session_id)::int                 AS sessions,
-              COUNT(a.attempt_id)::int                          AS attempts,
-              (COUNT(a.attempt_id) FILTER (WHERE a.is_success))::int AS sends
+      `SELECT COUNT(DISTINCT s.session_id)::int               AS sessions,
+              COALESCE(SUM(a.attempt_count), 0)::int          AS attempts,
+              COALESCE(SUM(a.send_count), 0)::int             AS sends,
+              -- duration lives on the session, and the attempts join repeats
+              -- it once per logged route, so sum it over distinct sessions.
+              COALESCE((
+                SELECT SUM(s2.duration_minutes)
+                  FROM sessions s2
+                 WHERE s2.user_id = $1 AND s2.visit_date >= $2 AND s2.visit_date < $3
+              ), 0)::int                                      AS minutes
          FROM sessions s
          LEFT JOIN attempts a ON a.session_id = s.session_id
         WHERE s.user_id = $1
@@ -251,6 +419,6 @@ export const statsRepository = {
       [userId, start, end],
     );
     // The aggregate always yields exactly one row, even with no matching data.
-    return rows[0] ?? { sessions: 0, attempts: 0, sends: 0 };
+    return rows[0] ?? { sessions: 0, attempts: 0, sends: 0, minutes: 0 };
   },
 };

@@ -11,8 +11,24 @@ export interface Performance {
   ai_model: string | null;
   /** Structured analysis + the stats snapshot it was computed from (JSONB). */
   analysis_data: unknown;
+  /** The climber's own layer — the only part of a report that is editable. */
+  title: string | null;
+  user_note: string | null;
+  is_pinned: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * What a climber may change on a saved report. Deliberately excludes
+ * performance_report and analysis_data: reviewing an old report is only
+ * worth anything if it still says what it said at the time, so the AI's
+ * words stay frozen and the climber's go beside them.
+ */
+export interface UpdatePerformanceInput {
+  title?: string | null;
+  user_note?: string | null;
+  is_pinned?: boolean;
 }
 
 export interface CreatePerformanceInput {
@@ -32,8 +48,9 @@ export interface CreatePerformanceInput {
  *
  * All reads/writes are scoped to a user_id (taken from the verified token by
  * the controller) so one user can never see or touch another user's rows.
- * Reports are immutable snapshots — regenerating a period inserts a new row
- * rather than updating the old one, so there is no update method.
+ * The AI-generated part of a report is an immutable snapshot — regenerating a
+ * period inserts a new row rather than updating the old one, and `update`
+ * reaches only the climber's own title/note/pin.
  */
 export const performanceRepository = {
   async findAll(
@@ -47,10 +64,12 @@ export const performanceRepository = {
       where += ` AND period_type = $${values.length}`;
     }
     values.push(options.limit ?? 20);
+    // Pinned reports lead: the review screen exists so a climber can keep a
+    // handful of reports to check back against, not to scroll a full archive.
     const { rows } = await query<Performance>(
       `SELECT * FROM performances
        ${where}
-       ORDER BY created_at DESC, performance_id DESC
+       ORDER BY is_pinned DESC, created_at DESC, performance_id DESC
        LIMIT $${values.length}`,
       values,
     );
@@ -83,6 +102,44 @@ export const performanceRepository = {
       ],
     );
     return rows[0]!;
+  },
+
+  /**
+   * Update the climber's own layer on a saved report. Builds the SET clause
+   * only from the fields provided so a missing field is left untouched.
+   */
+  async update(
+    id: number,
+    userId: number,
+    input: UpdatePerformanceInput,
+  ): Promise<Performance | null> {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    const push = (column: string, value: unknown) => {
+      values.push(value);
+      fields.push(`${column} = $${values.length}`);
+    };
+
+    if (input.title !== undefined) push("title", input.title);
+    if (input.user_note !== undefined) push("user_note", input.user_note);
+    if (input.is_pinned !== undefined) push("is_pinned", input.is_pinned);
+
+    if (fields.length === 0) {
+      return this.findById(id, userId);
+    }
+
+    values.push(id);
+    const idIdx = values.length;
+    values.push(userId);
+    const userIdx = values.length;
+    const { rows } = await query<Performance>(
+      `UPDATE performances SET ${fields.join(", ")}
+       WHERE performance_id = $${idIdx} AND user_id = $${userIdx}
+       RETURNING *`,
+      values,
+    );
+    return rows[0] ?? null;
   },
 
   async remove(id: number, userId: number): Promise<boolean> {
