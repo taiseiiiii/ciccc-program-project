@@ -1,6 +1,11 @@
-import { useId, type ComponentPropsWithoutRef } from "react";
+import { useId, type ComponentPropsWithRef } from "react";
 
-interface InputProps extends ComponentPropsWithoutRef<"input"> {
+/**
+ * `ComponentPropsWithRef` rather than `WithoutRef`: a caller that rejects a
+ * field needs to be able to scroll to it and focus it. React 19 passes `ref`
+ * through as an ordinary prop, so the spread below is all it takes.
+ */
+interface InputProps extends ComponentPropsWithRef<"input"> {
   label?: string;
 }
 
@@ -12,6 +17,13 @@ export default function Input({ label, className = "", ...props }: InputProps) {
       {label && (
         <label className="text-label-md text-on-surface-variant" htmlFor={id}>
           {label}
+          {/* Marked, not just enforced: a field that is rejected on submit
+              without ever having looked mandatory reads as a broken button. */}
+          {props.required && (
+            <span className="text-error" aria-hidden="true">
+              {" *"}
+            </span>
+          )}
         </label>
       )}
       <input

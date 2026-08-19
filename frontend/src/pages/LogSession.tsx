@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { uploadMedia } from "../lib/storage";
+import {
+  clearSessionDraft,
+  readSessionDraft,
+  writeSessionDraft,
+  type StoredClimb,
+} from "../lib/sessionDraft";
 
 import type AttemptType from "../types/AttemptType";
 import type Grade from "../types/GradeType";
@@ -41,6 +47,40 @@ const emptyClimb = (): DraftClimb => ({
   files: [],
 });
 
+/**
+ * Mirrors the ceiling POST /sessions enforces. Checked here so an out-of-range
+ * or fractional duration is caught with a sentence about minutes, instead of
+ * coming back as a 400 naming a database column — and, more to the point,
+ * without the rest of the visit being thrown away with it.
+ */
+const MAX_SESSION_MINUTES = 1440;
+
+/** The part of a drafted climb that survives a reload: everything but the files. */
+const stripFiles = (climb: DraftClimb): StoredClimb => ({
+  id: climb.id,
+  grade_name: climb.grade_name,
+  route_name: climb.route_name,
+  attempt_count: climb.attempt_count,
+  send_count: climb.send_count,
+  note: climb.note,
+  wall_type_ids: climb.wall_type_ids,
+  hold_type_ids: climb.hold_type_ids,
+  weakness_type_ids: climb.weakness_type_ids,
+  weakness_labels: climb.weakness_labels,
+});
+
+/** Does this drafted climb hold anything the climber would miss losing? */
+const isClimbDirty = (climb: DraftClimb): boolean =>
+  climb.route_name.trim() !== "" ||
+  climb.note.trim() !== "" ||
+  climb.attempt_count !== 1 ||
+  climb.send_count !== 0 ||
+  climb.wall_type_ids.length > 0 ||
+  climb.hold_type_ids.length > 0 ||
+  climb.weakness_type_ids.length > 0 ||
+  climb.weakness_labels.length > 0 ||
+  climb.files.length > 0;
+
 /** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
 const describeResult = (climb: AttemptType): string => {
   if (climb.send_count === 0) {
@@ -52,12 +92,90 @@ const describeResult = (climb: AttemptType): string => {
 
 const LogSession = () => {
   const today = new Date().toLocaleDateString("sv-SE");
-  const [visitDate, setVisitDate] = useState<string>(today);
-  const [gymName, setGymName] = useState<string>("");
-  const [durationMinutes, setDurationMinutes] = useState<string>("");
-  const [draft, setDraft] = useState<DraftClimb>(emptyClimb);
-  const [climbs, setClimbs] = useState<DraftClimb[]>([]);
+
+  // Read before the first render, so a visit that was half typed in when the
+  // app was closed comes back filled in rather than blank.
+  const [restored] = useState(readSessionDraft);
+
+  const [visitDate, setVisitDate] = useState<string>(
+    restored?.visit_date ?? today,
+  );
+  const [gymName, setGymName] = useState<string>(restored?.gym_name ?? "");
+  const [durationMinutes, setDurationMinutes] = useState<string>(
+    restored?.duration_minutes ?? "",
+  );
+  const [draft, setDraft] = useState<DraftClimb>(() =>
+    restored ? { ...restored.draft, files: [] } : emptyClimb(),
+  );
+  const [climbs, setClimbs] = useState<DraftClimb[]>(() =>
+    restored ? restored.climbs.map((climb) => ({ ...climb, files: [] })) : [],
+  );
   const [editing, setEditing] = useState<DraftClimb | null>(null);
+
+  // Held so a save blocked on the gym name can put the climber in front of the
+  // field instead of relying on a toast that appears at the top of the screen,
+  // four seconds long, while they are looking at the button at the bottom.
+  const gymNameRef = useRef<HTMLInputElement>(null);
+
+  /** Everything on this screen that is not on the server yet. */
+  const hasUnsavedWork =
+    climbs.length > 0 ||
+    isClimbDirty(draft) ||
+    gymName.trim() !== "" ||
+    durationMinutes.trim() !== "";
+
+  // Say so, once, when a visit is brought back — and be honest about the files,
+  // which are the one part that could not come with it.
+  const hasAnnouncedRestore = useRef(false);
+  useEffect(() => {
+    if (!restored || hasAnnouncedRestore.current) return;
+    hasAnnouncedRestore.current = true;
+
+    toast.success(
+      restored.climbs.length > 0
+        ? `Unsaved session restored — ${restored.climbs.length} route${
+            restored.climbs.length === 1 ? "" : "s"
+          } still waiting to be saved`
+        : "Unsaved session restored",
+    );
+    if (restored.had_files) {
+      toast.error("Photos and videos could not be restored — pick them again");
+    }
+  }, [restored]);
+
+  // Mirror the form after every change. Nothing here reaches the server until
+  // Save Session, so without this a reload, a tab close or a tap on the nav bar
+  // silently threw away a whole visit's worth of typing.
+  useEffect(() => {
+    if (!hasUnsavedWork) {
+      clearSessionDraft();
+      return;
+    }
+    writeSessionDraft({
+      visit_date: visitDate,
+      gym_name: gymName,
+      duration_minutes: durationMinutes,
+      draft: stripFiles(draft),
+      climbs: climbs.map(stripFiles),
+      had_files:
+        draft.files.length > 0 ||
+        climbs.some((climb) => climb.files.length > 0),
+    });
+  }, [hasUnsavedWork, visitDate, gymName, durationMinutes, draft, climbs]);
+
+  // Reload and tab-close are the two exits the restore cannot make invisible —
+  // staged photos do not survive them — so they still get the browser's warning.
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Older browsers only show the prompt when returnValue is set; the string
+      // itself has been ignored for years.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedWork]);
 
   const queryClient = useQueryClient();
 
@@ -174,6 +292,10 @@ const LogSession = () => {
       setDurationMinutes("");
       setVisitDate(today);
       setClimbs([]);
+      // The visit is on the server now, so the local copy has nothing left to
+      // protect. (Resetting the fields above would clear it anyway; doing it
+      // here keeps the two from drifting apart.)
+      clearSessionDraft();
 
       if (failedUploads > 0) {
         toast.success("Session saved");
@@ -213,7 +335,7 @@ const LogSession = () => {
 
     setClimbs([{ ...draft, id: Date.now() }, ...climbs]);
     setDraft(emptyClimb());
-    toast.success("Route added");
+    toast.success("Route added — press Save Session when the visit is done");
   };
 
   const handleUpdateClimb = () => {
@@ -233,19 +355,72 @@ const LogSession = () => {
     toast.success("Route removed");
   };
 
+  /** Refuse the save and take the climber to the field that refused it. */
+  const rejectSave = (message: string, field?: HTMLElement | null) => {
+    toast.error(message);
+    field?.scrollIntoView({ behavior: "smooth", block: "center" });
+    field?.focus({ preventScroll: true });
+  };
+
   const handleSaveSession = () => {
+    // Checked in the order the form reads, top card first, so fixing one
+    // problem does not immediately surface another further up the page.
+    //
+    // Location is the gate that actually bit people: it is mandatory here
+    // (gym_name is nullable in the database — this is a product rule, not a
+    // schema one) but it sat unmarked in the same card as "Time on the wall",
+    // so a visit typed straight into the route form was refused on a field the
+    // climber never knew was required. It reads as "Save did nothing", and the
+    // neighbouring blank duration field takes the blame.
     if (!gymName.trim()) {
-      toast.error("Where did you climb?");
-      return;
-    }
-    if (grades.length === 0) {
-      toast.error("Grade data is not loaded yet");
+      rejectSave("Where did you climb? Add the gym to save", gymNameRef.current);
       return;
     }
 
-    const duration = durationMinutes.trim() === "" ? undefined : Number(durationMinutes);
-    if (duration !== undefined && (!Number.isFinite(duration) || duration < 1)) {
-      toast.error("Session length must be a number of minutes");
+    // Same rule the API applies: a whole number of minutes, 1..1440. Accepting
+    // "1.5" here only to have the server reject the request threw the entire
+    // visit away over one field. Blank stays perfectly valid — the column is
+    // nullable and always has been.
+    const duration =
+      durationMinutes.trim() === "" ? undefined : Number(durationMinutes);
+    if (
+      duration !== undefined &&
+      (!Number.isInteger(duration) ||
+        duration < 1 ||
+        duration > MAX_SESSION_MINUTES)
+    ) {
+      rejectSave(
+        `Time on the wall must be a whole number of minutes, 1–${MAX_SESSION_MINUTES}`,
+      );
+      return;
+    }
+
+    // The route still sitting in the form counts. Saving without it because
+    // "Add Route" was never pressed is silent data loss — the climber typed it,
+    // so it goes with the visit. It is validated the same way Add Route would
+    // have validated it, rather than being dropped on the floor.
+    const pending = isClimbDirty(draft) ? draft : null;
+    if (pending) {
+      if (!pending.route_name.trim()) {
+        rejectSave("Name the route still in the form, or clear it, before saving");
+        return;
+      }
+      if (pending.send_count > pending.attempt_count) {
+        rejectSave("You cannot send a route more times than you tried it");
+        return;
+      }
+    }
+    // Newest first, matching the order Add Route builds the list in.
+    const toSave = pending ? [pending, ...climbs] : climbs;
+
+    if (toSave.length === 0) {
+      rejectSave("Add at least one route before saving");
+      return;
+    }
+    if (grades.length === 0) {
+      // Fetched once with staleTime: Infinity, so a failed load stays failed —
+      // say what unsticks it instead of stating the problem.
+      rejectSave("Grades have not loaded — tap Retry above, then save again");
       return;
     }
 
@@ -253,7 +428,7 @@ const LogSession = () => {
       visit_date: visitDate,
       gym_name: gymName,
       duration_minutes: duration,
-      climbs,
+      climbs: toSave,
     });
   };
 
@@ -266,6 +441,7 @@ const LogSession = () => {
       <Input
         type="text"
         label="Route Name"
+        required
         placeholder="e.g. yellow overhang by the door"
         value={climb.route_name}
         onChange={(e) => update("route_name", e.target.value)}
@@ -420,8 +596,10 @@ const LogSession = () => {
 
       <Card className="flex flex-col md:flex-row gap-3 mt-6">
         <Input
+          ref={gymNameRef}
           type="text"
           label="Location"
+          required
           placeholder="The Hive"
           value={gymName}
           autoCapitalize="words"
@@ -461,10 +639,13 @@ const LogSession = () => {
 
         {renderFilePicker(draft, updateDraft)}
 
-        <div className="flex justify-end">
+        <div className="flex flex-col items-end">
           <Button className="mt-3" onClick={handleAddClimb}>
             Add Route
           </Button>
+          <p className="text-label-sm text-on-surface-variant mt-1.5 text-right">
+            Adds it to the list below. The visit itself is saved at the bottom.
+          </p>
         </div>
       </Card>
 
@@ -518,17 +699,25 @@ const LogSession = () => {
               </Card>
             ))}
           </div>
-          <div className="flex justify-end">
-            <Button
-              className="mt-3"
-              onClick={handleSaveSession}
-              disabled={isSavingSession}
-            >
-              {isSavingSession ? "Saving..." : "Save Session"}
-            </Button>
-          </div>
         </div>
       )}
+
+      {/*
+        Always on screen, including before the first route is added. Hiding it
+        until the list existed is what made "Add Route" read as the save button:
+        a climber could add a visit's worth of routes, get a green toast each
+        time, and walk away with nothing on their account.
+      */}
+      <div className="flex flex-col items-end gap-1.5 mt-6">
+        <Button onClick={handleSaveSession} disabled={isSavingSession}>
+          {isSavingSession ? "Saving..." : "Save Session"}
+        </Button>
+        <p className="text-label-sm text-on-surface-variant text-right">
+          {climbs.length === 0
+            ? "Nothing is saved to your account until you press this."
+            : `${climbs.length} route${climbs.length === 1 ? "" : "s"} waiting to be saved.`}
+        </p>
+      </div>
 
       {editing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

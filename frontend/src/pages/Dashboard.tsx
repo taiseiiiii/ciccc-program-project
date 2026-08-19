@@ -26,6 +26,10 @@ import {
 // The charts cover the current month and the previous four.
 const MONTHS_SHOWN = 5;
 
+// How many visits "Recent Activity" lists. Two was short enough that a week of
+// climbing looked like most of it had failed to save.
+const RECENT_SESSIONS_SHOWN = 5;
+
 /** Local YYYY-MM for the month `offset` months before the current one. */
 const monthKey = (offset: number): string => {
   const d = new Date();
@@ -253,7 +257,7 @@ const Dashboard = () => {
     : null;
 
   // Most recent gym visits (the server returns sessions newest first)
-  const recentSessions = sessions.slice(0, 2);
+  const recentSessions = sessions.slice(0, RECENT_SESSIONS_SHOWN);
 
   const coachSummary =
     latestPerformance?.analysis_data?.summary ??
