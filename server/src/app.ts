@@ -5,9 +5,11 @@ import cors from "cors";
 import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
 import { parse as parseYaml } from "yaml";
-import { env } from "./config/env";
+import { env, isProduction } from "./config/env";
 import apiRoutes from "./routes";
 import { errorHandler, notFound } from "./middleware/errorHandler";
+import { apiLimiter } from "./middleware/rateLimit";
+import { requestLog } from "./middleware/requestLog";
 
 // docs/ sits next to src/ in dev (tsx) and next to dist/ after build, so one
 // level up from __dirname resolves correctly in both cases.
@@ -17,9 +19,19 @@ const OPENAPI_PATH = path.join(__dirname, "..", "docs", "openapi.yaml");
 export function createApp(): Application {
   const app = express();
 
+  // Render terminates TLS and forwards through exactly one proxy, so the
+  // client's real address is the first entry in X-Forwarded-For. Trusting that
+  // header locally would let any caller claim any IP and walk straight through
+  // the rate limiter, so it is only trusted where a proxy actually exists.
+  if (isProduction) {
+    app.set("trust proxy", 1);
+  }
+
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigins }));
   app.use(express.json());
+  app.use(requestLog);
+  app.use(apiLimiter);
 
   app.get("/", (_req, res) => {
     res.json({

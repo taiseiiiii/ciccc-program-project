@@ -1,21 +1,17 @@
 import type { Request, Response } from "express";
 import { performanceRepository } from "../repositories/performance.repository";
 import { statsRepository } from "../repositories/stats.repository";
-import { goalRepository, type GoalWithGrade } from "../repositories/goal.repository";
-import { aiService, type GoalSummary } from "../services/ai.service";
+import { goalRepository } from "../repositories/goal.repository";
+import { aiService, toGoalSummaries } from "../services/ai.service";
 import { env } from "../config/env";
 import { HttpError } from "../utils/HttpError";
 import { isDateString, monthBounds, todayString } from "../utils/period";
-import { optionalBoolean, optionalString, parseId } from "../utils/validate";
-
-function toGoalSummaries(goals: GoalWithGrade[]): GoalSummary[] {
-  return goals.map((g) => ({
-    target_grade: g.grade_name,
-    description: g.goal_description,
-    target_date: g.target_date,
-    is_achieved: g.is_achieved,
-  }));
-}
+import {
+  optionalBoolean,
+  optionalString,
+  parseId,
+  parseLimit,
+} from "../utils/validate";
 
 /**
  * HTTP layer for AI performance reports. POST aggregates the period's
@@ -37,13 +33,7 @@ export const performanceController = {
     ) {
       throw HttpError.badRequest("period_type must be 'daily' or 'monthly'");
     }
-    let parsedLimit: number | undefined;
-    if (limit !== undefined) {
-      parsedLimit = Number(limit);
-      if (!Number.isInteger(parsedLimit) || parsedLimit <= 0 || parsedLimit > 100) {
-        throw HttpError.badRequest("limit must be an integer between 1 and 100");
-      }
-    }
+    const parsedLimit = parseLimit(limit);
 
     const performances = await performanceRepository.findAll(
       req.user!.user_id,

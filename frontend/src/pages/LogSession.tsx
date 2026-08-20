@@ -10,6 +10,9 @@ import {
   type StoredClimb,
 } from "../lib/sessionDraft";
 
+import { useAuth } from "../hooks/useAuth";
+import { todayString } from "../lib/date";
+import Modal from "../components/Modal";
 import type AttemptType from "../types/AttemptType";
 import type Grade from "../types/GradeType";
 import type TaxonomyTerm from "../types/TaxonomyType";
@@ -33,8 +36,15 @@ interface DraftClimb extends AttemptType {
   files: File[];
 }
 
+/**
+ * `crypto.randomUUID()` rather than `Date.now()`: two routes added inside the
+ * same millisecond used to share an id, which gave React duplicate keys and
+ * pointed the edit modal at whichever one it found first.
+ */
+const newClimbId = () => crypto.randomUUID();
+
 const emptyClimb = (): DraftClimb => ({
-  id: Date.now(),
+  id: newClimbId(),
   grade_name: "V0",
   route_name: "",
   attempt_count: 1,
@@ -91,11 +101,14 @@ const describeResult = (climb: AttemptType): string => {
 };
 
 const LogSession = () => {
-  const today = new Date().toLocaleDateString("sv-SE");
+  const today = todayString();
+  const { session } = useAuth();
+  // Drafts are stored per account, so the id is part of every call below.
+  const userId = session?.user.id ?? "anonymous";
 
   // Read before the first render, so a visit that was half typed in when the
   // app was closed comes back filled in rather than blank.
-  const [restored] = useState(readSessionDraft);
+  const [restored] = useState(() => readSessionDraft(userId));
 
   const [visitDate, setVisitDate] = useState<string>(
     restored?.visit_date ?? today,
@@ -148,10 +161,10 @@ const LogSession = () => {
   // silently threw away a whole visit's worth of typing.
   useEffect(() => {
     if (!hasUnsavedWork) {
-      clearSessionDraft();
+      clearSessionDraft(userId);
       return;
     }
-    writeSessionDraft({
+    writeSessionDraft(userId, {
       visit_date: visitDate,
       gym_name: gymName,
       duration_minutes: durationMinutes,
@@ -161,7 +174,7 @@ const LogSession = () => {
         draft.files.length > 0 ||
         climbs.some((climb) => climb.files.length > 0),
     });
-  }, [hasUnsavedWork, visitDate, gymName, durationMinutes, draft, climbs]);
+  }, [userId, hasUnsavedWork, visitDate, gymName, durationMinutes, draft, climbs]);
 
   // Reload and tab-close are the two exits the restore cannot make invisible —
   // staged photos do not survive them — so they still get the browser's warning.
@@ -295,7 +308,7 @@ const LogSession = () => {
       // The visit is on the server now, so the local copy has nothing left to
       // protect. (Resetting the fields above would clear it anyway; doing it
       // here keeps the two from drifting apart.)
-      clearSessionDraft();
+      clearSessionDraft(userId);
 
       if (failedUploads > 0) {
         toast.success("Session saved");
@@ -333,7 +346,7 @@ const LogSession = () => {
       return;
     }
 
-    setClimbs([{ ...draft, id: Date.now() }, ...climbs]);
+    setClimbs([{ ...draft, id: newClimbId() }, ...climbs]);
     setDraft(emptyClimb());
     toast.success("Route added — press Save Session when the visit is done");
   };
@@ -719,13 +732,27 @@ const LogSession = () => {
         </p>
       </div>
 
-      {editing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface rounded-xl p-4">
-            <h2 className="text-on-surface text-headline-sm font-bold tracking-tight mb-4">
-              Edit route
-            </h2>
-
+      <Modal
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Edit route"
+        size="lg"
+        footer={
+          <>
+            <Button variant="error" onClick={handleDeleteClimb}>
+              Remove route
+            </Button>
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateClimb}>Save</Button>
+            </div>
+          </>
+        }
+      >
+        {editing && (
+          <>
             {renderClimbFields(editing, updateEditing)}
 
             <div className="mt-3">
@@ -739,21 +766,9 @@ const LogSession = () => {
             </div>
 
             {renderFilePicker(editing, updateEditing)}
-
-            <div className="flex gap-3 justify-between mt-4">
-              <Button variant="error" onClick={handleDeleteClimb}>
-                Delete
-              </Button>
-              <div className="flex gap-3">
-                <Button variant="secondary" onClick={() => setEditing(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpdateClimb}>Save</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

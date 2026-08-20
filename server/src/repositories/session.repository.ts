@@ -1,6 +1,8 @@
 import { pool, query } from "../db/pool";
+import { buildUpdate } from "../utils/buildUpdate";
 import type { Attempt } from "./attempt.repository";
 import { attemptRepository } from "./attempt.repository";
+import { routeRepository } from "./route.repository";
 import { weaknessRepository } from "./weakness.repository";
 
 /** Shape of a row in the `sessions` table. */
@@ -64,12 +66,25 @@ export interface UpdateSessionInput {
  * the controller) so one user can never see or touch another user's rows.
  */
 export const sessionRepository = {
-  async findAll(userId: number): Promise<Session[]> {
+  /**
+   * The climber's visits, newest first.
+   *
+   * `limit` is optional and defaults to everything, because the log screen and
+   * the API's own contract still hand back the full list. The dashboard asks
+   * for five — it only ever shows five.
+   */
+  async findAll(userId: number, limit?: number): Promise<Session[]> {
+    const values: unknown[] = [userId];
+    let suffix = "";
+    if (limit !== undefined) {
+      values.push(limit);
+      suffix = ` LIMIT $${values.length}`;
+    }
     const { rows } = await query<Session>(
       `SELECT * FROM sessions
        WHERE user_id = $1
-       ORDER BY visit_date DESC, session_id DESC`,
-      [userId],
+       ORDER BY visit_date DESC, session_id DESC${suffix}`,
+      values,
     );
     return rows;
   },
@@ -80,21 +95,6 @@ export const sessionRepository = {
       [id, userId],
     );
     return rows[0] ?? null;
-  },
-
-  async create(input: CreateSessionInput): Promise<Session> {
-    const { rows } = await query<Session>(
-      `INSERT INTO sessions (user_id, visit_date, gym_name, duration_minutes)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [
-        input.user_id,
-        input.visit_date,
-        input.gym_name ?? null,
-        input.duration_minutes ?? null,
-      ],
-    );
-    return rows[0]!;
   },
 
   /**
@@ -196,50 +196,74 @@ export const sessionRepository = {
   },
 
   /**
-   * Partial update. Builds the SET clause only from the fields provided so a
-   * missing field is left untouched (rather than overwritten with NULL).
+   * Partial update. Only the fields provided are written, so a missing field is
+   * left untouched rather than overwritten with NULL. See utils/buildUpdate.
    */
   async update(
     id: number,
     userId: number,
     input: UpdateSessionInput,
   ): Promise<Session | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-
-    const push = (column: string, value: unknown) => {
-      values.push(value);
-      fields.push(`${column} = $${values.length}`);
-    };
-
-    if (input.visit_date !== undefined) push("visit_date", input.visit_date);
-    if (input.gym_name !== undefined) push("gym_name", input.gym_name);
-    if (input.duration_minutes !== undefined) {
-      push("duration_minutes", input.duration_minutes);
-    }
-
-    if (fields.length === 0) {
-      return this.findById(id, userId);
-    }
-
-    values.push(id);
-    const idIdx = values.length;
-    values.push(userId);
-    const userIdx = values.length;
-    const { rows } = await query<Session>(
-      `UPDATE sessions SET ${fields.join(", ")}
-       WHERE session_id = $${idIdx} AND user_id = $${userIdx}
-       RETURNING *`,
-      values,
+    const statement = buildUpdate(
+      "sessions",
+      {
+        visit_date: input.visit_date,
+        gym_name: input.gym_name,
+        duration_minutes: input.duration_minutes,
+      },
+      { session_id: id, user_id: userId },
+      { returning: "*" },
     );
+    if (!statement) return this.findById(id, userId);
+
+    const { rows } = await query<Session>(statement.text, statement.values);
     return rows[0] ?? null;
   },
 
+  /**
+   * Delete a visit, its climbs, and any route those climbs were the last
+   * reference to.
+   *
+   * Attempts cascade from the session, but `routes` is the *parent* side of
+   * that foreign key, so the route rows survive their own climbs and become
+   * unreachable garbage. The ids are collected before the delete and swept
+   * after it, all inside one transaction so a failure halfway leaves the visit
+   * intact rather than half-deleted.
+   */
   async remove(id: number, userId: number): Promise<boolean> {
-    const { rowCount } = await query(
-      `DELETE FROM sessions WHERE session_id = $1 AND user_id = $2`,
-      [id, userId],
-    );
-    return (rowCount ?? 0) > 0;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const { rows: routeRows } = await client.query<{ route_id: number }>(
+        `SELECT a.route_id
+           FROM attempts a
+           JOIN sessions s USING (session_id)
+          WHERE a.session_id = $1 AND s.user_id = $2`,
+        [id, userId],
+      );
+
+      const { rowCount } = await client.query(
+        `DELETE FROM sessions WHERE session_id = $1 AND user_id = $2`,
+        [id, userId],
+      );
+      if ((rowCount ?? 0) === 0) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+
+      await routeRepository.removeOrphans(
+        routeRows.map((r) => r.route_id),
+        client,
+      );
+
+      await client.query("COMMIT");
+      return true;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 };

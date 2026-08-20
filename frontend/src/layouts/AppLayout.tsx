@@ -6,12 +6,15 @@ import SideNavigation from "../components/SideNavigation";
 const AppLayout = () => {
   return (
     <div className="h-screen md:flex md:flex-row">
-      <Header></Header>
-      <SideNavigation className="hidden md:flex"></SideNavigation>
-      <main className="flex-1 h-full overflow-y-auto pt-20 px-4 md:px-6 pb-20 md:pb-6">
-        <Outlet></Outlet>
+      <Header />
+      <SideNavigation className="hidden md:flex" />
+      <main
+        id="main"
+        className="flex-1 h-full overflow-y-auto pt-20 px-4 md:px-6 pb-20 md:pb-6"
+      >
+        <Outlet />
       </main>
-      <BottomNavigation className="md:hidden"></BottomNavigation>
+      <BottomNavigation className="md:hidden" />
     </div>
   );
 };

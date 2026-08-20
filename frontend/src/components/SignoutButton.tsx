@@ -1,18 +1,16 @@
-import { useAuth } from "../hooks/useAuth";
-import type { ReactNode, ComponentPropsWithoutRef } from "react";
+import type { ComponentProps } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import Button from "./Button";
 
-interface SignoutButtonProps extends ComponentPropsWithoutRef<"button"> {
-  children: ReactNode;
-  variant?: "primary" | "secondary" | "error";
-}
-
-export default function SignoutButton({
-  children,
-  variant = "primary",
-  className = "",
-  ...props
-}: SignoutButtonProps) {
+/**
+ * Sign out, then land on the auth screen.
+ *
+ * A thin wrapper over Button rather than a second copy of it — this used to
+ * re-declare Button's entire base style and variant map, so every change to
+ * Button quietly skipped it. The disabled states, for one, never arrived here.
+ */
+export default function SignoutButton(props: ComponentProps<typeof Button>) {
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -21,21 +19,5 @@ export default function SignoutButton({
     navigate("/auth");
   };
 
-  const baseStyle =
-    "px-4 py-2 rounded-lg font-sans text-label-md transition-all active:scale-95 cursor-pointer";
-  const styles = {
-    primary: "bg-primary text-on-primary hover:bg-primary-container",
-    secondary:
-      "bg-surface-container-high text-on-surface hover:bg-surface-container-highest",
-    error: "bg-error text-on-error hover:bg-error-container",
-  };
-  return (
-    <button
-      onClick={handleSignout}
-      className={`${baseStyle} ${styles[variant]} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+  return <Button onClick={handleSignout} {...props} />;
 }

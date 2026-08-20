@@ -41,15 +41,6 @@ export const weaknessRepository = {
     return rows;
   },
 
-  async findById(id: number, userId: number): Promise<WeaknessType | null> {
-    const { rows } = await query<WeaknessType>(
-      `SELECT * FROM weakness_types
-       WHERE weakness_type_id = $1 AND (user_id IS NULL OR user_id = $2)`,
-      [id, userId],
-    );
-    return rows[0] ?? null;
-  },
-
   /**
    * Resolve a typed label to a weakness id, creating the climber's own row the
    * first time they use it.
@@ -122,28 +113,5 @@ export const weaknessRepository = {
       [id, userId],
     );
     return (rowCount ?? 0) > 0;
-  },
-
-  /**
-   * How often each weakness was cited over a date range — the input the AI
-   * coach uses to compare what the climber blamed with what the numbers show.
-   */
-  async findFrequency(
-    userId: number,
-    start: string,
-    end: string,
-  ): Promise<Array<{ label: string; count: number }>> {
-    const { rows } = await query<{ label: string; count: number }>(
-      `SELECT w.label, COUNT(*)::int AS count
-         FROM attempt_weaknesses aw
-         JOIN weakness_types w USING (weakness_type_id)
-         JOIN attempts a       USING (attempt_id)
-         JOIN sessions s       USING (session_id)
-        WHERE s.user_id = $1 AND s.visit_date BETWEEN $2 AND $3
-        GROUP BY w.label
-        ORDER BY count DESC, w.label ASC`,
-      [userId, start, end],
-    );
-    return rows;
   },
 };

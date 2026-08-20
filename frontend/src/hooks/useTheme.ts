@@ -1,7 +1,9 @@
 import { createContext, useContext } from "react";
 
+export type Theme = "light" | "dark";
+
 export interface ThemeContextType {
-  theme: string;
+  theme: Theme;
   toggleTheme: () => void;
 }
 

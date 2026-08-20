@@ -1,86 +1,92 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import Dashboard from "../pages/Dashboard";
-import LogSession from "../pages/LogSession";
-import AICoach from "../pages/AICoach";
 import AppLayout from "../layouts/AppLayout";
-import Profile from "../pages/Profile";
-import AuthLayout from "../layouts/AuthLayout";
+import Auth from "../pages/Auth";
+import Card from "../components/Card";
 
-// Progress is the largest screen in the app, so it is loaded on demand. Note
-// that this does not keep recharts out of the initial download: Dashboard is
-// eagerly imported above and pulls the same charting library in with it.
+/**
+ * Every screen is loaded on demand.
+ *
+ * Dashboard used to be imported eagerly, which pulled recharts — the single
+ * largest dependency in the app — into the entry chunk and defeated the point
+ * of lazy-loading Progress at all. All four charting screens split now, so the
+ * first paint (and the sign-in screen, which needs none of it) carries none of
+ * it either.
+ */
+const Dashboard = lazy(() => import("../pages/Dashboard"));
 const Progress = lazy(() => import("../pages/Progress"));
-
-// Injuries is loaded on demand for a different reason: most climbers, most of
-// the time, never open it.
+const AICoach = lazy(() => import("../pages/AICoach"));
 const Injuries = lazy(() => import("../pages/Injuries"));
+const LogSession = lazy(() => import("../pages/LogSession"));
+const Profile = lazy(() => import("../pages/Profile"));
+
+/** Shown while a screen's chunk arrives. */
+const ScreenFallback = () => (
+  <p className="text-on-surface-variant animate-pulse">Loading...</p>
+);
+
+/**
+ * Route guards.
+ *
+ * `loading` is the initial `getSession()` call. Rendering null through it, as
+ * before, meant a blank screen on every cold start; a spinner at least says
+ * the app is doing something.
+ */
+const AuthPending = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <p className="text-on-surface-variant animate-pulse">Loading ClimbLog...</p>
+  </div>
+);
 
 const RequireAuth = () => {
   const { session, loading } = useAuth();
-  if (loading) return null;
-
-  if (session) {
-    return <Outlet />;
-  } else {
-    return <Navigate to={"/auth"} replace />;
-  }
+  if (loading) return <AuthPending />;
+  return session ? <Outlet /> : <Navigate to="/auth" replace />;
 };
 
 const RedirectIfAuthed = () => {
   const { session, loading } = useAuth();
-  if (loading) return null;
-
-  if (session) {
-    return <Navigate to={"/"} replace />;
-  } else {
-    return <Outlet />;
-  }
+  if (loading) return <AuthPending />;
+  return session ? <Navigate to="/" replace /> : <Outlet />;
 };
+
+/** Anything the router does not recognise. Previously a blank page. */
+const NotFound = () => (
+  <Card className="max-w-md mx-auto mt-10 flex flex-col gap-3">
+    <h1 className="text-headline-sm font-bold text-on-surface">
+      That page does not exist
+    </h1>
+    <p className="text-on-surface-variant">
+      The link may be out of date, or there may be a typo in the address.
+    </p>
+    <Link to="/" className="text-primary font-medium hover:underline">
+      Back to the dashboard
+    </Link>
+  </Card>
+);
 
 const AppRoutes = () => {
   return (
-    <Routes>
-      <Route element={<RedirectIfAuthed />}>
-        <Route path="/auth" element={<AuthLayout />} />
-      </Route>
-
-      <Route element={<RequireAuth />}>
-        <Route element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="log-session" element={<LogSession />} />
-          <Route
-            path="progress"
-            element={
-              <Suspense
-                fallback={
-                  <p className="text-on-surface-variant">
-                    Loading your analytics...
-                  </p>
-                }
-              >
-                <Progress />
-              </Suspense>
-            }
-          />
-          <Route path="ai-coach" element={<AICoach />} />
-          <Route
-            path="injuries"
-            element={
-              <Suspense
-                fallback={
-                  <p className="text-on-surface-variant">Loading...</p>
-                }
-              >
-                <Injuries />
-              </Suspense>
-            }
-          />
-          <Route path="profile" element={<Profile />} />
+    <Suspense fallback={<ScreenFallback />}>
+      <Routes>
+        <Route element={<RedirectIfAuthed />}>
+          <Route path="/auth" element={<Auth />} />
         </Route>
-      </Route>
-    </Routes>
+
+        <Route element={<RequireAuth />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="log-session" element={<LogSession />} />
+            <Route path="progress" element={<Progress />} />
+            <Route path="ai-coach" element={<AICoach />} />
+            <Route path="injuries" element={<Injuries />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Route>
+      </Routes>
+    </Suspense>
   );
 };
 

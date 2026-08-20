@@ -1,15 +1,7 @@
 import type { Request, Response } from "express";
 import { gradeRepository } from "../repositories/grade.repository";
 import { HttpError } from "../utils/HttpError";
-
-/** Parse and validate a numeric route param (e.g. :id). */
-function parseId(raw: string): number {
-  const id = Number(raw);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw HttpError.badRequest(`Invalid id: ${raw}`);
-  }
-  return id;
-}
+import { parseId } from "../utils/validate";
 
 /**
  * HTTP layer for grades. Grades are read-only master data (the V0–V17 scale is

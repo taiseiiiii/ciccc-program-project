@@ -13,13 +13,63 @@ import { HttpError } from "./HttpError";
  * climber filling in the form nothing at all.
  */
 
+/**
+ * Plain digits, no sign, no leading zero, no separators. Deliberately stricter
+ * than `Number()`, which happily reads "1e3" as 1000, "0x10" as 16 and " 12 "
+ * as 12 — so `/attempts/1e3` used to be a valid way to ask for attempt 1000.
+ * An id in a URL has exactly one spelling.
+ */
+const ID_PATTERN = /^[1-9][0-9]*$/;
+
 /** Parse and validate a numeric route param (e.g. :id). */
 export function parseId(raw: string, field = "id"): number {
+  if (!ID_PATTERN.test(raw)) {
+    throw HttpError.badRequest(`Invalid ${field}: ${raw}`);
+  }
   const id = Number(raw);
-  if (!Number.isInteger(id) || id <= 0) {
+  if (!Number.isSafeInteger(id)) {
     throw HttpError.badRequest(`Invalid ${field}: ${raw}`);
   }
   return id;
+}
+
+/**
+ * A `?limit=` query parameter. Absent stays undefined so the repository's own
+ * default applies; anything present has to be a sane page size.
+ */
+export function parseLimit(
+  value: unknown,
+  { max = 100 }: { max?: number } = {},
+): number | undefined {
+  if (value === undefined) return undefined;
+  // Same reasoning as parseId: plain digits only, so "1e9" is a 400 rather than
+  // a billion-row page.
+  if (typeof value !== "string" || !ID_PATTERN.test(value)) {
+    throw HttpError.badRequest(`limit must be an integer between 1 and ${max}`);
+  }
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit) || limit > max) {
+    throw HttpError.badRequest(`limit must be an integer between 1 and ${max}`);
+  }
+  return limit;
+}
+
+/**
+ * One of a fixed set of string values — the shape every status/side/kind field
+ * takes. Returns undefined for an absent optional field and null for an
+ * explicit null, matching the other optional* helpers.
+ */
+export function optionalEnum<const T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  allowed: T,
+): T[number] | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw HttpError.badRequest(`${field} must be one of: ${allowed.join(", ")}`);
+  }
+  return value as T[number];
 }
 
 /** A required positive integer from a request body. */

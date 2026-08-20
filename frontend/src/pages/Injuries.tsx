@@ -10,6 +10,9 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Input from "../components/Input";
 import Textarea from "../components/Textarea";
+import Modal from "../components/Modal";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { daysSince, formatDate, formatDayMonth, pluralize, todayString } from "../lib/date";
 import {
   LineChart,
   Line,
@@ -32,22 +35,6 @@ const STATUS_LABELS: Record<Injury["status"], string> = {
 };
 
 const SIDES = ["left", "right", "both"] as const;
-
-const formatDate = (date: string) =>
-  new Date(`${date.slice(0, 10)}T00:00:00`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-/** Days between a date and today, for "sore for 12 days". */
-const daysSince = (date: string): number =>
-  Math.max(
-    0,
-    Math.round(
-      (Date.now() - new Date(`${date}T00:00:00`).getTime()) / 86_400_000,
-    ),
-  );
 
 /**
  * The pain trend for one injury.
@@ -80,10 +67,7 @@ const PainChart = ({ injuryId }: { injuryId: number }) => {
   }
 
   const chartData = logs.map((log) => ({
-    date: new Date(`${log.logged_on}T00:00:00`).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    }),
+    date: formatDayMonth(log.logged_on),
     pain: log.pain_level,
   }));
 
@@ -121,12 +105,15 @@ const PainChart = ({ injuryId }: { injuryId: number }) => {
 };
 
 const Injuries = () => {
-  const today = new Date().toLocaleDateString("sv-SE");
+  const today = todayString();
   const queryClient = useQueryClient();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showHealed, setShowHealed] = useState(false);
+  // Deleting an injury takes every pain check-in with it, so it asks first —
+  // it used to be a single tap with no confirmation at all.
+  const [pendingDelete, setPendingDelete] = useState<Injury | null>(null);
 
   const [form, setForm] = useState<{
     bodyPartId: number | null;
@@ -207,6 +194,7 @@ const Injuries = () => {
     mutationFn: (id: number) => api(`/injuries/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
+      setPendingDelete(null);
       toast.success("Injury removed");
     },
     onError: (err) => {
@@ -214,7 +202,8 @@ const Injuries = () => {
     },
   });
 
-  const { mutate: logPain, isPending: isLogging } = useMutation({
+  const { mutate: logPain, isPending: isLogging, variables: loggingFor } =
+    useMutation({
     mutationFn: ({
       id,
       pain,
@@ -270,6 +259,7 @@ const Injuries = () => {
       pain: injury.latest_pain_level ?? 3,
       note: "",
     };
+    const isSavingThis = isLogging && loggingFor?.id === injury.injury_id;
 
     return (
       <Card key={injury.injury_id} className="p-4">
@@ -289,7 +279,7 @@ const Injuries = () => {
             <p className="text-on-surface-variant text-body-sm mt-1">
               Since {formatDate(injury.occurred_on)}
               {injury.status !== "healed" &&
-                ` · ${daysSince(injury.occurred_on)} days`}
+                ` · ${pluralize(daysSince(injury.occurred_on), "day")}`}
               {injury.severity ? ` · severity ${injury.severity}/5` : ""}
             </p>
           </div>
@@ -368,8 +358,10 @@ const Injuries = () => {
                 </div>
 
                 <div className="flex justify-end mt-3">
+                  {/* Scoped to this card: a single shared flag disabled every
+                      open injury's button while any one of them saved. */}
                   <Button
-                    disabled={isLogging}
+                    disabled={isSavingThis}
                     onClick={() =>
                       logPain({
                         id: injury.injury_id,
@@ -378,7 +370,7 @@ const Injuries = () => {
                       })
                     }
                   >
-                    {isLogging ? "Saving..." : "Check in for today"}
+                    {isSavingThis ? "Saving..." : "Check in for today"}
                   </Button>
                 </div>
               </div>
@@ -403,10 +395,7 @@ const Injuries = () => {
                     </Button>
                   ))}
               </div>
-              <Button
-                variant="error"
-                onClick={() => deleteInjury(injury.injury_id)}
-              >
+              <Button variant="error" onClick={() => setPendingDelete(injury)}>
                 Delete
               </Button>
             </div>
@@ -483,13 +472,40 @@ const Injuries = () => {
         </>
       )}
 
-      {isFormOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface rounded-xl p-6">
-            <h2 className="text-on-surface text-headline-sm font-bold tracking-tight mb-4">
-              Record an injury
-            </h2>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() =>
+          pendingDelete && deleteInjury(pendingDelete.injury_id)
+        }
+        title="Delete this injury?"
+        message={
+          pendingDelete
+            ? `This removes the ${pendingDelete.body_part_label.toLowerCase()} record and every pain check-in on it. That history cannot be recovered.`
+            : ""
+        }
+        confirmLabel="Delete"
+      />
 
+      <Modal
+        open={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        title="Record an injury"
+        size="lg"
+        footer={
+          <>
+            <span />
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => setIsFormOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreate} disabled={isCreating}>
+                {isCreating ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </>
+        }
+      >
             <p className="text-label-md text-on-surface-variant mb-2">
               Where does it hurt?
             </p>
@@ -594,17 +610,7 @@ const Injuries = () => {
               />
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="secondary" onClick={() => setIsFormOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreate} disabled={isCreating}>
-                {isCreating ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 };

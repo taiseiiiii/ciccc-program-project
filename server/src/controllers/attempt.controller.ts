@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { attemptRepository } from "../repositories/attempt.repository";
-import { routeRepository } from "../repositories/route.repository";
+import { gradeRepository } from "../repositories/grade.repository";
 import { taxonomyRepository } from "../repositories/taxonomy.repository";
 import { weaknessRepository } from "../repositories/weakness.repository";
 import { HttpError } from "../utils/HttpError";
@@ -49,15 +49,22 @@ export const attemptController = {
   },
 
   // PATCH /api/v1/attempts/:id
-  // Body: { route_id?, attempt_count?, send_count?, note?,
+  // Body: { grade_id?, route_name?, attempt_count?, send_count?, note?,
   //         wall_type_ids?, hold_type_ids?, weakness_type_ids?, weakness_labels? }
   //
   // `is_success` is not accepted: it is generated from send_count, so a climb
   // is marked sent by saying how many times it went.
+  //
+  // `route_id` is not accepted either. It used to be, checked only for
+  // existence — which let a caller aim their own attempt at a stranger's route,
+  // read its name and grade back through the joined response, and overwrite its
+  // tags. Correcting the grade or name of a logged climb is what `grade_id` and
+  // `route_name` are for; both apply to this attempt's own route.
   async update(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
     const {
-      route_id,
+      grade_id,
+      route_name,
       attempt_count,
       send_count,
       note,
@@ -72,11 +79,17 @@ export const attemptController = {
         "is_success is derived from send_count — send send_count instead",
       );
     }
-
-    const routeId = optionalInt(route_id, "route_id", { min: 1 });
-    if (routeId === null) {
-      throw HttpError.badRequest("route_id cannot be cleared");
+    if (req.body?.route_id !== undefined) {
+      throw HttpError.badRequest(
+        "route_id cannot be changed — send grade_id / route_name to correct this climb's route",
+      );
     }
+
+    const gradeId = optionalInt(grade_id, "grade_id", { min: 1 });
+    if (gradeId === null) {
+      throw HttpError.badRequest("grade_id cannot be cleared");
+    }
+    const routeName = optionalString(route_name, "route_name", 150);
     const attemptCount = optionalInt(attempt_count, "attempt_count", {
       min: 1,
       max: MAX_TRIES_PER_ROUTE,
@@ -103,11 +116,11 @@ export const attemptController = {
       );
     }
 
-    if (routeId !== undefined) {
-      const route = await routeRepository.findById(routeId);
-      if (!route) {
+    if (gradeId !== undefined) {
+      const grade = await gradeRepository.findById(gradeId);
+      if (!grade) {
         throw HttpError.badRequest(
-          `route_id ${routeId} does not reference an existing route`,
+          `grade_id ${gradeId} does not reference an existing grade`,
         );
       }
     }
@@ -130,13 +143,22 @@ export const attemptController = {
     }
 
     const attempt = await attemptRepository.update(id, req.user!.user_id, {
-      route_id: routeId,
       attempt_count: attemptCount,
       send_count: sendCount,
       note: optionalString(note, "note", 2000),
     });
     if (!attempt) {
       throw HttpError.notFound(`Attempt ${id} not found`);
+    }
+
+    // Grade and name live on the route, and `attempt.route_id` came from a row
+    // this caller was just confirmed to own — so this can only ever reach their
+    // own route.
+    if (gradeId !== undefined || routeName !== undefined) {
+      await attemptRepository.updateRoute(attempt.route_id, {
+        grade_id: gradeId,
+        route_name: routeName,
+      });
     }
 
     // Tags hang off the route, weaknesses off the attempt. Both are replace-in-

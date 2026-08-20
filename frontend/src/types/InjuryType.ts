@@ -52,4 +52,10 @@ export interface InjuryUpdate {
   status?: "active" | "recovering" | "healed";
   severity?: number | null;
   description?: string | null;
+  /**
+   * Usually left out. Marking an injury healed without naming a date fills in
+   * today, and reopening one clears it — the API keeps `status` and
+   * `resolved_on` in agreement so the caller does not have to.
+   */
+  resolved_on?: string | null;
 }

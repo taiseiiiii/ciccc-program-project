@@ -10,7 +10,12 @@
  * options on save.
  */
 export default interface Attempt {
-  id: number;
+  /**
+   * Client-side draft key only — never a server id. A UUID rather than a
+   * timestamp, because two routes added in the same millisecond used to
+   * collide.
+   */
+  id: string;
   grade_name: string;
   route_name: string;
   attempt_count: number;

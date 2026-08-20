@@ -39,34 +39,38 @@ export interface CreateMediaInput {
 }
 
 export const mediaRepository = {
-  /** The climber's attachments, newest first, optionally scoped to one parent. */
+  /**
+   * The climber's attachments, newest first, optionally scoped to one parent.
+   *
+   * `sessionId` means "everything from that visit" — rows pinned to the session
+   * itself *and* rows pinned to any climb within it. Matching only
+   * `media.session_id` would return almost nothing in practice, because the log
+   * form attaches photos to the climb they belong to, not to the visit; a
+   * session view built on that saw an empty gallery.
+   */
   async findAll(
     userId: number,
     scope: { sessionId?: number; attemptId?: number } = {},
   ): Promise<Media[]> {
     const values: unknown[] = [userId];
-    let where = `WHERE user_id = $1`;
+    let where = `WHERE m.user_id = $1`;
     if (scope.sessionId !== undefined) {
       values.push(scope.sessionId);
-      where += ` AND session_id = $${values.length}`;
+      const idx = values.length;
+      where += ` AND (m.session_id = $${idx} OR a.session_id = $${idx})`;
     }
     if (scope.attemptId !== undefined) {
       values.push(scope.attemptId);
-      where += ` AND attempt_id = $${values.length}`;
+      where += ` AND m.attempt_id = $${values.length}`;
     }
     const { rows } = await query<Media>(
-      `SELECT * FROM media ${where} ORDER BY created_at DESC, media_id DESC`,
+      `SELECT m.* FROM media m
+         LEFT JOIN attempts a ON a.attempt_id = m.attempt_id
+       ${where}
+       ORDER BY m.created_at DESC, m.media_id DESC`,
       values,
     );
     return rows;
-  },
-
-  async findById(id: number, userId: number): Promise<Media | null> {
-    const { rows } = await query<Media>(
-      `SELECT * FROM media WHERE media_id = $1 AND user_id = $2`,
-      [id, userId],
-    );
-    return rows[0] ?? null;
   },
 
   /**

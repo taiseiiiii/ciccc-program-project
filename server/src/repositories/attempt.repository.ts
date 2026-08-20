@@ -1,5 +1,7 @@
 import { pool, query } from "../db/pool";
 import type { PoolClient } from "pg";
+import { buildUpdate } from "../utils/buildUpdate";
+import { routeRepository } from "./route.repository";
 
 /**
  * Shape of a row in the `attempts` table.
@@ -51,10 +53,19 @@ export interface AttemptWithRoute extends Attempt {
 }
 
 export interface UpdateAttemptInput {
-  route_id?: number;
   attempt_count?: number;
   send_count?: number;
   note?: string | null;
+}
+
+/**
+ * The route fields a climber may correct on an already-logged climb.
+ * Applied to the attempt's own route, which is why this is not reachable
+ * without first loading the attempt as its owner.
+ */
+export interface UpdateAttemptRouteInput {
+  grade_id?: number;
+  route_name?: string | null;
 }
 
 /**
@@ -137,44 +148,38 @@ export const attemptRepository = {
   },
 
   /**
-   * Partial update. Builds the SET clause only from the fields provided so a
-   * missing field is left untouched (rather than overwritten with NULL).
+   * Partial update. Only the fields provided are written, so a missing field is
+   * left untouched rather than overwritten with NULL. See utils/buildUpdate.
    *
    * `is_success` is not updatable: it is generated from send_count, so sending
-   * a send_count is how a climb is marked sent.
+   * a send_count is how a climb is marked sent. `route_id` is not updatable
+   * either — repointing an attempt at an arbitrary route id was a way to read
+   * and rewrite another climber's route. Correct the route through
+   * `updateRoute` below instead, which can only reach the attempt's own.
    */
   async update(
     id: number,
     userId: number,
     input: UpdateAttemptInput,
   ): Promise<AttemptWithRoute | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
+    const statement = buildUpdate(
+      "attempts",
+      {
+        attempt_count: input.attempt_count,
+        send_count: input.send_count,
+        note: input.note,
+      },
+      { attempt_id: id },
+    );
+    if (!statement) return this.findById(id, userId);
 
-    const push = (column: string, value: unknown) => {
-      values.push(value);
-      fields.push(`${column} = $${values.length}`);
-    };
-
-    if (input.route_id !== undefined) push("route_id", input.route_id);
-    if (input.attempt_count !== undefined) push("attempt_count", input.attempt_count);
-    if (input.send_count !== undefined) push("send_count", input.send_count);
-    if (input.note !== undefined) push("note", input.note);
-
-    if (fields.length === 0) {
-      return this.findById(id, userId);
-    }
-
-    values.push(id);
-    const idIdx = values.length;
-    values.push(userId);
-    const userIdx = values.length;
-
+    // Ownership is a subquery rather than another equality, because attempts
+    // carry no user_id of their own — it lives on the parent session.
     const { rowCount } = await query(
-      `UPDATE attempts SET ${fields.join(", ")}
-       WHERE attempt_id = $${idIdx}
-         AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $${userIdx})`,
-      values,
+      `${statement.text} AND session_id IN (
+         SELECT session_id FROM sessions WHERE user_id = $${statement.values.length + 1}
+       )`,
+      [...statement.values, userId],
     );
     if ((rowCount ?? 0) === 0) return null;
     // Re-read rather than RETURNING *: the response carries joined route, grade
@@ -182,14 +187,45 @@ export const attemptRepository = {
     return this.findById(id, userId);
   },
 
+  /**
+   * Correct the grade or name of the route behind one attempt.
+   *
+   * Takes the route id from an attempt the caller has already been shown to
+   * own, so there is no way to aim this at a stranger's row. Returns false when
+   * there was nothing to change.
+   */
+  async updateRoute(
+    routeId: number,
+    input: UpdateAttemptRouteInput,
+  ): Promise<boolean> {
+    const statement = buildUpdate(
+      "routes",
+      { grade_id: input.grade_id, route_name: input.route_name },
+      { route_id: routeId },
+    );
+    if (!statement) return false;
+
+    const { rowCount } = await query(statement.text, statement.values);
+    return (rowCount ?? 0) > 0;
+  },
+
+  /**
+   * Delete one logged climb, and the route behind it if nothing else points at
+   * it. `routes` is the parent side of the foreign key, so without the second
+   * step every deleted climb leaves a row nobody can ever reach again.
+   */
   async remove(id: number, userId: number): Promise<boolean> {
-    const { rowCount } = await query(
+    const { rows } = await query<{ route_id: number }>(
       `DELETE FROM attempts
        WHERE attempt_id = $1
-         AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $2)`,
+         AND session_id IN (SELECT session_id FROM sessions WHERE user_id = $2)
+       RETURNING route_id`,
       [id, userId],
     );
-    return (rowCount ?? 0) > 0;
+    if (rows.length === 0) return false;
+
+    await routeRepository.removeOrphans(rows.map((r) => r.route_id));
+    return true;
   },
 
   /**

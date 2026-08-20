@@ -1,30 +1,26 @@
 import type { Request, Response } from "express";
 import { trainingRepository } from "../repositories/training.repository";
 import { statsRepository } from "../repositories/stats.repository";
-import { goalRepository, type GoalWithGrade } from "../repositories/goal.repository";
+import { goalRepository } from "../repositories/goal.repository";
 import { injuryRepository } from "../repositories/injury.repository";
 import {
   aiService,
   filterUnsafeDrills,
-  type GoalSummary,
+  toGoalSummaries,
 } from "../services/ai.service";
 import { env } from "../config/env";
 import { HttpError } from "../utils/HttpError";
 import { daysBefore, isDateString, todayString } from "../utils/period";
-import { optionalBoolean, optionalString, parseId } from "../utils/validate";
+import {
+  optionalBoolean,
+  optionalString,
+  parseId,
+  parseLimit,
+} from "../utils/validate";
 
 // A training plan looks at a rolling window of recent climbing rather than a
 // calendar period — long enough to see patterns, short enough to stay current.
 const TRAINING_WINDOW_DAYS = 30;
-
-function toGoalSummaries(goals: GoalWithGrade[]): GoalSummary[] {
-  return goals.map((g) => ({
-    target_grade: g.grade_name,
-    description: g.goal_description,
-    target_date: g.target_date,
-    is_achieved: g.is_achieved,
-  }));
-}
 
 /**
  * HTTP layer for AI training plans. POST aggregates the last 30 days of
@@ -38,13 +34,7 @@ export const trainingController = {
   // GET /api/v1/trainings?limit=n
   async list(req: Request, res: Response): Promise<void> {
     const { limit } = req.query;
-    let parsedLimit: number | undefined;
-    if (limit !== undefined) {
-      parsedLimit = Number(limit);
-      if (!Number.isInteger(parsedLimit) || parsedLimit <= 0 || parsedLimit > 100) {
-        throw HttpError.badRequest("limit must be an integer between 1 and 100");
-      }
-    }
+    const parsedLimit = parseLimit(limit);
 
     const trainings = await trainingRepository.findAll(
       req.user!.user_id,

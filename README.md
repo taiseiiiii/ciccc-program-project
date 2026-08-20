@@ -1,206 +1,152 @@
-# Program Project Kickoff
+# ClimbLog AI
 
-## Team Composition
+A bouldering logbook that turns what you actually did at the gym into coaching
+you can act on.
 
-- Each group can have **up to 2 members**, depending on project size, to ensure effective workload distribution.
-- Discuss and assign roles and responsibilities within the team.
+Log a visit route by route — how many times you pulled on, how many of those
+went, the wall angle, the holds, and why it didn't go. The app counts the parts
+you can't count yourself (flash rate, success rate by angle, tries-to-send,
+weeks-in-a-row) and an AI coach reads the aggregate back to you as a
+performance report and a training plan. If something hurts, you record it, and
+the plan routes around it.
 
-## Choosing a Project
-
-1. **Identify a Real-World Problem**
-   - Clearly define the **problem statements** your project aims to solve.
-2. **Define Project Objectives**
-   - What do you want to achieve with this project?
-3. **Determine Target Users**
-   - Who will benefit from your project?
-4. **Analyze Competitors**
-   - What makes your project stand out?
-   - How will you convince users to choose your product?
-5. **Instructor Approval**
-   - Confirm your project idea with the instructor before proceeding.
-
-## Project Requirements
-
-- **Full-Stack Application:**
-  - **Frontend (Client)**
-  - **Backend (Server)**
-  - **Database**
-  - **Project Documentation** with the followings 👇
-
-### User Stories
-
-- Describe software features from a **user’s perspective**.
-- Focus on delivering value to the user.
-
-  > **Example:**\
-  > **As an** authenticated user,\
-  > **I want to** reorder products based on my purchase history,\
-  > **So that I** don’t have to search for products again.
-
-### Minimum Viable Product (MVP)
-
-- Define **core features** required to make the project functional.
-- Keep it **simple** and **iterative**.
-- Gather feedback and improve continuously.
-
-### Wireframes
-
-- **Low-fidelity sketches** of the UI.
-- No graphics or colors, just layout planning.
-
-### Mock Design
-
-- **High-fidelity designs** using tools like Figma.
-- Seek help from **UI/UX students** for better designs.
-- Design inspiration websites:
-  - [Dribbble](https://dribbble.com/)
-  - [Behance](https://www.behance.net/)
-  - [Pinterest](https://www.pinterest.ca/)
-  - [Awwwards](https://www.awwwards.com/)
-  - [CSS Design Awards](https://www.cssdesignawards.com/)
-  - [V0 by Vercel](https://v0.dev/) (**⚠️ May incur charges after a certain usage**)
-
-### Tech Stack
-
-- **Frontend:** React, Next.js, TypeScript
-- **Backend:** Express, Node.js
-- **Database:** PostgreSQL, MongoDB
-- **Other Technologies:** Clerk, Tiptap, Socket.io, etc.
-
-> You may use other technologies, but instructor support may be limited for less familiar tools.
-
-### Entity-Relationship Diagram (ERD)
-
-- Identify the entities and the relationships:
-  - **One-to-One**
-  - **One-to-Many**
-  - **Many-to-Many** (requires join tables)
-- Draw an ERD diagram to map data relationships.
-
-### API Endpoints
-
-- Plan RESTful API endpoints. Example:
-
-  ```
-  GET       /api/v1/notes
-  GET       /api/v1/notes/:id
-  POST      /api/v1/notes
-  PUT/PATCH /api/v1/notes/:id
-  DELETE    /api/v1/notes/:id
-  ```
-
-### Project management
-
-- Use a project management tool like **GitHub Projects**.
-- Create a project board and add tasks based on user stories.
-- Assign responsibilities.
-- **Estimate** tasks and set due dates to aim (it is ok to change them later)
-
-### Communication
-
-- Use **Slack** for team discussions.
-- Create a project chatroom and invite your team members and instructor.
-- Daily standup
-  - What did you do yesterday?
-  - What are you going to do today?
-  - Do you have any blockers?
-- Weekly report with Instructor (Decide Day and Time - first come, first serve)
-  - Update on the project
-  - What did you learn this week?
-  - What are your blockers?
-  - What are your goals for the next week?
-  - Update on the deadlines
-
-## Project Timeline
-
-| Week    | Task                                  |
-| ------- | ------------------------------------- |
-| **1**   | Project Kickoff & Planning            |
-| **2**   | Planning Report & Instructor Approval |
-| **3**   | School Break                          |
-| **4-9** | Development Phase                     |
-| **10**  | Testing & Polishing & Deployment      |
-| **11**  | Presentation Prep & Demo Day          |
-
-## Demo Day
-
-### **📅 SAVE THE DATE**
-
-- Potential audiences: Friends, Family, Instructors, Students, Potential employers
-
-> Many audiences may not understand your code, so demo your project accordingly
+Built as a full-stack program project: React 19 PWA, Express + PostgreSQL API,
+Supabase for auth and file storage, OpenAI for the coaching.
 
 ---
 
-## Presentation Guidelines
+## What's in the box
 
-### **1. Presentation Focus & Time Allocation**
+| Screen           | What it does                                                              |
+| ---------------- | ------------------------------------------------------------------------- |
+| **Dashboard**    | This month at a glance, five-month trends, weekly streak, recent visits    |
+| **Log session**  | The whole visit in one form — routes, counts, tags, notes, photos          |
+| **Progress**     | Success rate by grade and wall angle, a 30-day heatmap, goals, PRs         |
+| **AI Coach**     | Generated performance reports and training plans, saved and annotatable    |
+| **Injuries**     | What hurts, a daily pain trend, and the guardrail on the training plans    |
+| **Profile**      | Name, lifetime totals, storage usage, account closing                      |
 
-Your **15-minute** presentation should be structured as follows:
-
-🔹 **80%: Selling Your Product** – Showcase what you built and why it matters.\
-🔹 **20%: Selling Yourself** – Highlight your strengths as a developer.
-
-### **2. Structuring Your Presentation**
-
-#### **A. Selling Your Product (80% of time)**
-
-#### 1️⃣.1 **Hook Your Audience**
-
-- Start with an engaging question, statistic, or short story.
-- Explain the problem your app solves.
-- Identify your target users.
-
-#### 2️⃣ **Introduce The Best Three Parts of Your Project**
-
-- Highlight the most impressive or unique features.
-- Explain how these features solve the problem effectively.
-- Showcase any innovative or technically challenging aspects.
-
-#### 3️⃣ Live Demo & Feature Walkthrough
-
-- Showcase the core features of your project.
-- Highlight what makes your app unique.
-
-#### 4️⃣ Technical Overview & Future Scope
-
-- Technologies used (React, Next.js, Prisma, etc.).
-- Major challenges and solutions.
-- Scalability and performance optimizations.
-- Future improvements.
+Installable as a PWA, works offline for anything already loaded, and ships iOS
+launch images for the home-screen case.
 
 ---
 
-#### **B. Selling Yourself (20% of time)**
+## Architecture
 
-#### 5️⃣ Your Role & Contributions
+```
+frontend/          React 19 · Vite · TypeScript · Tailwind v4 · TanStack Query
+  src/pages/         one file per screen, all lazy-loaded
+  src/components/    shared UI (Button, Modal, ReportCard, MediaGallery, …)
+  src/lib/           api client, Supabase client, date helpers, draft storage
 
-- What was your focus in the project?
-- Key technical challenges you tackled.
-- Highlight your unique strengths as a developer.
-- Emphasize teamwork, adaptability, and problem-solving skills.
+server/            Express 4 · TypeScript · node-postgres
+  src/routes/        thin — path to controller, plus auth and rate limits
+  src/controllers/   HTTP: validation and status codes, no SQL
+  src/repositories/  SQL: every statement parameterized, every read user-scoped
+  src/services/      the AI coach — prompts, schemas, injury guardrail
+  db/migrations/     forward-only, checksummed, one transaction each
+  docs/openapi.yaml  the full API contract (also served at /api/v1/docs)
+```
 
-### **3. Presentation Tips**
+Three rules the code sticks to:
 
-✨ **Keep It Concise & Engaging** – Avoid excessive jargon.\
-✨ **Live Demo Over Slides** – Show your work in action.\
-✨ **Practice Multiple Times** – Ensure smooth delivery.\
-✨ **Be Confident & Interactive** – Engage your audience.\
-✨ **Anticipate Questions** – Prepare for technical and non-technical queries.\
-✨ **Focus on the Best Parts** – Do not showcase broken features.
+1. **The user id comes from the verified JWT, never from a request body.** A row
+   owned by someone else is indistinguishable from a missing one — always a 404.
+2. **Controllers validate, repositories query.** No SQL above the repository
+   layer, no `req`/`res` below it.
+3. **AI reports are immutable snapshots.** Regenerating adds a row. The stats
+   the model saw are stored beside its words, so an old report still means what
+   it meant.
 
-> It is a good starting point, and you can come up with your own story telling
+The ERD lives in [`required/climb-app-erd.md`](required/climb-app-erd.md).
 
 ---
 
-## Final Notes
+## Quickstart
 
-- Success or failure is a team effort; support each other.
-- If you do not want to lead, support the lead.
-- Make decisions as a team.
-- Be responsive within half a day.
-- Flag any issues promptly.
-- Seek help if stuck on a problem for more than an hour.
-- Focus on action rather than overthinking.
+Needs Node 22+, pnpm, and either local PostgreSQL 16+ or a Supabase project.
 
-🎯 **Good luck! Reach out to your instructor for any questions.**
+```bash
+# 1. API
+cd server
+cp .env.example .env          # fill in DATABASE_URL and SUPABASE_URL
+pnpm install
+pnpm db:migrate               # creates the schema and its reference data
+pnpm db:seed                  # optional: ten weeks of believable demo climbing
+pnpm dev                      # http://localhost:4000
+
+# 2. Frontend, in another shell
+cd frontend
+cp .env.example .env.local    # fill in the two VITE_SUPABASE_* values
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+Interactive API docs: <http://localhost:4000/api/v1/docs>
+
+Two things the app will not start without: `SUPABASE_URL` on the server and the
+two `VITE_SUPABASE_*` values on the client. Both fail loudly and say so.
+`OPENAI_API_KEY` is optional — without it everything works except the two AI
+endpoints, which answer 503.
+
+---
+
+## Commands
+
+| Where      | Command             | What                                             |
+| ---------- | ------------------- | ------------------------------------------------ |
+| `server/`  | `pnpm dev`          | API with reload                                  |
+| `server/`  | `pnpm test`         | vitest — validation, dates, TLS, guardrail, HTTP  |
+| `server/`  | `pnpm typecheck`    | `tsc --noEmit`, tests included                    |
+| `server/`  | `pnpm db:migrate`   | apply pending migrations                          |
+| `server/`  | `pnpm db:status`    | list applied / pending                            |
+| `server/`  | `pnpm db:reset`     | local only: drop, re-migrate, re-seed             |
+| `frontend/`| `npm run dev`       | Vite dev server                                   |
+| `frontend/`| `npm run lint`      | eslint                                            |
+| `frontend/`| `npm run build`     | typecheck + production build                      |
+
+CI runs the typecheck, tests, lint and both builds on every pull request.
+
+---
+
+## Deployment
+
+The API runs on Render and the frontend on Vercel.
+
+`pnpm start` is `node dist/db/migrate.js && node dist/index.js`, so a deploy
+applies any pending migration before the new build serves traffic — code can
+never reach production ahead of the schema it needs. The migration runner takes
+a Postgres advisory lock, so instances starting together are safe.
+
+---
+
+## Documentation
+
+| Document                                              | What it covers                                          |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| [`server/README.md`](server/README.md)                 | API layout, migration rules, auth, local setup           |
+| [`server/docs/openapi.yaml`](server/docs/openapi.yaml) | Every endpoint, request and response shape               |
+| [`MANUAL_SETUP.md`](MANUAL_SETUP.md)                   | The Supabase bits that are not code — bucket, RLS, demo  |
+| [`frontend/SUPABASE_SETUP.md`](frontend/SUPABASE_SETUP.md) | Creating the Supabase project and finding the keys  |
+| [`frontend/API_INTEGRATION.md`](frontend/API_INTEGRATION.md) | How the client talks to the API                   |
+| [`required/climb-app-erd.md`](required/climb-app-erd.md) | The entity-relationship diagram                        |
+| [`docs/assignment-brief.md`](docs/assignment-brief.md) | The original course brief this project was built against |
+
+---
+
+## A note on the AI coaching
+
+The coach is given pre-aggregated statistics, never raw rows: SQL does the
+arithmetic, the model does the interpretation, and the prompt stays the same
+size whether you have logged ten climbs or ten thousand.
+
+It is also explicitly not a physiotherapist. Injury data is in the prompt so a
+plan can route *around* a hurt body part — that is load management. Naming a
+condition, prescribing rehab or estimating a recovery time is medical advice the
+app does not give. The model is told so, and the generated plan is then
+re-checked in code against the injured body parts before it is stored, with
+anything dropped reported to the climber rather than quietly removed.
+
+## License
+
+MIT

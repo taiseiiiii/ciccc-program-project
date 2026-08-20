@@ -1,16 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
-import type SessionType from "../types/SessionType";
-import type { AttemptRecord } from "../types/AttemptType";
-import { isFlash } from "../types/AttemptType";
+import { api } from "../lib/api";
+import {
+  currentMonthKey,
+  formatDate,
+  formatDayMonth,
+  formatMinutes,
+  pluralize,
+  todayString,
+} from "../lib/date";
+import type Stats from "../types/StatsType";
 import type Goal from "../types/GoalType";
 import type { GoalCreate, GoalUpdate } from "../types/GoalType";
 import type Grade from "../types/GradeType";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Input from "../components/Input";
+import Textarea from "../components/Textarea";
+import Modal from "../components/Modal";
+import ConfirmDialog from "../components/ConfirmDialog";
 import {
   BarChart,
   Bar,
@@ -22,26 +31,16 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-/** Local YYYY-MM for the month `offset` months before the current one. */
-const monthKey = (offset: number): string => {
-  const d = new Date();
-  d.setDate(1); // step back from the 1st so month arithmetic can't overflow
-  d.setMonth(d.getMonth() - offset);
-  return d.toLocaleDateString("sv-SE").slice(0, 7);
-};
+const TOOLTIP_STYLE = {
+  backgroundColor: "var(--color-surface-container-highest)",
+  borderColor: "var(--color-outline-variant)",
+  borderRadius: "8px",
+  color: "var(--color-on-surface)",
+} as const;
 
 // Active goals shown before "View all" is pressed. Three is what fits above
 // the fold on a phone — a longer list turns the page's opening into a backlog.
 const GOALS_PREVIEW_COUNT = 3;
-
-/** 135 -> "2h 15m". Minutes alone stop being readable past an hour or two. */
-const formatMinutes = (minutes: number): string => {
-  if (minutes <= 0) return "-";
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours === 0) return `${rest}m`;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
-};
 
 const getTileColor = (count: number) => {
   if (count === 0)
@@ -49,6 +48,23 @@ const getTileColor = (count: number) => {
   if (count === 1) return "bg-primary/50 text-on-primary font-medium";
   if (count === 2) return "bg-primary/80 text-on-primary font-bold";
   return "bg-primary text-on-primary font-bold shadow-sm";
+};
+
+/** A stat card's month-over-month line, or nothing when the delta is zero. */
+const Delta = ({
+  value,
+  format = String,
+}: {
+  value: number;
+  format?: (n: number) => string;
+}) => {
+  if (value === 0) return null;
+  return (
+    <p className={value > 0 ? "text-primary" : "text-error"}>
+      {value > 0 ? "+" : "−"}
+      {format(Math.abs(value))} from last month
+    </p>
+  );
 };
 
 const Progress = () => {
@@ -61,22 +77,24 @@ const Progress = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [showAllGoals, setShowAllGoals] = useState(false);
 
-  const {
-    data: sessionsData,
-    isPending: isSessionsLoading,
-    isError: isSessionsError,
-  } = useQuery({
-    queryKey: ["sessions"],
-    queryFn: () => api<{ data: SessionType[] }>("/sessions"),
-  });
+  const month = currentMonthKey();
 
+  /**
+   * Every figure on this page, counted in SQL.
+   *
+   * The same query key the Dashboard uses, so navigating between the two
+   * screens costs nothing. This replaced fetching `/sessions` and `/attempts`
+   * in full and deriving fourteen aggregates from them on every keystroke in
+   * the goal form.
+   */
   const {
-    data: attemptsData,
-    isPending: isAttemptsLoading,
-    isError: isAttemptsError,
+    data: statsData,
+    isPending: isStatsLoading,
+    isError: isStatsError,
   } = useQuery({
-    queryKey: ["attempts"],
-    queryFn: () => api<{ data: AttemptRecord[] }>("/attempts"),
+    queryKey: ["stats", month],
+    queryFn: () =>
+      api<{ data: Stats }>(`/stats?month=${month}&today=${todayString()}`),
   });
 
   const {
@@ -100,15 +118,13 @@ const Progress = () => {
     staleTime: Infinity,
   });
 
-  const goals = goalsData?.data || [];
+  const goals = goalsData?.data ?? [];
   const grades = gradesData?.data ?? [];
+  const stats = statsData?.data;
 
-  const isLoading =
-    isSessionsLoading || isAttemptsLoading || isGoalsLoading || isGradesLoading;
-  const isError =
-    isSessionsError || isAttemptsError || isGoalsError || isGradesError;
+  const isLoading = isStatsLoading || isGoalsLoading || isGradesLoading;
+  const isError = isStatsError || isGoalsError || isGradesError;
 
-  // Goals Update Setting
   const resetGoalForm = () => {
     setSelectedGradeId(null);
     setTargetDate("");
@@ -116,18 +132,23 @@ const Progress = () => {
     setEditingGoalId(null);
   };
 
+  const handleCloseModal = () => {
+    setIsGoalModalOpen(false);
+    resetGoalForm();
+  };
+
+  const invalidateGoals = () =>
+    queryClient.invalidateQueries({ queryKey: ["goals"] });
+
   const createGoalMutation = useMutation<{ data: Goal }, Error, GoalCreate>({
-    mutationFn: (newGoal: GoalCreate) =>
+    mutationFn: (newGoal) =>
       api("/goals", { method: "POST", body: JSON.stringify(newGoal) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["goals"] });
-
-      toast.success("Goal created successfully!");
+      invalidateGoals();
+      toast.success("Goal created");
       handleCloseModal();
     },
-    onError: () => {
-      toast.error("Failed to create goal");
-    },
+    onError: (error) => toast.error(error.message),
   });
 
   const updateGoalMutation = useMutation<
@@ -135,81 +156,50 @@ const Progress = () => {
     Error,
     { goalId: number; updatedGoal: GoalUpdate }
   >({
-    mutationFn: ({
-      goalId,
-      updatedGoal,
-    }: {
-      goalId: number;
-      updatedGoal: GoalUpdate;
-    }) =>
+    mutationFn: ({ goalId, updatedGoal }) =>
       api(`/goals/${goalId}`, {
         method: "PATCH",
         body: JSON.stringify(updatedGoal),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["goals"] });
-      toast.success("Goal updated successfully!");
+      invalidateGoals();
+      toast.success("Goal updated");
       handleCloseModal();
     },
-    onError: (error) => {
-      console.error("Failed to update goal:", error);
-      toast.error("Failed to update goal");
-    },
+    onError: (error) => toast.error(error.message),
   });
 
   const deleteGoalMutation = useMutation<unknown, Error, number>({
-    mutationFn: (goalId: number) =>
-      api(`/goals/${goalId}`, {
-        method: "DELETE",
-      }),
+    mutationFn: (goalId) => api(`/goals/${goalId}`, { method: "DELETE" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["goals"] });
-      toast.success("Goal deleted successfully!");
+      invalidateGoals();
+      toast.success("Goal deleted");
       setIsDeleteConfirmOpen(false);
       handleCloseModal();
     },
-    onError: (error) => {
-      console.error("Failed to delete goal:", error);
-      toast.error("Failed to delete goal");
-    },
+    onError: (error) => toast.error(error.message),
   });
 
-  const getGradeName = (gradeId: number) => {
-    const foundGradeName = grades.find((g) => g.grade_id === gradeId);
-    return foundGradeName ? foundGradeName.grade_name : `Grade No.${gradeId}`;
-  };
+  const getGradeName = (gradeId: number) =>
+    grades.find((g) => g.grade_id === gradeId)?.grade_name ?? `Grade ${gradeId}`;
 
   const handleSaveGoal = () => {
     if (!selectedGradeId) {
-      toast.error("Please select a target grade.");
+      toast.error("Pick a target grade first");
       return;
     }
 
+    const payload: GoalCreate & GoalUpdate = {
+      grade_id: selectedGradeId,
+      goal_description: goalDescription.trim() || null,
+      target_date: targetDate || null,
+    };
+
     if (editingGoalId) {
-      const updateGoalData: GoalUpdate = {
-        grade_id: selectedGradeId,
-        goal_description: goalDescription.trim() || null,
-        target_date: targetDate || null,
-      };
-
-      updateGoalMutation.mutate({
-        goalId: editingGoalId,
-        updatedGoal: updateGoalData,
-      });
+      updateGoalMutation.mutate({ goalId: editingGoalId, updatedGoal: payload });
     } else {
-      const newGoalData: GoalCreate = {
-        grade_id: selectedGradeId,
-        goal_description: goalDescription.trim() || null,
-        target_date: targetDate || null,
-      };
-
-      createGoalMutation.mutate(newGoalData);
+      createGoalMutation.mutate(payload);
     }
-  };
-
-  const handleCloseModal = () => {
-    setIsGoalModalOpen(false);
-    resetGoalForm();
   };
 
   const handleOpenEditModal = (goal: Goal) => {
@@ -220,253 +210,20 @@ const Progress = () => {
     setIsGoalModalOpen(true);
   };
 
-  const handleDeleteGoal = () => {
-    if (!editingGoalId) return;
-    deleteGoalMutation.mutate(editingGoalId);
-  };
-
-  const activeGoals = goals.filter((g) => g.is_achieved === false);
-  const sortedActiveGoals = [...activeGoals].sort((a, b) => {
-    if (!a.target_date && !b.target_date) return 0;
-    if (!a.target_date) return 1;
-    if (!b.target_date) return -1;
-    return a.target_date.localeCompare(b.target_date);
-  });
   // Soonest deadlines first, so the three that show are the three that matter.
+  // Goals with no deadline sort last.
+  const sortedActiveGoals = goals
+    .filter((g) => !g.is_achieved)
+    .sort((a, b) => {
+      if (!a.target_date && !b.target_date) return 0;
+      if (!a.target_date) return 1;
+      if (!b.target_date) return -1;
+      return a.target_date.localeCompare(b.target_date);
+    });
   const visibleGoals = showAllGoals
     ? sortedActiveGoals
     : sortedActiveGoals.slice(0, GOALS_PREVIEW_COUNT);
   const hiddenGoalCount = sortedActiveGoals.length - visibleGoals.length;
-
-  // Every figure on the page is derived from the two lists and is pure, so it is
-  // memoised: the goal modal's form state lives in this component, and without
-  // this each keystroke would re-run every pass over the whole history.
-  const {
-    currentMonthSendsCount,
-    monthSendsDelta,
-    highestGradeThisMonth,
-    totalAttemptThisMonthCount,
-    flashCountThisMonth,
-    minutesThisMonth,
-    minutesDelta,
-    climbingDaysThisMonthCount,
-    climbingDaysDelta,
-    monthlySessionFrequencyData,
-    gradeSuccessRateData,
-    wallSuccessRateData,
-    calendarDays,
-    personalRecordTop3,
-  } = useMemo(() => {
-    const sessions = sessionsData?.data ?? [];
-    const attempts = attemptsData?.data ?? [];
-
-    const currentMonth = monthKey(0);
-    const lastMonth = monthKey(1);
-
-    // An attempt row only carries its insert timestamp, so the month it belongs
-    // to comes from its session's visit_date — the day the user says they
-    // climbed, which they may backdate, and the basis the climbing-day figures
-    // and the server's own aggregates both use.
-    const visitDateBySession = new Map(
-      sessions.map((session) => [session.session_id, session.visit_date]),
-    );
-    const monthOf = (attempt: AttemptRecord) =>
-      visitDateBySession.get(attempt.session_id)?.slice(0, 7);
-
-    // A row is one route, so "sends" is the sum of send_count and "attempts"
-    // the sum of attempt_count — counting rows would report routes touched.
-    const sendsIn = (month: string) =>
-      attempts.filter((a) => a.is_success && monthOf(a) === month);
-    const sendCountIn = (month: string) =>
-      attempts
-        .filter((a) => monthOf(a) === month)
-        .reduce((sum, a) => sum + a.send_count, 0);
-
-    const sendsThisMonth = sendsIn(currentMonth);
-    const currentMonthSendsCount = sendCountIn(currentMonth);
-    const monthSendsDelta = currentMonthSendsCount - sendCountIn(lastMonth);
-
-    // Highest grade sent this month (routes that went at least once)
-    const highestGradeThisMonth =
-      sendsThisMonth.length > 0
-        ? sendsThisMonth.reduce((best, a) =>
-            a.grade_level > best.grade_level ? a : best,
-          ).grade_name
-        : "-";
-
-    const totalAttemptsThisMonth = attempts.filter(
-      (a) => monthOf(a) === currentMonth,
-    );
-    const totalAttemptThisMonthCount = totalAttemptsThisMonth.reduce(
-      (sum, a) => sum + a.attempt_count,
-      0,
-    );
-
-    // Routes sent first try. The figure climbers actually celebrate, and one
-    // the old one-row-per-try model could not express at all.
-    const flashCountThisMonth = totalAttemptsThisMonth.filter((a) =>
-      isFlash(a),
-    ).length;
-
-    // Minutes on the wall, from the sessions themselves.
-    const minutesIn = (month: string) =>
-      sessions
-        .filter((s) => s.visit_date?.slice(0, 7) === month)
-        .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-    const minutesThisMonth = minutesIn(currentMonth);
-    const minutesDelta = minutesThisMonth - minutesIn(lastMonth);
-
-    // Climbing days per month
-    const climbingDaysIn = (month: string) =>
-      new Set(
-        sessions
-          .filter((s) => s.visit_date?.slice(0, 7) === month)
-          .map((s) => s.visit_date),
-      ).size;
-    const climbingDaysThisMonthCount = climbingDaysIn(currentMonth);
-    const climbingDaysDelta =
-      climbingDaysThisMonthCount - climbingDaysIn(lastMonth);
-
-    // Monthly session frequency
-    const dailyCounts = new Map<string, number>();
-    for (const session of sessions) {
-      const dateKey = session.visit_date.slice(0, 10);
-      dailyCounts.set(dateKey, (dailyCounts.get(dateKey) ?? 0) + 1);
-    }
-
-    // The page always shows the current month, so the chart runs up to today.
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-
-    const monthlySessionFrequencyData = Array.from(
-      { length: today.getDate() },
-      (_, i) => {
-        const dayNumber = i + 1;
-        const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
-        const dateLabel = new Date(
-          year,
-          month - 1,
-          dayNumber,
-        ).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-        return {
-          date: dateLabel,
-          sessions: dailyCounts.get(dateKey) ?? 0,
-        };
-      },
-    ).reduce<
-      Array<{ date: string; sessions: number; cumulativeSessions: number }>
-    >((days, day) => {
-      const previous = days[days.length - 1]?.cumulativeSessions ?? 0;
-      days.push({ ...day, cumulativeSessions: previous + day.sessions });
-      return days;
-    }, []);
-
-    // Success rate by grade. Tries and sends, not rows: a route worked eight
-    // times and sent once is 1/8, which is the number that means something.
-    type GradeStat = { sends: number; tries: number };
-    const statsMap = new Map<string, GradeStat>();
-
-    for (const attempt of totalAttemptsThisMonth) {
-      const grade = attempt.grade_name;
-      const current = statsMap.get(grade) ?? { sends: 0, tries: 0 };
-      current.sends += attempt.send_count;
-      current.tries += attempt.attempt_count;
-      statsMap.set(grade, current);
-    }
-    const gradeSuccessRateData = Array.from(statsMap.entries())
-      .map(([grade, { sends, tries }]) => ({
-        grade,
-        successRate: tries > 0 ? Math.round((sends / tries) * 100) : 0,
-        sends,
-        fails: tries - sends,
-      }))
-      .sort((a, b) =>
-        a.grade.localeCompare(b.grade, undefined, { numeric: true }),
-      );
-
-    // Success rate by wall angle — the chart the wall tags exist to produce.
-    // Only shown once there is something tagged, so it stays absent rather
-    // than rendering an empty axis for climbers who skip the tags.
-    const wallStats = new Map<string, GradeStat>();
-    for (const attempt of totalAttemptsThisMonth) {
-      for (const wall of attempt.wall_types) {
-        const current = wallStats.get(wall.label) ?? { sends: 0, tries: 0 };
-        current.sends += attempt.send_count;
-        current.tries += attempt.attempt_count;
-        wallStats.set(wall.label, current);
-      }
-    }
-    const wallSuccessRateData = Array.from(wallStats.entries())
-      .map(([wall, { sends, tries }]) => ({
-        wall,
-        successRate: tries > 0 ? Math.round((sends / tries) * 100) : 0,
-        tries,
-      }))
-      .sort((a, b) => b.successRate - a.successRate);
-
-    // Session activity heatmap. Every cell is offset from the same `today`, so a
-    // render spanning local midnight cannot emit two cells for the same day.
-    const calendarDays = Array.from({ length: 30 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() - (29 - i));
-      const dateKey = d.toLocaleDateString("sv-SE");
-
-      return {
-        dateKey,
-        dateLabel: d.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        }),
-        dayNumber: d.getDate(),
-        count: dailyCounts.get(dateKey) ?? 0,
-      };
-    });
-
-    // Personal records. Only the surviving three are date-formatted.
-    const sessionById = new Map(sessions.map((s) => [s.session_id, s]));
-    const personalRecordTop3 = attempts
-      .filter((a) => a.is_success)
-      .sort((a, b) => b.grade_level - a.grade_level)
-      .slice(0, 3)
-      .map((attempt) => {
-        const session = sessionById.get(attempt.session_id);
-
-        return {
-          id: attempt.attempt_id,
-          grade_name: attempt.grade_name,
-          grade_level: attempt.grade_level,
-          route_name: attempt.route_name || "Unnamed Route",
-          location: session?.gym_name || "No location name",
-          // The day it was climbed, not the day it happened to be logged.
-          // A bare YYYY-MM-DD parses as UTC, so pin it to local midnight.
-          date: session
-            ? new Date(`${session.visit_date}T00:00:00`).toLocaleDateString(
-                "en-US",
-                { month: "short", day: "numeric", year: "numeric" },
-              )
-            : "-",
-        };
-      });
-
-    return {
-      currentMonthSendsCount,
-      monthSendsDelta,
-      highestGradeThisMonth,
-      totalAttemptThisMonthCount,
-      flashCountThisMonth,
-      minutesThisMonth,
-      minutesDelta,
-      climbingDaysThisMonthCount,
-      climbingDaysDelta,
-      monthlySessionFrequencyData,
-      gradeSuccessRateData,
-      wallSuccessRateData,
-      calendarDays,
-      personalRecordTop3,
-    };
-  }, [sessionsData, attemptsData]);
 
   if (isLoading) {
     return (
@@ -478,262 +235,248 @@ const Progress = () => {
     );
   }
 
-  if (isError) {
+  if (isError || !stats) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-sm text-error font-medium">
-          Failed to load performance analytics.
+      <Card className="mt-3">
+        <p className="font-bold text-on-surface">
+          Could not load your analytics
         </p>
-      </div>
+        <p className="text-on-surface-variant mt-1">
+          The server did not answer. Nothing you logged has been lost — try
+          reloading in a moment.
+        </p>
+      </Card>
     );
   }
 
+  const thisMonth = stats.current_month;
+  const lastMonth = stats.previous_month;
+
+  // Running total of visits across the month so far. A reduce rather than a
+  // mutated counter, so nothing outlives the render that built it.
+  const monthlySessionFrequencyData = stats.daily
+    .filter((day) => day.date.startsWith(month))
+    .reduce<
+      Array<{ date: string; sessions: number; cumulativeSessions: number }>
+    >((days, day) => {
+      const previous = days[days.length - 1]?.cumulativeSessions ?? 0;
+      days.push({
+        date: formatDayMonth(day.date),
+        sessions: day.sessions,
+        cumulativeSessions: previous + day.sessions,
+      });
+      return days;
+    }, []);
+
+  const gradeSuccessRateData = stats.grade_breakdown.map((g) => ({
+    grade: g.grade_name,
+    successRate: g.attempts > 0 ? Math.round((g.sends / g.attempts) * 100) : 0,
+    sends: g.sends,
+    fails: g.fails,
+  }));
+
+  const wallSuccessRateData = [...stats.wall_breakdown]
+    .sort((a, b) => b.success_rate - a.success_rate)
+    .map((w) => ({
+      wall: w.label,
+      successRate: Math.round(w.success_rate),
+      tries: w.attempts,
+    }));
+
   return (
     <div>
-      {isDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl border border-outline-variant space-y-4 text-center">
-            <h3 className="text-base font-bold text-on-surface">
-              Delete Goal
-            </h3>
-            <p className="text-sm text-on-surface-variant">
-              Are you sure you want to delete this goal?
-            </p>
+      <ConfirmDialog
+        open={isDeleteConfirmOpen}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={() => editingGoalId && deleteGoalMutation.mutate(editingGoalId)}
+        title="Delete goal"
+        message="This removes the goal and its deadline. Your logged climbs are not affected."
+        isPending={deleteGoalMutation.isPending}
+      />
 
-            <div className="flex justify-center gap-3 pt-2">
+      <Modal
+        open={isGoalModalOpen}
+        onClose={handleCloseModal}
+        title={editingGoalId ? "Edit goal" : "Set a new goal"}
+        footer={
+          <>
+            {editingGoalId ? (
               <Button
-                variant="secondary"
-                onClick={() => setIsDeleteConfirmOpen(false)}
+                variant="error"
+                onClick={() => setIsDeleteConfirmOpen(true)}
                 disabled={deleteGoalMutation.isPending}
               >
+                Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={handleCloseModal}>
                 Cancel
               </Button>
               <Button
-                variant="error"
-                onClick={handleDeleteGoal}
-                disabled={deleteGoalMutation.isPending}
+                onClick={handleSaveGoal}
+                disabled={
+                  createGoalMutation.isPending || updateGoalMutation.isPending
+                }
               >
-                {deleteGoalMutation.isPending ? "Deleting..." : "Yes, Delete"}
+                {createGoalMutation.isPending || updateGoalMutation.isPending
+                  ? "Saving..."
+                  : editingGoalId
+                    ? "Update goal"
+                    : "Save goal"}
               </Button>
             </div>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-label-md text-on-surface-variant mb-2">
+              Target grade
+            </p>
+            {isGradesLoading ? (
+              <p className="text-body-sm text-on-surface-variant">
+                Loading grades...
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                {grades.map((grade) => {
+                  const isSelected = selectedGradeId === grade.grade_id;
+                  return (
+                    <button
+                      key={grade.grade_id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedGradeId(grade.grade_id)}
+                      className={`px-3 py-1.5 rounded-lg text-label-md transition-colors cursor-pointer border ${
+                        isSelected
+                          ? "bg-primary text-on-primary border-primary font-bold"
+                          : "bg-surface-container-high text-on-surface border-outline-variant hover:bg-surface-container-highest"
+                      }`}
+                    >
+                      {grade.grade_name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          <Input
+            type="date"
+            label="Target date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+          />
+
+          <Textarea
+            label="Description / memo"
+            placeholder="Send V5 in one month!!"
+            rows={3}
+            className="resize-none"
+            value={goalDescription}
+            onChange={(e) => setGoalDescription(e.target.value)}
+          />
         </div>
-      )}
-
-      {isGoalModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-outline-variant space-y-5">
-            <div className="flex items-center justify-between border-b border-outline-variant pb-3">
-              <h2 className="text-lg font-bold text-on-surface">
-                {editingGoalId ? "Edit Goal" : "Set New Goal"}
-              </h2>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={handleCloseModal}
-                className="text-on-surface-variant hover:text-on-surface cursor-pointer rounded-lg p-1 text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                  Target Grade
-                </label>
-                {isGradesLoading ? (
-                  <div className="text-xs text-on-surface-variant p-2">
-                    Loading grades...
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-                    {grades.map((grade) => {
-                      const isSelected = selectedGradeId === grade.grade_id;
-                      return (
-                        <button
-                          key={grade.grade_id}
-                          type="button"
-                          onClick={() => setSelectedGradeId(grade.grade_id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            isSelected
-                              ? "bg-primary text-black font-bold"
-                              : "bg-background border border-outline-variant text-on-surface-variant hover:text-on-surface"
-                          }`}
-                        >
-                          {grade.grade_name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                  Target Date
-                </label>
-                <Input
-                  type="date"
-                  value={targetDate}
-                  onChange={(e) => setTargetDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-on-surface-variant mb-1">
-                  Description / Memo
-                </label>
-                <textarea
-                  value={goalDescription}
-                  onChange={(e) => setGoalDescription(e.target.value)}
-                  placeholder="Send V5 in one month!!"
-                  rows={3}
-                  className="w-full px-3 py-2 bg-background border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              {editingGoalId ? (
-                <Button
-                  variant="error"
-                  onClick={() => setIsDeleteConfirmOpen(true)}
-                  disabled={deleteGoalMutation.isPending}
-                >
-                  Delete
-                </Button>
-              ) : (
-                <div></div>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button variant="secondary" onClick={handleCloseModal}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleSaveGoal}
-                  disabled={
-                    createGoalMutation.isPending || updateGoalMutation.isPending
-                  }
-                >
-                  {createGoalMutation.isPending || updateGoalMutation.isPending
-                    ? "Saving..."
-                    : editingGoalId
-                      ? "Update Goal"
-                      : "Save Goal"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       <h1 className="text-primary text-headline-md font-bold tracking-tight mb-4">
         Performance Analytics
       </h1>
 
-      <div>
-        <Card className="p-4 mb-6 border border-outline-variant/30">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold tracking-wider text-on-surface-variant uppercase">
-                Active Goals
-              </h3>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
-                {sortedActiveGoals.length}
-              </span>
-            </div>
-
-            <Button
-              variant="primary"
-              onClick={() => setIsGoalModalOpen(true)}
-              className="text-xs"
-            >
-              + Add Goal
-            </Button>
+      <Card className="p-4 mb-6 border border-outline-variant/30">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold tracking-wider text-on-surface-variant uppercase">
+              Active Goals
+            </h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold tabular-nums">
+              {sortedActiveGoals.length}
+            </span>
           </div>
 
-          <div className="flex flex-col gap-2.5">
-            {sortedActiveGoals.length > 0 ? (
-              visibleGoals.map((goal) => (
-                <div
-                  key={goal.goal_id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-surface-container-high/40 border border-outline-variant/20 hover:border-outline-variant/50 transition-all"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
-                    <div className="shrink-0 w-11 h-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base">
-                      {getGradeName(goal.grade_id)}
-                    </div>
+          <Button onClick={() => setIsGoalModalOpen(true)} className="text-xs">
+            + Add goal
+          </Button>
+        </div>
 
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-semibold text-sm text-on-surface truncate">
-                        {goal.goal_description}
-                      </span>
-                      {goal.target_date && (
-                        <span className="text-xs text-on-surface-variant font-mono flex items-center gap-1">
-                          Due: {goal.target_date}
-                        </span>
-                      )}
-                    </div>
+        <div className="flex flex-col gap-2.5">
+          {sortedActiveGoals.length > 0 ? (
+            visibleGoals.map((goal) => (
+              <div
+                key={goal.goal_id}
+                className="flex items-center justify-between p-3 rounded-xl bg-surface-container-high/40 border border-outline-variant/20 hover:border-outline-variant/50 transition-all"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                  <div className="shrink-0 w-11 h-11 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base">
+                    {getGradeName(goal.grade_id)}
                   </div>
 
-                  <div className="flex gap-3">
-                    <Button
-                      variant="secondary"
-                      onClick={() => handleOpenEditModal(goal)}
-                      className="text-xs text-primary hover:underline font-medium"
-                    >
-                      Edit
-                    </Button>
-
-                    <Button
-                      variant="primary"
-                      className="shrink-0 text-xs gap-1 hover:bg-primary hover:text-on-primary border-primary/30"
-                      onClick={() => {
-                        updateGoalMutation.mutate({
-                          goalId: goal.goal_id,
-                          updatedGoal: {
-                            is_achieved: true,
-                          },
-                        });
-                      }}
-                    >
-                      Complete
-                    </Button>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-semibold text-sm text-on-surface truncate">
+                      {goal.goal_description ?? `Send ${getGradeName(goal.grade_id)}`}
+                    </span>
+                    {goal.target_date && (
+                      <span className="text-xs text-on-surface-variant">
+                        Due {formatDate(goal.target_date)}
+                      </span>
+                    )}
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-6 px-4 border border-dashed border-outline-variant/40 rounded-xl flex flex-col items-center justify-center gap-2">
-                <p className="text-sm text-on-surface-variant">
-                  No active goals set yet.
-                </p>
-                <Button
-                  variant="secondary"
-                  className="text-xs text-primary underline"
-                  onClick={() => setIsGoalModalOpen(true)}
-                >
-                  Set your first climbing goal!
-                </Button>
-              </div>
-            )}
-          </div>
 
-          {sortedActiveGoals.length > GOALS_PREVIEW_COUNT && (
-            <button
-              type="button"
-              onClick={() => setShowAllGoals((shown) => !shown)}
-              className="w-full mt-3 py-2 text-xs font-medium text-primary hover:underline cursor-pointer"
-            >
-              {showAllGoals
-                ? "Show less"
-                : `View all ${sortedActiveGoals.length} goals (${hiddenGoalCount} more)`}
-            </button>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleOpenEditModal(goal)}
+                    className="text-xs"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    className="text-xs"
+                    disabled={updateGoalMutation.isPending}
+                    onClick={() =>
+                      updateGoalMutation.mutate({
+                        goalId: goal.goal_id,
+                        updatedGoal: { is_achieved: true },
+                      })
+                    }
+                  >
+                    Complete
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-6 px-4 border border-dashed border-outline-variant/40 rounded-xl flex flex-col items-center justify-center gap-2">
+              <p className="text-sm text-on-surface-variant">
+                No active goals set yet.
+              </p>
+              <Button
+                variant="secondary"
+                className="text-xs"
+                onClick={() => setIsGoalModalOpen(true)}
+              >
+                Set your first climbing goal
+              </Button>
+            </div>
           )}
-        </Card>
-      </div>
+        </div>
+
+        {sortedActiveGoals.length > GOALS_PREVIEW_COUNT && (
+          <button
+            type="button"
+            onClick={() => setShowAllGoals((shown) => !shown)}
+            className="w-full mt-3 py-2 text-xs font-medium text-primary hover:underline cursor-pointer"
+          >
+            {showAllGoals
+              ? "Show less"
+              : `View all ${sortedActiveGoals.length} goals (${hiddenGoalCount} more)`}
+          </button>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
         <Card className="p-4 flex flex-col justify-center">
@@ -741,24 +484,17 @@ const Progress = () => {
             TOTAL SENDS / MONTH
           </h3>
           <div className="flex flex-col gap-3">
-            <p className="text-4xl font-bold mt-2 text-primary">
-              {currentMonthSendsCount}{" "}
-              <span className="text-sm font-bold mt-2 text-primary">
-                / {totalAttemptThisMonthCount} tries
+            <p className="text-4xl font-bold mt-2 text-primary tabular-nums">
+              {thisMonth.sends}{" "}
+              <span className="text-sm font-bold text-primary">
+                / {thisMonth.attempts} tries
               </span>
             </p>
             <div className="flex flex-col gap-1">
-              {monthSendsDelta !== 0 && (
-                <p
-                  className={monthSendsDelta > 0 ? "text-primary" : "text-error"}
-                >
-                  {monthSendsDelta > 0 ? `+${monthSendsDelta}` : monthSendsDelta}{" "}
-                  from last month
-                </p>
-              )}
-              {flashCountThisMonth > 0 && (
+              <Delta value={thisMonth.sends - lastMonth.sends} />
+              {thisMonth.flashes > 0 && (
                 <p className="text-xs text-on-surface-variant">
-                  {flashCountThisMonth} flashed first try
+                  {thisMonth.flashes} flashed first try
                 </p>
               )}
             </div>
@@ -769,11 +505,9 @@ const Progress = () => {
           <h3 className="text-sm font-medium text-on-surface-variant">
             HIGHEST GRADE / MONTH
           </h3>
-          <div className="flex flex-col gap-3">
-            <p className="text-4xl font-bold mt-2 text-error">
-              {highestGradeThisMonth}
-            </p>
-          </div>
+          <p className="text-4xl font-bold mt-2 text-secondary">
+            {thisMonth.highest_sent_grade ?? "-"}
+          </p>
         </Card>
 
         <Card className="p-4 flex flex-col justify-center">
@@ -781,20 +515,10 @@ const Progress = () => {
             CLIMBING DAYS / MONTH
           </h3>
           <div className="flex flex-col gap-3">
-            <p className="text-4xl font-bold mt-2 text-secondary">
-              {climbingDaysThisMonthCount} day
-              {climbingDaysThisMonthCount === 1 ? "" : "s"}
+            <p className="text-4xl font-bold mt-2 text-tertiary tabular-nums">
+              {pluralize(thisMonth.climbing_days, "day")}
             </p>
-            {climbingDaysDelta !== 0 && (
-              <p
-                className={climbingDaysDelta > 0 ? "text-primary" : "text-error"}
-              >
-                {climbingDaysDelta > 0
-                  ? `+${climbingDaysDelta}`
-                  : climbingDaysDelta}{" "}
-                from last month
-              </p>
-            )}
+            <Delta value={thisMonth.climbing_days - lastMonth.climbing_days} />
           </div>
         </Card>
 
@@ -803,22 +527,20 @@ const Progress = () => {
             TIME ON THE WALL
           </h3>
           <div className="flex flex-col gap-3">
-            <p className="text-4xl font-bold mt-2 text-tertiary">
-              {formatMinutes(minutesThisMonth)}
+            <p className="text-4xl font-bold mt-2 text-primary tabular-nums">
+              {formatMinutes(thisMonth.minutes)}
             </p>
-            {minutesThisMonth === 0 ? (
+            {thisMonth.minutes === 0 ? (
               // Not a zero — it means nobody typed a duration. Saying "0h"
               // would read as "you did not climb", which is a different claim.
               <p className="text-xs text-on-surface-variant">
                 Add a session length when you log
               </p>
             ) : (
-              minutesDelta !== 0 && (
-                <p className={minutesDelta > 0 ? "text-primary" : "text-error"}>
-                  {minutesDelta > 0 ? "+" : "−"}
-                  {formatMinutes(Math.abs(minutesDelta))} from last month
-                </p>
-              )
+              <Delta
+                value={thisMonth.minutes - lastMonth.minutes}
+                format={formatMinutes}
+              />
             )}
           </div>
         </Card>
@@ -833,13 +555,7 @@ const Progress = () => {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlySessionFrequencyData}>
                 <defs>
-                  <linearGradient
-                    id="colorSessions"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
+                  <linearGradient id="colorSessions" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="5%"
                       stopColor="var(--color-primary)"
@@ -858,22 +574,15 @@ const Progress = () => {
                   fontSize={11}
                   interval={4}
                 />
-                <YAxis stroke="var(--color-outline)" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--color-surface-container-highest)",
-                    borderColor: "var(--color-outline-variant)",
-                    borderRadius: "8px",
-                    color: "var(--color-on-surface)",
-                  }}
-                />
+                <YAxis stroke="var(--color-outline)" fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Area
                   type="monotone"
                   dataKey="cumulativeSessions"
                   stroke="var(--color-primary)"
                   fillOpacity={1}
                   fill="url(#colorSessions)"
-                  name="Total Visits"
+                  name="Total visits"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -901,19 +610,14 @@ const Progress = () => {
                   fontSize={12}
                 />
                 <Tooltip
-                  formatter={(value) => [`${value ?? 0}%`, "Success Rate"]}
-                  contentStyle={{
-                    backgroundColor: "var(--color-surface-container-highest)",
-                    borderColor: "var(--color-outline-variant)",
-                    borderRadius: "8px",
-                    color: "var(--color-on-surface)",
-                  }}
+                  formatter={(value) => [`${value ?? 0}%`, "Success rate"]}
+                  contentStyle={TOOLTIP_STYLE}
                 />
                 <Bar
                   dataKey="successRate"
                   fill="var(--color-primary-container)"
                   radius={[0, 4, 4, 0]}
-                  name="Success Rate"
+                  name="Success rate"
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -922,14 +626,17 @@ const Progress = () => {
 
         {/*
           The chart the wall tags exist to produce. Hidden until something is
-          tagged rather than rendered as an empty axis — a climber who skips
-          the tags should not be shown a broken-looking card.
+          tagged rather than rendered as an empty axis.
         */}
         {wallSuccessRateData.length > 0 && (
           <Card className="p-4 flex flex-col justify-center">
-            <h3 className="text-sm font-medium text-on-surface-variant mb-3">
+            <h3 className="text-sm font-medium text-on-surface-variant mb-1">
               Success Rate by Wall Angle (%)
             </h3>
+            <p className="text-label-sm text-on-surface-variant mb-3">
+              A route tagged with two angles counts under both, so these bars do
+              not add up to the month.
+            </p>
             <div className="h-60 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={wallSuccessRateData} layout="vertical">
@@ -950,20 +657,15 @@ const Progress = () => {
                   <Tooltip
                     formatter={(value, _name, item) => [
                       `${value ?? 0}% of ${item?.payload?.tries ?? 0} tries`,
-                      "Success Rate",
+                      "Success rate",
                     ]}
-                    contentStyle={{
-                      backgroundColor: "var(--color-surface-container-highest)",
-                      borderColor: "var(--color-outline-variant)",
-                      borderRadius: "8px",
-                      color: "var(--color-on-surface)",
-                    }}
+                    contentStyle={TOOLTIP_STYLE}
                   />
                   <Bar
                     dataKey="successRate"
                     fill="var(--color-tertiary)"
                     radius={[0, 4, 4, 0]}
-                    name="Success Rate"
+                    name="Success rate"
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -981,18 +683,18 @@ const Progress = () => {
             </span>
           </div>
           <div className="grid grid-cols-7 gap-1.5 my-auto">
-            {calendarDays.map((item) => (
+            {stats.daily.map((day) => (
               <div
-                key={item.dateKey}
+                key={day.date}
                 className={`aspect-square rounded-md flex flex-col items-center justify-center text-[10px] transition-all ${getTileColor(
-                  item.count,
+                  day.sessions,
                 )}`}
-                title={`${item.dateLabel}: ${item.count} session${item.count === 1 ? "" : "s"}`}
+                title={`${formatDayMonth(day.date)}: ${pluralize(day.sessions, "session")}`}
               >
-                <span>{item.dayNumber}</span>
-                {item.count > 1 && (
+                <span className="tabular-nums">{Number(day.date.slice(8))}</span>
+                {day.sessions > 1 && (
                   <span className="text-[8px] font-extrabold leading-none">
-                    x{item.count}
+                    x{day.sessions}
                   </span>
                 )}
               </div>
@@ -1014,10 +716,10 @@ const Progress = () => {
             PERSONAL RECORDS (TOP 3)
           </h3>
           <div className="flex flex-col gap-3">
-            {personalRecordTop3.length > 0 ? (
-              personalRecordTop3.map((item, index) => (
+            {stats.personal_records.length > 0 ? (
+              stats.personal_records.map((item) => (
                 <div
-                  key={item.id || index}
+                  key={item.attempt_id}
                   className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-high/40 border border-outline-variant/20 hover:border-outline-variant/50 transition-colors"
                 >
                   <div className="px-3 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-black text-xl">
@@ -1026,16 +728,16 @@ const Progress = () => {
 
                   <div className="flex-1 mx-4 flex flex-col justify-center min-w-0">
                     <span className="font-semibold text-sm text-on-surface truncate">
-                      {item.route_name}
+                      {item.route_name || "Unnamed route"}
                     </span>
                     <span className="text-xs text-on-surface-variant truncate">
-                      {item.location}
+                      {item.gym_name || "No location name"}
                     </span>
                   </div>
 
                   <div className="text-right whitespace-nowrap">
-                    <span className="text-xs text-on-surface-variant font-mono">
-                      {item.date}
+                    <span className="text-xs text-on-surface-variant tabular-nums">
+                      {formatDate(item.visit_date)}
                     </span>
                   </div>
                 </div>

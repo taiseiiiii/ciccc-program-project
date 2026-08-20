@@ -49,22 +49,17 @@ export default function ConfirmEmailNotice({
       </p>
 
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+        <div role="alert" className="p-3 rounded-lg bg-error-container text-on-error-container text-body-sm">
           {error}
         </div>
       )}
       {sent && !error && (
-        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+        <div role="status" className="p-3 rounded-lg bg-primary-container text-on-primary-container text-body-sm">
           Sent. It can take a minute to arrive.
         </div>
       )}
 
-      <Button
-        type="button"
-        onClick={handleResend}
-        disabled={isSending}
-        className={isSending ? "opacity-50 cursor-not-allowed" : ""}
-      >
+      <Button type="button" onClick={handleResend} disabled={isSending}>
         {isSending ? "Sending..." : "Resend confirmation email"}
       </Button>
       <Button type="button" variant="secondary" onClick={onBack}>

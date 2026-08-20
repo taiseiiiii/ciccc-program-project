@@ -10,7 +10,7 @@ export const notFound: RequestHandler = (req, res) => {
 };
 
 /** Central error handler. Must be registered last, after all routes. */
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof HttpError) {
     res.status(err.statusCode).json({
       error: { message: err.message, details: err.details },
@@ -46,11 +46,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  console.error("[error]", err);
+  // Tagged with the request id so a user reporting "it said 500" hands over
+  // something that finds the exact line in the log.
+  console.error(`[error] ${req.id ?? "-"}`, err);
 
   res.status(500).json({
     error: {
       message: "Internal Server Error",
+      request_id: req.id,
       // Surface the real message in dev to make debugging easier.
       ...(isProduction
         ? {}

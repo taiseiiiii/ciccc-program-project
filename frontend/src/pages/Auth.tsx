@@ -56,12 +56,18 @@ const Auth = () => {
   return (
     <div className="h-screen w-screen bg-background flex items-center justify-center">
       <Card className="flex md:h-auto md:max-w-6xl md:flex-row">
-        <div className="hidden md:flex md:w-1/2 relative bg-cover bg-center items-center justify-center">
-          <img
-            src={RockWall}
-            alt=""
-            className="absolute inset-0 h-full w-full"
-          />
+        {/*
+          A CSS background rather than an <img>. The panel is hidden below md,
+          and browsers skip background images on a display:none element — where
+          an <img src> is fetched regardless. This is decoration; a phone should
+          not spend a quarter of a megabyte on the sign-in screen to render
+          something it will never show.
+        */}
+        <div
+          className="hidden md:flex md:w-1/2 relative bg-cover bg-center items-center justify-center"
+          style={{ backgroundImage: `url(${RockWall})` }}
+          role="presentation"
+        >
           <div className="absolute inset-0 bg-surface-container-lowest/60" />
           <div className="relative z-10 flex flex-col items-center justify-center text-center p-8">
             <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
@@ -94,7 +100,10 @@ const Auth = () => {
                   : "Log in to continue your training session."}
               </p>
               {errorMessage && (
-                <div className="p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                <div
+                  role="alert"
+                  className="p-3 mb-4 rounded-lg bg-error-container text-on-error-container text-body-sm"
+                >
                   {errorMessage}
                 </div>
               )}
@@ -107,6 +116,7 @@ const Auth = () => {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     autoCapitalize="words"
+                    autoComplete="given-name"
                     className="capitalize"
                   />
                   <Input
@@ -116,6 +126,7 @@ const Auth = () => {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     autoCapitalize="words"
+                    autoComplete="family-name"
                     className="capitalize"
                   />
                 </div>
@@ -125,6 +136,8 @@ const Auth = () => {
                 label="Email address"
                 placeholder="climbLogAI@email.com"
                 value={email}
+                required
+                autoComplete="email"
                 onChange={(e) => setEmail(e.target.value)}
               />
               <Input
@@ -132,13 +145,15 @@ const Auth = () => {
                 label="Password"
                 placeholder="••••••••"
                 value={password}
+                required
+                // Tells a password manager which of the two flows this is, so
+                // signing up offers to generate one and signing in offers the
+                // saved one.
+                autoComplete={isSignUp ? "new-password" : "current-password"}
+                minLength={isSignUp ? 6 : undefined}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className={isSubmitting ? "opacity-50 cursor-not-allowed" : ""}
-              >
+              <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
                   ? "Loading..."
                   : isSignUp

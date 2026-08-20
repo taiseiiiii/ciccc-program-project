@@ -4,6 +4,12 @@ name: Deploy server to Render
 # receive push events itself. This workflow calls the service's Deploy Hook
 # with the same filtering Render's native GitHub integration would apply:
 # only pushes to main that touch server/.
+#
+# Migrations are NOT run from here. `pnpm start` is
+# `node dist/db/migrate.js && node dist/index.js`, so Render applies any pending
+# migration as part of booting the new build — which is the only ordering that
+# cannot ship code ahead of the schema it needs. The runner takes an advisory
+# lock, so two instances starting together is safe.
 on:
   push:
     branches: [main]
@@ -11,9 +17,35 @@ on:
       - "server/**"
 
 jobs:
-  trigger-render-deploy:
+  deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
     steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.3.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # Verified here as well as in CI, because this job is what actually
+      # triggers production. Deploying a build that does not compile just moves
+      # the failure somewhere with no rollback and a cold start.
+      - name: Verify before deploying
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm build
+
       - name: Trigger Render deploy hook
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

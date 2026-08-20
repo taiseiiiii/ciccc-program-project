@@ -1,75 +1,74 @@
-# React + TypeScript + Vite
+# ClimbLog AI — frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + Vite + TypeScript, styled with Tailwind v4 against a Material 3
+token set, served as an installable PWA. See the [root README](../README.md) for
+what the app is and how the two halves fit together.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cp .env.example .env.local   # two Supabase values + the API URL
+npm install
+npm run dev                  # http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Layout
 
 ```
+src/
+  pages/         one file per screen. All lazy-loaded from routes/AppRoutes.tsx,
+                 which keeps recharts — by far the largest dependency — out of
+                 the entry chunk.
+  components/    shared UI. Modal and ConfirmDialog are the ones to reach for
+                 before hand-rolling an overlay; ReportCard and MediaGallery are
+                 composed into the AI Coach and session views.
+  layouts/       AppLayout — header, side nav, bottom nav, scroll container.
+  context/       AuthProvider and ThemeProvider (components only, so Fast
+                 Refresh keeps working).
+  hooks/         useAuth / useTheme — the context objects and their hooks live
+                 apart from the providers for the same reason.
+  lib/           api client, Supabase client, query client, date helpers,
+                 storage (Supabase Storage upload/sign/delete), sessionDraft.
+  types/         the API's shapes, mirroring server/src/repositories.
+```
+
+## Conventions worth knowing before editing
+
+**Server state goes through TanStack Query, never `useState`.** Query keys are
+`["resource"]` or `["resource", scope]`; a mutation invalidates the keys it
+affects. `staleTime: Infinity` is used for the master-data lists (grades, wall
+types, hold types, body parts) — they only change when a migration changes them.
+
+**`/stats` is one request for the Dashboard and Progress both.** They share the
+query key, so opening both screens costs one round trip. Do not go back to
+fetching `/sessions` + `/attempts` to compute a figure in the browser — add it
+to the stats endpoint instead.
+
+**Dates are the climber's, not the server's.** Anything that needs "today" or
+"this month" takes it from `lib/date.ts` and sends it to the API explicitly.
+A bare `YYYY-MM-DD` handed to `new Date()` parses as UTC and can render the day
+before, which is why `parseLocalDate` exists and why nothing calls
+`new Date(dateString)` directly.
+
+**Colours come from the token set, never the Tailwind palette.** `text-primary`,
+`bg-error-container`, `text-on-surface-variant` — not `text-red-500`. Every
+token is defined for both themes in `index.css`, and a raw palette colour will
+be wrong in one of them.
+
+**Overlays use `<Modal>`.** It is built on the native `<dialog>`, so Escape, the
+focus trap, the backdrop and the scroll lock come for free. A hand-rolled
+`fixed inset-0` div gets none of them.
+
+## Commands
+
+| Command           | What                                       |
+| ----------------- | ------------------------------------------ |
+| `npm run dev`     | dev server with HMR                        |
+| `npm run build`   | `tsc -b` then a production build           |
+| `npm run preview` | serve the production build locally         |
+| `npm run lint`    | eslint, including the TanStack Query rules |
+
+## PWA
+
+`vite-plugin-pwa` in `prompt` mode: a new deploy waits rather than swapping the
+bundle out mid-session, and `PWAUpdatePrompt` offers the reload. API and
+Supabase calls are never cached — only the app shell, fonts and icons. The iOS
+launch images in `index.html` are generated by `design/generate-splash.py`.

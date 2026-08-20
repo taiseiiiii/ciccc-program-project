@@ -4,13 +4,14 @@ import { taxonomyRepository } from "../repositories/taxonomy.repository";
 import { HttpError } from "../utils/HttpError";
 import {
   optionalDate,
+  optionalEnum,
   optionalInt,
   optionalString,
   parseId,
   requireDate,
   requireInt,
 } from "../utils/validate";
-import { todayString } from "../utils/period";
+import { dayAfter, todayString } from "../utils/period";
 
 /**
  * HTTP layer for injuries and their daily check-ins.
@@ -28,26 +29,6 @@ import { todayString } from "../utils/period";
 const STATUSES = ["active", "recovering", "healed"] as const;
 const SIDES = ["left", "right", "both"] as const;
 
-function parseStatus(value: unknown, required: boolean): (typeof STATUSES)[number] | undefined {
-  if (value === undefined) {
-    if (required) throw HttpError.badRequest("status is required");
-    return undefined;
-  }
-  if (!STATUSES.includes(value as (typeof STATUSES)[number])) {
-    throw HttpError.badRequest(`status must be one of: ${STATUSES.join(", ")}`);
-  }
-  return value as (typeof STATUSES)[number];
-}
-
-function parseSide(value: unknown): (typeof SIDES)[number] | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (!SIDES.includes(value as (typeof SIDES)[number])) {
-    throw HttpError.badRequest(`side must be one of: ${SIDES.join(", ")}`);
-  }
-  return value as (typeof SIDES)[number];
-}
-
 /** Reject a body_part_id that does not exist, so the FK never surfaces as a 500. */
 async function assertBodyPartExists(id: number): Promise<void> {
   const found = await taxonomyRepository.findExistingIds("body_parts", [id]);
@@ -56,10 +37,28 @@ async function assertBodyPartExists(id: number): Promise<void> {
   }
 }
 
+/**
+ * An injury cannot have started tomorrow. Checked on create and on update:
+ * only create used to check it, so an edit could quietly move an injury into
+ * the future and take the "sore for N days" counter with it.
+ *
+ * The bound is the server's tomorrow, not its today, because "today" is not one
+ * date. The client sends its own local date and the server's can legitimately
+ * be a day behind it — a climber in Tokyo logging a Tuesday injury against a
+ * server still on Monday is not sending a future date, and refusing them would
+ * be a bug that only appears in some timezones. One day of slack covers every
+ * real offset; it does not let anyone log next week.
+ */
+function assertNotFuture(date: string, field: string): void {
+  if (date > dayAfter(todayString())) {
+    throw HttpError.badRequest(`${field} cannot be in the future`);
+  }
+}
+
 export const injuryController = {
   // GET /api/v1/injuries        (optionally ?status=active|recovering|healed)
   async list(req: Request, res: Response): Promise<void> {
-    const status = parseStatus(req.query.status, false);
+    const status = optionalEnum(req.query.status, "status", STATUSES) ?? undefined;
     const injuries = await injuryRepository.findAll(req.user!.user_id, { status });
     res.json({ data: injuries });
   },
@@ -81,14 +80,12 @@ export const injuryController = {
     await assertBodyPartExists(bodyPartId);
 
     const occurredOn = requireDate(occurred_on, "occurred_on");
-    if (occurredOn > todayString()) {
-      throw HttpError.badRequest("occurred_on cannot be in the future");
-    }
+    assertNotFuture(occurredOn, "occurred_on");
 
     const injury = await injuryRepository.create({
       user_id: req.user!.user_id,
       body_part_id: bodyPartId,
-      side: parseSide(side) ?? null,
+      side: optionalEnum(side, "side", SIDES) ?? null,
       occurred_on: occurredOn,
       severity: optionalInt(severity, "severity", { min: 1, max: 5 }) ?? null,
       description: optionalString(description, "description", 2000) ?? null,
@@ -109,14 +106,22 @@ export const injuryController = {
       await assertBodyPartExists(bodyPartId);
     }
 
+    // `?? undefined` on the dates: occurred_on is NOT NULL, so an explicit null
+    // means "leave it alone" rather than "clear it".
+    const occurredOn = optionalDate(occurred_on, "occurred_on") ?? undefined;
+    if (occurredOn !== undefined) assertNotFuture(occurredOn, "occurred_on");
+
+    const resolvedOn = optionalDate(resolved_on, "resolved_on");
+    if (typeof resolvedOn === "string") assertNotFuture(resolvedOn, "resolved_on");
+
     const injury = await injuryRepository.update(id, req.user!.user_id, {
       body_part_id: bodyPartId,
-      side: parseSide(side),
-      occurred_on: optionalDate(occurred_on, "occurred_on") ?? undefined,
+      side: optionalEnum(side, "side", SIDES),
+      occurred_on: occurredOn,
       severity: optionalInt(severity, "severity", { min: 1, max: 5 }),
       description: optionalString(description, "description", 2000),
-      status: parseStatus(status, false),
-      resolved_on: optionalDate(resolved_on, "resolved_on"),
+      status: optionalEnum(status, "status", STATUSES) ?? undefined,
+      resolved_on: resolvedOn,
     });
     if (!injury) throw HttpError.notFound(`Injury ${id} not found`);
     res.json({ data: injury });
@@ -142,6 +147,8 @@ export const injuryController = {
   // Body: { pain_level: 0-10, logged_on?: 'YYYY-MM-DD', note? }
   // One entry per day: re-posting the same date corrects it rather than adding
   // a second reading, so a climber can fix a mis-tap without a delete first.
+  // Which is why the status code depends on what actually happened — 201 for a
+  // new day, 200 when today's reading was corrected.
   async createLog(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
     const { pain_level, logged_on, note } = req.body ?? {};
@@ -166,6 +173,6 @@ export const injuryController = {
       note: optionalString(note, "note", 1000) ?? null,
     });
     if (!log) throw HttpError.notFound(`Injury ${id} not found`);
-    res.status(201).json({ data: log });
+    res.status(log.created ? 201 : 200).json({ data: log.log });
   },
 };

@@ -1,4 +1,5 @@
 import { query } from "../db/pool";
+import { buildUpdate } from "../utils/buildUpdate";
 
 /**
  * Data-access layer for injuries and their daily check-ins.
@@ -167,48 +168,37 @@ export const injuryRepository = {
     userId: number,
     input: UpdateInjuryInput,
   ): Promise<InjuryWithPart | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-
-    const push = (column: string, value: unknown) => {
-      values.push(value);
-      fields.push(`${column} = $${values.length}`);
-    };
-
-    if (input.body_part_id !== undefined) push("body_part_id", input.body_part_id);
-    if (input.side !== undefined) push("side", input.side);
-    if (input.occurred_on !== undefined) push("occurred_on", input.occurred_on);
-    if (input.severity !== undefined) push("severity", input.severity);
-    if (input.description !== undefined) push("description", input.description);
-
-    if (input.status !== undefined) {
-      push("status", input.status);
-      if (input.resolved_on !== undefined) {
-        push("resolved_on", input.resolved_on);
-      } else if (input.status === "healed") {
-        fields.push(`resolved_on = COALESCE(resolved_on, CURRENT_DATE)`);
-      } else {
-        fields.push(`resolved_on = NULL`);
-      }
-    } else if (input.resolved_on !== undefined) {
-      push("resolved_on", input.resolved_on);
-    }
-
-    if (fields.length === 0) {
-      return this.findById(id, userId);
-    }
-
-    values.push(id);
-    const idIdx = values.length;
-    values.push(userId);
-    const userIdx = values.length;
-
-    const { rowCount } = await query(
-      `UPDATE injuries SET ${fields.join(", ")}
-       WHERE injury_id = $${idIdx} AND user_id = $${userIdx}`,
-      values,
+    const statement = buildUpdate(
+      "injuries",
+      {
+        body_part_id: input.body_part_id,
+        side: input.side,
+        occurred_on: input.occurred_on,
+        severity: input.severity,
+        description: input.description,
+        status: input.status,
+        // Only written when the caller named a date explicitly; otherwise the
+        // fragment below derives it from the new status.
+        resolved_on: input.resolved_on,
+      },
+      { injury_id: id, user_id: userId },
+      {
+        extra: () => {
+          // A status change with no explicit date has to keep resolved_on in
+          // agreement with chk_injuries_resolved.
+          if (input.status === undefined) return [];
+          if (input.resolved_on !== undefined) return [];
+          return input.status === "healed"
+            ? ["resolved_on = COALESCE(resolved_on, CURRENT_DATE)"]
+            : ["resolved_on = NULL"];
+        },
+      },
     );
+    if (!statement) return this.findById(id, userId);
+
+    const { rowCount } = await query(statement.text, statement.values);
     if ((rowCount ?? 0) === 0) return null;
+    // Re-read: the response carries the joined body part and latest check-in.
     return this.findById(id, userId);
   },
 
@@ -238,13 +228,17 @@ export const injuryRepository = {
    * Record today's pain level. One entry per injury per day, so re-submitting
    * corrects the day rather than adding a second reading — hence upsert, not
    * insert.
+   *
+   * Reports which of the two happened, because the caller answers 201 for a new
+   * reading and 200 for a corrected one. `xmax = 0` is the standard Postgres
+   * test: a freshly inserted row has no updating transaction stamped on it.
    */
   async upsertLog(
     injuryId: number,
     userId: number,
     input: { logged_on: string; pain_level: number; note?: string | null },
-  ): Promise<InjuryLog | null> {
-    const { rows } = await query<InjuryLog>(
+  ): Promise<{ log: InjuryLog; created: boolean } | null> {
+    const { rows } = await query<InjuryLog & { created: boolean }>(
       `INSERT INTO injury_logs (injury_id, logged_on, pain_level, note)
        SELECT $1, $2, $3, $4
          FROM injuries
@@ -252,11 +246,15 @@ export const injuryRepository = {
        ON CONFLICT (injury_id, logged_on) DO UPDATE
          SET pain_level = EXCLUDED.pain_level,
              note       = EXCLUDED.note
-       RETURNING *`,
+       RETURNING *, (xmax = 0) AS created`,
       [injuryId, input.logged_on, input.pain_level, input.note ?? null, userId],
     );
     // No row means the SELECT matched nothing: the injury is missing or is
     // someone else's, which the controller turns into a 404.
-    return rows[0] ?? null;
+    const row = rows[0];
+    if (!row) return null;
+
+    const { created, ...log } = row;
+    return { log, created };
   },
 };

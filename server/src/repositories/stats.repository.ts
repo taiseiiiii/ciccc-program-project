@@ -1,4 +1,5 @@
 import { query } from "../db/pool";
+import { dayAfter } from "../utils/period";
 
 /**
  * Read-only aggregation over sessions/attempts/routes/grades, for the two
@@ -129,12 +130,46 @@ export interface MonthlyGradeBreakdown {
   fails: number;
 }
 
-/** Headline counts for a whole month, used for the month-over-month deltas. */
+/**
+ * Every headline figure for one range — a month, or all of time. Used for the
+ * dashboard's lifetime numbers, this month's cards, and the previous month the
+ * deltas are measured against.
+ */
 export interface PeriodTotals {
+  sessions: number;
+  /** Distinct visit dates. Two sessions in one day are one climbing day. */
+  climbing_days: number;
+  /** Minutes on the wall. 0 when nobody recorded a duration. */
+  minutes: number;
+  /** Rows in `attempts` — routes touched, not tries. */
+  routes: number;
+  /** Tries across every route. SUM(attempt_count). */
+  attempts: number;
+  sends: number;
+  /** Routes sent first try. The figure climbers actually brag about. */
+  flashes: number;
+  highest_sent_grade: string | null;
+  highest_sent_level: number | null;
+}
+
+/** One calendar month of activity, for the multi-month charts. */
+export interface MonthlyActivity {
+  month: string; // 'YYYY-MM'
   sessions: number;
   attempts: number;
   sends: number;
-  minutes: number;
+  /** Hardest grade sent that month, or null for a month with no sends. */
+  max_sent_level: number | null;
+}
+
+/** A hard send, with the context needed to display it. */
+export interface PersonalRecord {
+  attempt_id: number;
+  grade_name: string;
+  grade_level: number;
+  route_name: string | null;
+  gym_name: string | null;
+  visit_date: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -143,12 +178,18 @@ export interface PeriodTotals {
  * Attempts/sends grouped by one of the route tag tables. The two tag
  * vocabularies are structurally identical, so the query is written once and
  * the table/column names come from this whitelist — never from a request.
+ *
+ * Counting caveat worth knowing before reading a chart built on this: a route
+ * tagged both "overhang" and "roof" contributes its full try count to *each*
+ * group. Every group's own success rate is meaningful; the sum across groups is
+ * not the period's total.
  */
 const TAG_SOURCES = {
   wall: { join: "route_wall_types", master: "wall_types", key: "wall_type_id" },
   hold: { join: "route_hold_types", master: "hold_types", key: "hold_type_id" },
 } as const;
 
+/** Attempts/sends grouped by tag over the half-open range `[start, end)`. */
 async function tagBreakdown(
   kind: keyof typeof TAG_SOURCES,
   userId: number,
@@ -170,7 +211,7 @@ async function tagBreakdown(
        JOIN sessions s USING (session_id)
        JOIN ${join} j ON j.route_id = a.route_id
        JOIN ${master} m USING (${key})
-      WHERE s.user_id = $1 AND s.visit_date BETWEEN $2 AND $3
+      WHERE s.user_id = $1 AND s.visit_date >= $2 AND s.visit_date < $3
       GROUP BY m.code, m.label, m.sort_order
       ORDER BY m.sort_order`,
     [userId, start, end],
@@ -285,8 +326,10 @@ export const statsRepository = {
           ORDER BY i.severity DESC NULLS LAST, bp.sort_order`,
         [userId],
       ),
-      tagBreakdown("wall", userId, periodStart, periodEnd),
-      tagBreakdown("hold", userId, periodStart, periodEnd),
+      // forPeriod's bounds are inclusive on both ends (they mirror the
+      // period_start/period_end columns); tagBreakdown takes a half-open range.
+      tagBreakdown("wall", userId, periodStart, dayAfter(periodEnd)),
+      tagBreakdown("hold", userId, periodStart, dayAfter(periodEnd)),
     ]);
 
     const breakdown = breakdownResult.rows;
@@ -380,45 +423,172 @@ export const statsRepository = {
     return rows;
   },
 
-  /** Attempts/sends by wall angle over `[start, end]`, both ends inclusive. */
+  /** Attempts/sends by wall angle over the half-open range `[start, end)`. */
   findWallBreakdown(userId: number, start: string, end: string) {
     return tagBreakdown("wall", userId, start, end);
   },
 
-  /** Attempts/sends by hold type over `[start, end]`, both ends inclusive. */
+  /** Attempts/sends by hold type over the half-open range `[start, end)`. */
   findHoldBreakdown(userId: number, start: string, end: string) {
     return tagBreakdown("hold", userId, start, end);
   },
 
   /**
-   * Whole-period totals over `[start, end)`. Used for the previous month,
-   * whose per-day and per-grade detail the screen never shows — only the
-   * deltas.
+   * Every headline figure for one range, in one round trip.
+   *
+   * Pass `null` for both bounds to get all-time totals — that is what the
+   * dashboard's lifetime numbers are.
+   *
+   * Written as one CTE per grain rather than one big join, because sessions and
+   * attempts are different grains: joining them and then summing
+   * `duration_minutes` would count a session's length once per route logged in
+   * it. Each figure below reads from exactly the grain it belongs to.
    */
-  async findPeriodTotals(
+  async findTotals(
     userId: number,
-    start: string,
-    end: string,
+    start: string | null,
+    end: string | null,
   ): Promise<PeriodTotals> {
     const { rows } = await query<PeriodTotals>(
-      `SELECT COUNT(DISTINCT s.session_id)::int               AS sessions,
-              COALESCE(SUM(a.attempt_count), 0)::int          AS attempts,
-              COALESCE(SUM(a.send_count), 0)::int             AS sends,
-              -- duration lives on the session, and the attempts join repeats
-              -- it once per logged route, so sum it over distinct sessions.
-              COALESCE((
-                SELECT SUM(s2.duration_minutes)
-                  FROM sessions s2
-                 WHERE s2.user_id = $1 AND s2.visit_date >= $2 AND s2.visit_date < $3
-              ), 0)::int                                      AS minutes
-         FROM sessions s
-         LEFT JOIN attempts a ON a.session_id = s.session_id
-        WHERE s.user_id = $1
-          AND s.visit_date >= $2
-          AND s.visit_date <  $3`,
+      `WITH s AS (
+         SELECT session_id, visit_date, duration_minutes
+           FROM sessions
+          WHERE user_id = $1
+            AND ($2::date IS NULL OR visit_date >= $2)
+            AND ($3::date IS NULL OR visit_date <  $3)
+       ), a AS (
+         SELECT a.attempt_count, a.send_count, r.grade_id
+           FROM attempts a
+           JOIN s ON s.session_id = a.session_id
+           JOIN routes r USING (route_id)
+       )
+       SELECT (SELECT COUNT(*)::int                    FROM s) AS sessions,
+              (SELECT COUNT(DISTINCT visit_date)::int  FROM s) AS climbing_days,
+              (SELECT COALESCE(SUM(duration_minutes), 0)::int FROM s) AS minutes,
+              (SELECT COUNT(*)::int                    FROM a) AS routes,
+              (SELECT COALESCE(SUM(attempt_count), 0)::int FROM a) AS attempts,
+              (SELECT COALESCE(SUM(send_count), 0)::int    FROM a) AS sends,
+              (SELECT COUNT(*)::int FROM a
+                WHERE attempt_count = 1 AND send_count = 1)  AS flashes,
+              (SELECT g.grade_name FROM a JOIN grades g USING (grade_id)
+                WHERE a.send_count > 0
+                ORDER BY g.level DESC LIMIT 1)               AS highest_sent_grade,
+              (SELECT g.level FROM a JOIN grades g USING (grade_id)
+                WHERE a.send_count > 0
+                ORDER BY g.level DESC LIMIT 1)               AS highest_sent_level`,
       [userId, start, end],
     );
     // The aggregate always yields exactly one row, even with no matching data.
-    return rows[0] ?? { sessions: 0, attempts: 0, sends: 0, minutes: 0 };
+    return (
+      rows[0] ?? {
+        sessions: 0,
+        climbing_days: 0,
+        minutes: 0,
+        routes: 0,
+        attempts: 0,
+        sends: 0,
+        flashes: 0,
+        highest_sent_grade: null,
+        highest_sent_level: null,
+      }
+    );
+  },
+
+  /**
+   * One row per calendar month over `[startMonth, endMonth]`, inclusive, with
+   * empty months present and zeroed — the charts need a continuous x-axis, and
+   * `generate_series` fills the gaps far more cheaply than the client can.
+   */
+  async findMonthlySeries(
+    userId: number,
+    startMonth: string,
+    endMonth: string,
+  ): Promise<MonthlyActivity[]> {
+    const { rows } = await query<MonthlyActivity>(
+      `SELECT to_char(m.month, 'YYYY-MM')                        AS month,
+              COUNT(DISTINCT s.session_id)::int                  AS sessions,
+              COALESCE(SUM(a.attempt_count), 0)::int             AS attempts,
+              COALESCE(SUM(a.send_count), 0)::int                AS sends,
+              MAX(g.level) FILTER (WHERE a.send_count > 0)       AS max_sent_level
+         FROM generate_series(
+                ($2 || '-01')::date, ($3 || '-01')::date, INTERVAL '1 month'
+              ) AS m(month)
+         LEFT JOIN sessions s
+                ON s.user_id = $1
+               AND date_trunc('month', s.visit_date) = m.month
+         LEFT JOIN attempts a ON a.session_id = s.session_id
+         LEFT JOIN routes   r ON r.route_id   = a.route_id
+         LEFT JOIN grades   g ON g.grade_id   = r.grade_id
+        GROUP BY m.month
+        ORDER BY m.month`,
+      [userId, startMonth, endMonth],
+    );
+    return rows;
+  },
+
+  /**
+   * How many consecutive weeks up to `today` contain a session.
+   *
+   * Weeks rather than days on purpose: a streak counted in days breaks the
+   * moment a climber takes the rest day their fingers need, which punishes
+   * exactly the behaviour the app should encourage. The current week not having
+   * one yet does not break the run either — it may only be Tuesday — so the
+   * count is allowed to start from last week.
+   *
+   * `today` comes from the client, because the server's date can be a different
+   * day in the climber's timezone and a streak is exactly the figure a reader
+   * would notice being off by one.
+   *
+   * Gaps-and-islands: numbering the distinct weeks newest-first and adding
+   * `rn` weeks back onto each makes every consecutive run share one constant,
+   * so the newest run is the rows whose constant matches row 1's.
+   */
+  async findStreakWeeks(userId: number, today: string): Promise<number> {
+    const { rows } = await query<{ streak: number }>(
+      `WITH bounds AS (
+         SELECT date_trunc('week', $2::date)::date AS this_week
+       ), weeks AS (
+         SELECT DISTINCT date_trunc('week', visit_date)::date AS wk
+           FROM sessions, bounds
+          WHERE user_id = $1 AND visit_date <= bounds.this_week + 6
+       ), ranked AS (
+         SELECT wk, ROW_NUMBER() OVER (ORDER BY wk DESC) AS rn FROM weeks
+       ), islands AS (
+         SELECT wk, rn, wk + (rn * INTERVAL '7 days') AS run FROM ranked
+       )
+       SELECT COALESCE((
+         SELECT COUNT(*)::int
+           FROM islands, bounds
+          WHERE run = (SELECT run FROM islands WHERE rn = 1)
+            -- A run that ended before last week is over, not current.
+            AND (SELECT wk FROM islands WHERE rn = 1) >= bounds.this_week - 7
+       ), 0) AS streak`,
+      [userId, today],
+    );
+    return rows[0]?.streak ?? 0;
+  },
+
+  /** The climber's hardest sends, hardest first. Ties break to the more recent. */
+  async findPersonalRecords(
+    userId: number,
+    limit: number,
+  ): Promise<PersonalRecord[]> {
+    const { rows } = await query<PersonalRecord>(
+      `SELECT a.attempt_id,
+              g.grade_name,
+              g.level AS grade_level,
+              r.route_name,
+              s.gym_name,
+              s.visit_date
+         FROM attempts a
+         JOIN sessions s USING (session_id)
+         JOIN routes   r USING (route_id)
+         JOIN grades   g USING (grade_id)
+        WHERE s.user_id = $1 AND a.send_count > 0
+        ORDER BY g.level DESC, s.visit_date DESC, a.attempt_id DESC
+        LIMIT $2`,
+      [userId, limit],
+    );
+    return rows;
   },
 };

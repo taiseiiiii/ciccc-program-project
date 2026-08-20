@@ -1,14 +1,9 @@
 import { useEffect } from "react";
-import type { ReactNode, ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useTheme } from "../hooks/useTheme";
 import { CgProfile } from "react-icons/cg";
-import { FiSun } from "react-icons/fi";
-import { FiMoon } from "react-icons/fi";
-
-interface HeaderProps extends ComponentPropsWithoutRef<"div"> {
-  children?: ReactNode;
-}
+import { FiSun, FiMoon } from "react-icons/fi";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
   "/": {
@@ -38,10 +33,9 @@ const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
 };
 
 export default function Header({
-  children,
   className = "",
   ...props
-}: HeaderProps) {
+}: ComponentPropsWithoutRef<"header">) {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
@@ -54,60 +48,58 @@ export default function Header({
     document.title = `${currentPage.title} | ClimbLog AI`;
   }, [currentPage.title]);
 
-  const getSideNavLinkClass = ({ isActive }: { isActive: boolean }) => {
-    const baseClass = "flex flex-row items-center px-3 gap-3 text-body-lg";
-    const activeClass = "text-primary font-bold";
-    const inactiveClass = "text-on-surface-variant hover:text-primary";
-
-    return `${baseClass} ${isActive ? activeClass : inactiveClass}`;
-  };
   return (
-    <div className={`${className}`}>
-      <div
-        className="flex flex-row items-center justify-between fixed top-0 left-0 md:left-64 right-0 h-16 p-2 z-10 bg-surface-container-low border-b"
-        {...props}
-      >
-        <div className="flex md:hidden items-center">
-          <Link
-            to="/"
-            className="text-headline-lg-mobile text-primary font-bold tracking-tight"
-          >
-            ClimbLog AI
-          </Link>
-        </div>
-
-        <div className="hidden md:flex flex-col justify-center min-w-0 pr-4">
-          <div className="flex items-baseline gap-2.5 min-w-0">
-            <p className="text-base text-primary font-bold tracking-tight whitespace-nowrap">
-              {currentPage.title}
-            </p>
-            {currentPage.subtitle && (
-              <span className="text-xs text-on-surface-variant truncate font-normal min-w-0">
-                — {currentPage.subtitle}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-row items-center justify-center">
-          <button
-            className="text-body-lg text-on-surface-variant hover:text-primary"
-            onClick={toggleTheme}
-            aria-label={
-              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-            }
-          >
-            {theme === "dark" ? <FiSun size={24} /> : <FiMoon size={24} />}
-          </button>
-          <NavLink
-            to="/profile"
-            className={getSideNavLinkClass}
-            aria-label="Profile"
-          >
-            <CgProfile size={24} />
-          </NavLink>
-        </div>
-        {children}
+    <header
+      className={`flex flex-row items-center justify-between fixed top-0 left-0 md:left-64 right-0 h-16 p-2 z-10 bg-surface-container-low border-b border-outline-variant ${className}`}
+      {...props}
+    >
+      <div className="flex md:hidden items-center">
+        <Link
+          to="/"
+          className="text-headline-lg-mobile text-primary font-bold tracking-tight"
+        >
+          ClimbLog AI
+        </Link>
       </div>
-    </div>
+
+      <div className="hidden md:flex flex-col justify-center min-w-0 pr-4">
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <p className="text-base text-primary font-bold tracking-tight whitespace-nowrap">
+            {currentPage.title}
+          </p>
+          {currentPage.subtitle && (
+            <span className="text-xs text-on-surface-variant truncate font-normal min-w-0">
+              — {currentPage.subtitle}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-row items-center gap-1">
+        <button
+          type="button"
+          className="cursor-pointer rounded-lg p-2 text-on-surface-variant hover:text-primary"
+          onClick={toggleTheme}
+          aria-label={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+        >
+          {theme === "dark" ? <FiSun size={22} /> : <FiMoon size={22} />}
+        </button>
+        <NavLink
+          to="/profile"
+          aria-label="Profile"
+          className={({ isActive }) =>
+            `rounded-lg p-2 ${
+              isActive
+                ? "text-primary"
+                : "text-on-surface-variant hover:text-primary"
+            }`
+          }
+        >
+          <CgProfile size={22} />
+        </NavLink>
+      </div>
+    </header>
   );
 }

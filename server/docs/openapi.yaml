@@ -23,6 +23,16 @@ info:
     - `TIMESTAMPTZ` columns (`created_at`, `updated_at`, `achieved_at`) are ISO 8601 date-time strings.
     - All `PATCH` endpoints accept partial bodies: omitted fields are left untouched.
     - Deleting a row still referenced by others (`ON DELETE RESTRICT`) returns `409`.
+    - Every response carries an `X-Request-Id`; a `500` repeats it as
+      `error.request_id`, which is what to quote in a bug report.
+
+    ## Rate limits
+    Two buckets, both answering `429` with the usual error envelope and
+    `RateLimit-*` headers:
+
+    - the whole API, 300 requests per minute per IP (`/health` exempt);
+    - `POST /performances` and `POST /trainings`, 10 per hour per **user** —
+      each is one paid model call.
 
     ## AI reports
     `POST /performances` and `POST /trainings` generate coaching reports with
@@ -74,6 +84,10 @@ tags:
     description: >-
       Injury records and daily pain check-ins. Recording and load management
       only — the API stores no diagnosis or treatment.
+  - name: Stats
+    description: >-
+      Counted-up figures for the Dashboard and Progress screens. One response
+      replaces fetching the whole history and aggregating it in the browser.
   - name: Performances
     description: AI-generated performance analysis of one day or month of climbing.
   - name: Trainings
@@ -127,6 +141,106 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Users]
+      summary: Update my display name
+      description: >-
+        `email`, `status`, `auth_user_id` and `user_id` are rejected with `400`.
+        The address belongs to Supabase Auth — change it with
+        `supabase.auth.updateUser()` and this row re-syncs from the token on the
+        next request.
+      operationId: updateMe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: The updated profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Users]
+      summary: Close my account
+      description: >-
+        Sets `status` to `withdrawn`, which every subsequent authenticated
+        request rejects with `403`. The climbing history is deliberately kept:
+        cascading the delete would take every session, report and injury with
+        it, which is not what a mis-tap should cost. Deleting the Supabase Auth
+        user is a separate, deliberate step.
+      operationId: withdrawMe
+      responses:
+        '200':
+          description: The closed profile, its status now `withdrawn`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /stats:
+    get:
+      tags: [Stats]
+      summary: Counted-up figures for the charts
+      description: >-
+        Every number the Dashboard and Progress screens display, aggregated in
+        SQL. One response serves both screens; before this existed they each
+        fetched the caller's entire unpaginated history and counted it in
+        JavaScript.
+
+        `month` and `today` both come from the client, because the server's date
+        can be a different day in the climber's timezone and "this month" and
+        "streak" are exactly the figures a reader notices being off by one.
+
+        Ranges are half-open — `daily` covers the 30 days ending on `today`,
+        inclusive.
+      operationId: getStats
+      parameters:
+        - name: month
+          in: query
+          description: Calendar month to report on. Defaults to the month containing `today`.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+          example: '2026-08'
+        - name: today
+          in: query
+          description: The client's local date, anchoring the streak and the heatmap.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: The aggregated figures.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Stats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -317,14 +431,19 @@ paths:
   /routes:
     get:
       tags: [Routes]
-      summary: List routes
+      summary: List my routes
       description: >-
+        Every route behind one of the caller's logged attempts, newest first.
+
         Routes are created through `POST /sessions` (nested `attempts`), never
-        directly.
+        directly, and they are read-only here: `routes` carries no owner column,
+        so a write endpoint could not tell whose logged climb it was rewriting.
+        Correcting the grade or name of a climb goes through
+        `PATCH /attempts/{id}`.
       operationId: listRoutes
       responses:
         '200':
-          description: All routes.
+          description: The caller's routes.
           content:
             application/json:
               schema:
@@ -344,6 +463,9 @@ paths:
     get:
       tags: [Routes]
       summary: Get a route
+      description: >-
+        Scoped through the caller's attempts — a route behind somebody else's
+        climb answers `404`, not the row.
       operationId: getRoute
       responses:
         '200':
@@ -362,56 +484,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
-    patch:
-      tags: [Routes]
-      summary: Update a route (partial)
-      operationId: updateRoute
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RouteUpdate'
-      responses:
-        '200':
-          description: The updated route.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Route'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      tags: [Routes]
-      summary: Delete a route
-      description: Returns `409` while any attempt still references the route (`ON DELETE RESTRICT`).
-      operationId: deleteRoute
-      responses:
-        '204':
-          description: Deleted. No content.
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: The route is still referenced by one or more attempts.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  message: 'Operation conflicts with related data (foreign key constraint)'
 
   /attempts:
     get:
@@ -711,6 +783,8 @@ paths:
           $ref: '#/components/responses/NoClimbingData'
         '502':
           $ref: '#/components/responses/AIFailure'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/AIFailure'
         '504':
@@ -858,6 +932,8 @@ paths:
           $ref: '#/components/responses/NoClimbingData'
         '502':
           $ref: '#/components/responses/AIFailure'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/AIFailure'
         '504':
@@ -1458,6 +1534,17 @@ components:
           example:
             error:
               message: 'No climbing data between 2026-08-01 and 2026-08-31 — log a session first'
+    RateLimited:
+      description: >-
+        Too many requests. `RateLimit-Limit` / `RateLimit-Remaining` /
+        `RateLimit-Reset` say when to retry.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: 'You have generated a lot of AI reports in the last hour — try again shortly'
     AIFailure:
       description: >-
         The AI service failed — `502` upstream error, `503` not configured or
@@ -1482,6 +1569,12 @@ components:
           properties:
             message:
               type: string
+            request_id:
+              type: string
+              format: uuid
+              description: >-
+                Present on `500`s. Matches the `X-Request-Id` header and the
+                server's log line — quote it in a bug report.
             details:
               description: Optional extra context. Usually absent.
 
@@ -1495,6 +1588,192 @@ components:
         db:
           type: string
           enum: [up, down]
+
+    UserUpdate:
+      type: object
+      description: >-
+        The climber's own display name. `email`, `status`, `auth_user_id` and
+        `user_id` are rejected with `400`.
+      properties:
+        first_name:
+          type: string
+          nullable: true
+          maxLength: 100
+        last_name:
+          type: string
+          nullable: true
+          maxLength: 100
+
+    PeriodTotals:
+      type: object
+      description: Headline figures for one range — a month, or all of time.
+      required:
+        [sessions, climbing_days, minutes, routes, attempts, sends, flashes,
+         success_rate, highest_sent_grade, highest_sent_level]
+      properties:
+        sessions:
+          type: integer
+        climbing_days:
+          type: integer
+          description: Distinct visit dates. Two sessions in one day are one climbing day.
+        minutes:
+          type: integer
+          description: Time on the wall. 0 when nobody recorded a duration.
+        routes:
+          type: integer
+          description: Rows in `attempts` — routes touched, not tries.
+        attempts:
+          type: integer
+          description: Tries across every route.
+        sends:
+          type: integer
+        flashes:
+          type: integer
+          description: Routes sent first try.
+        success_rate:
+          type: number
+          description: Sends / attempts as a percentage (0–100, one decimal). 0 when no attempts.
+        highest_sent_grade:
+          type: string
+          nullable: true
+        highest_sent_level:
+          type: integer
+          nullable: true
+
+    Stats:
+      type: object
+      required:
+        [month, today, lifetime, current_month, previous_month, months, daily,
+         grade_breakdown, wall_breakdown, hold_breakdown, streak_weeks,
+         personal_records, recent_sessions]
+      properties:
+        month:
+          type: string
+          example: '2026-08'
+        today:
+          type: string
+          format: date
+        lifetime:
+          $ref: '#/components/schemas/PeriodTotals'
+        current_month:
+          $ref: '#/components/schemas/PeriodTotals'
+        previous_month:
+          $ref: '#/components/schemas/PeriodTotals'
+        months:
+          type: array
+          description: The reported month plus the four before it, oldest first. Empty months are present and zeroed.
+          items:
+            type: object
+            required: [month, sessions, attempts, sends, max_sent_level]
+            properties:
+              month:
+                type: string
+                example: '2026-08'
+              sessions:
+                type: integer
+              attempts:
+                type: integer
+              sends:
+                type: integer
+              max_sent_level:
+                type: integer
+                nullable: true
+                description: Hardest grade sent that month. Null for a month with no sends, so the chart shows a gap rather than a drop to V0.
+        daily:
+          type: array
+          description: The 30 days ending on `today`. Days with no session are present, with zeros.
+          items:
+            type: object
+            required: [date, sessions, attempts]
+            properties:
+              date:
+                type: string
+                format: date
+              sessions:
+                type: integer
+              attempts:
+                type: integer
+        grade_breakdown:
+          type: array
+          description: The reported month, easiest grade first.
+          items:
+            type: object
+            required: [grade_id, grade_name, level, attempts, sends, fails]
+            properties:
+              grade_id:
+                type: integer
+              grade_name:
+                type: string
+              level:
+                type: integer
+              attempts:
+                type: integer
+              sends:
+                type: integer
+              fails:
+                type: integer
+        wall_breakdown:
+          type: array
+          description: >-
+            The reported month, by wall angle. A route tagged with two angles
+            contributes its full try count to each, so each bar's own rate is
+            meaningful but the sum across bars is not the month's total.
+          items:
+            $ref: '#/components/schemas/TagBreakdown'
+        hold_breakdown:
+          type: array
+          description: The reported month, by hold type. Same counting caveat as `wall_breakdown`.
+          items:
+            $ref: '#/components/schemas/TagBreakdown'
+        streak_weeks:
+          type: integer
+          description: >-
+            Consecutive weeks up to `today` containing a session. Weeks, not
+            days, so a rest day does not break it; the current week having no
+            session yet does not break it either.
+        personal_records:
+          type: array
+          description: The three hardest sends of all time, hardest first.
+          items:
+            type: object
+            required: [attempt_id, grade_name, grade_level, route_name, gym_name, visit_date]
+            properties:
+              attempt_id:
+                type: integer
+              grade_name:
+                type: string
+              grade_level:
+                type: integer
+              route_name:
+                type: string
+                nullable: true
+              gym_name:
+                type: string
+                nullable: true
+              visit_date:
+                type: string
+                format: date
+        recent_sessions:
+          type: array
+          description: The five most recent visits.
+          items:
+            $ref: '#/components/schemas/Session'
+
+    TagBreakdown:
+      type: object
+      required: [code, label, attempts, sends, success_rate]
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        attempts:
+          type: integer
+        sends:
+          type: integer
+        success_rate:
+          type: number
+          description: Sends / attempts as a percentage (0–100, one decimal).
 
     User:
       type: object
@@ -1731,17 +2010,6 @@ components:
           type: string
           format: date-time
 
-    RouteUpdate:
-      type: object
-      properties:
-        grade_id:
-          type: integer
-          minimum: 1
-        route_name:
-          type: string
-          nullable: true
-          maxLength: 150
-
     Attempt:
       type: object
       description: >-
@@ -1832,12 +2100,24 @@ components:
     AttemptUpdate:
       type: object
       description: >-
-        `is_success` is rejected — send `send_count` instead. Tag arrays
-        replace in full, so `[]` clears them.
+        `is_success` is rejected — send `send_count` instead.
+
+        `route_id` is rejected too. It used to be accepted after only an
+        existence check, which let a caller aim their attempt at another
+        climber's route and rewrite its tags. `grade_id` and `route_name`
+        correct *this* climb's own route instead.
+
+        Tag arrays replace in full, so `[]` clears them.
       properties:
-        route_id:
+        grade_id:
           type: integer
           minimum: 1
+          description: Re-grade this climb's route. Must reference an existing grade.
+        route_name:
+          type: string
+          nullable: true
+          maxLength: 150
+          description: Rename this climb's route.
         attempt_count:
           type: integer
           minimum: 1
@@ -1940,18 +2220,6 @@ components:
           nullable: true
           description: 'Must match `YYYY-MM-DD`.'
 
-    GradeRef:
-      type: object
-      description: A grade referred to from a statistic — just the label and its rank.
-      required: [grade_name, level]
-      properties:
-        grade_name:
-          type: string
-          example: 'V4'
-        level:
-          type: integer
-          description: Position on the V0–V17 scale, used for ordering.
-          example: 4
     ClimbingStats:
       type: object
       description: >-

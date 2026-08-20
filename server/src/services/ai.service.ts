@@ -1,5 +1,6 @@
 import { completeWithSchema } from "./openai.service";
 import type { ClimbingStats } from "../repositories/stats.repository";
+import type { GoalWithGrade } from "../repositories/goal.repository";
 
 /**
  * Domain layer for the AI coach: turns aggregated climbing stats into the
@@ -24,6 +25,20 @@ export interface GoalSummary {
   description: string | null;
   target_date: string | null;
   is_achieved: boolean;
+}
+
+/**
+ * Narrow stored goals to what the prompt should see. Both AI controllers feed
+ * the model the same view, so the mapping lives here rather than being written
+ * out identically in each of them.
+ */
+export function toGoalSummaries(goals: GoalWithGrade[]): GoalSummary[] {
+  return goals.map((g) => ({
+    target_grade: g.grade_name,
+    description: g.goal_description,
+    target_date: g.target_date,
+    is_achieved: g.is_achieved,
+  }));
 }
 
 /** What the model returns for a performance analysis. */

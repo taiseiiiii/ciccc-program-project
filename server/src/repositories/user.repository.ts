@@ -1,4 +1,5 @@
 import { query } from '../db/pool';
+import { buildUpdate } from '../utils/buildUpdate';
 
 /**
  * Shape of a row in the `users` table. Authentication lives in Supabase Auth;
@@ -19,6 +20,18 @@ export interface User {
 export interface ProvisionUserInput {
   auth_user_id: string;
   email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+}
+
+/**
+ * What a climber may change about their own profile.
+ *
+ * Not `email`: that is Supabase Auth's, and changing it here would leave the
+ * two disagreeing about who this account is. Not `status` in general either —
+ * only the one transition below, which is a climber closing their own account.
+ */
+export interface UpdateUserInput {
   first_name?: string | null;
   last_name?: string | null;
 }
@@ -50,5 +63,45 @@ export const userRepository = {
       [input.auth_user_id, input.email, input.first_name ?? null, input.last_name ?? null],
     );
     return rows[0]!;
+  },
+
+  /** Update the caller's own display name. */
+  async update(userId: number, input: UpdateUserInput): Promise<User | null> {
+    const statement = buildUpdate(
+      'users',
+      { first_name: input.first_name, last_name: input.last_name },
+      { user_id: userId },
+      { returning: '*' },
+    );
+    if (!statement) {
+      const { rows } = await query<User>(
+        `SELECT * FROM users WHERE user_id = $1`,
+        [userId],
+      );
+      return rows[0] ?? null;
+    }
+
+    const { rows } = await query<User>(statement.text, statement.values);
+    return rows[0] ?? null;
+  },
+
+  /**
+   * Close an account.
+   *
+   * Flips `status` to 'withdrawn', which `requireAuth` already refuses to let
+   * through — so the next request with a still-valid token gets a 403 rather
+   * than silently working. The rows are kept: `ON DELETE CASCADE` from `users`
+   * would take every session, climb, report and injury with them, and a climber
+   * tapping "close my account" at 11pm should not lose two years of logs to a
+   * mis-tap. Deleting the Supabase Auth user is the separate, deliberate step.
+   */
+  async withdraw(userId: number): Promise<User | null> {
+    const { rows } = await query<User>(
+      `UPDATE users SET status = 'withdrawn'
+        WHERE user_id = $1
+        RETURNING *`,
+      [userId],
+    );
+    return rows[0] ?? null;
   },
 };

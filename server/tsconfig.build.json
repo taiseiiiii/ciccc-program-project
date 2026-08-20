@@ -1,0 +1,7 @@
+{
+  // Build config. Identical to tsconfig.json except that tests are not emitted
+  // into dist/ — they are typechecked (by `pnpm typecheck`, which uses the base
+  // config) and run by vitest from source, but they must not ship.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

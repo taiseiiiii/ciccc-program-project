@@ -1,4 +1,5 @@
 import { query } from "../db/pool";
+import { buildUpdate } from "../utils/buildUpdate";
 
 /** Shape of a row in the `performances` table (AI-generated report snapshot). */
 export interface Performance {
@@ -105,40 +106,27 @@ export const performanceRepository = {
   },
 
   /**
-   * Update the climber's own layer on a saved report. Builds the SET clause
-   * only from the fields provided so a missing field is left untouched.
+   * Update the climber's own layer on a saved report. Only the fields
+   * provided are written; see utils/buildUpdate.
    */
   async update(
     id: number,
     userId: number,
     input: UpdatePerformanceInput,
   ): Promise<Performance | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-
-    const push = (column: string, value: unknown) => {
-      values.push(value);
-      fields.push(`${column} = $${values.length}`);
-    };
-
-    if (input.title !== undefined) push("title", input.title);
-    if (input.user_note !== undefined) push("user_note", input.user_note);
-    if (input.is_pinned !== undefined) push("is_pinned", input.is_pinned);
-
-    if (fields.length === 0) {
-      return this.findById(id, userId);
-    }
-
-    values.push(id);
-    const idIdx = values.length;
-    values.push(userId);
-    const userIdx = values.length;
-    const { rows } = await query<Performance>(
-      `UPDATE performances SET ${fields.join(", ")}
-       WHERE performance_id = $${idIdx} AND user_id = $${userIdx}
-       RETURNING *`,
-      values,
+    const statement = buildUpdate(
+      "performances",
+      {
+        title: input.title,
+        user_note: input.user_note,
+        is_pinned: input.is_pinned,
+      },
+      { performance_id: id, user_id: userId },
+      { returning: "*" },
     );
+    if (!statement) return this.findById(id, userId);
+
+    const { rows } = await query<Performance>(statement.text, statement.values);
     return rows[0] ?? null;
   },
 

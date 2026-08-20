@@ -64,15 +64,22 @@
   --color-on-primary: #ffffff;
   --color-on-primary-container: #acefd1;
 
+  /* Secondary is warm orange and tertiary is cool slate-blue, in BOTH themes.
+   * They used to swap hue between light and dark — secondary went orange to
+   * mint, tertiary slate to peach — which showed up worst in the charts, where
+   * "Grade Progress" is a secondary-coloured line and changed colour when the
+   * theme did. A reader toggling the theme saw what looked like a different
+   * series. Only lightness and chroma move between themes now; the hue is the
+   * role's identity. */
   --color-secondary: #9d4300;
-  --color-secondary-container: #fd761a;
+  --color-secondary-container: #ffdbc8;
   --color-on-secondary: #ffffff;
   --color-on-secondary-container: #5c2400;
 
   --color-tertiary: #414c60;
-  --color-tertiary-container: #596479;
+  --color-tertiary-container: #d6e1f9;
   --color-on-tertiary: #ffffff;
-  --color-on-tertiary-container: #d6e1f9;
+  --color-on-tertiary-container: #2a3446;
 
   --color-background: #f8f9fa;
   --color-on-background: #191c1d;
@@ -113,15 +120,16 @@
   --color-on-primary: #003919;
   --color-on-primary-container: #005e2d;
 
-  --color-secondary: #9bd4a5;
-  --color-secondary-container: #1a512d;
-  --color-on-secondary: #003919;
-  --color-on-secondary-container: #8ac294;
+  /* Same hues as light mode, lifted for a dark ground — see the note there. */
+  --color-secondary: #ffb787;
+  --color-secondary-container: #6a3000;
+  --color-on-secondary: #4f2500;
+  --color-on-secondary-container: #ffdbc8;
 
-  --color-tertiary: #ffd9c1;
-  --color-tertiary-container: #ffb47f;
-  --color-on-tertiary: #4f2500;
-  --color-on-tertiary-container: #794418;
+  --color-tertiary: #b3c5e4;
+  --color-tertiary-container: #2a3446;
+  --color-on-tertiary: #253141;
+  --color-on-tertiary-container: #d6e1f9;
 
   --color-background: #0e150f;
   --color-on-background: #dde5da;
@@ -151,8 +159,38 @@
 }
 
 @layer base {
+  /* Tailwind v4's preflight is `border: 0 solid` with no colour, so an
+   * unqualified `border-b` falls back to the CSS initial value — currentColor,
+   * i.e. the text colour. That gave the header, side nav and bottom nav a
+   * near-black hairline in light mode and a near-white one in dark, instead of
+   * the outline colour the design system defines. Naming the default here
+   * fixes those and every future bare border at once. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-outline-variant);
+  }
+
   body {
-    @apply font-sans 
+    @apply font-sans
     bg-background text-on-background transition-colors duration-200;
+  }
+
+  /* Keyboard focus has to be visible. Several controls set
+   * `focus:outline-none` for the mouse case, which removed it for everyone. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

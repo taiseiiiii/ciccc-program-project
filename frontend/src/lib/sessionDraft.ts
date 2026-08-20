@@ -23,8 +23,15 @@ import type AttemptType from "../types/AttemptType";
 /**
  * Bumped whenever the stored shape changes, so an old draft is ignored rather
  * than restored into fields that no longer exist.
+ *
+ * Scoped per account. The key used to be global, and `clearSessionDraft` only
+ * ran when the form emptied — so a draft outlived sign-out, and the next person
+ * to use the same phone was offered the previous climber's half-typed session,
+ * gym name included.
  */
-const STORAGE_KEY = "climblog:session-draft:v1";
+const KEY_PREFIX = "climblog:session-draft:v1";
+
+const storageKey = (userId: string) => `${KEY_PREFIX}:${userId}`;
 
 /** A drafted climb as stored — everything except the File handles. */
 export type StoredClimb = AttemptType;
@@ -73,7 +80,7 @@ function normaliseClimb(raw: unknown): StoredClimb | null {
   const climb = raw as Record<string, unknown>;
 
   return {
-    id: asCount(climb.id, Date.now()),
+    id: asText(climb.id) || crypto.randomUUID(),
     grade_name: asText(climb.grade_name) || "V0",
     route_name: asText(climb.route_name),
     attempt_count: Math.max(1, asCount(climb.attempt_count, 1)),
@@ -86,10 +93,30 @@ function normaliseClimb(raw: unknown): StoredClimb | null {
   };
 }
 
-/** The saved draft, or null when there is none worth restoring. */
-export function readSessionDraft(): StoredDraft | null {
+/**
+ * Adopt a draft written before the key was scoped per account.
+ *
+ * The key gained a user id in this release. Without this, deploying it would
+ * silently discard the half-typed session of anyone who happened to have one
+ * open — which is precisely the failure this whole file exists to prevent.
+ * Runs once: the old key is claimed and removed.
+ */
+function adoptLegacyDraft(userId: string): string | null {
+  const legacy = localStorage.getItem(KEY_PREFIX);
+  if (legacy === null) return null;
+
+  localStorage.removeItem(KEY_PREFIX);
+  // Only claim it if this account has nothing of its own to lose.
+  if (localStorage.getItem(storageKey(userId)) !== null) return null;
+
+  localStorage.setItem(storageKey(userId), legacy);
+  return legacy;
+}
+
+/** The saved draft for one account, or null when there is none worth restoring. */
+export function readSessionDraft(userId: string): StoredDraft | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId)) ?? adoptLegacyDraft(userId);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Record<string, unknown> | null;
@@ -118,18 +145,35 @@ export function readSessionDraft(): StoredDraft | null {
   }
 }
 
-export function writeSessionDraft(draft: StoredDraft): void {
+export function writeSessionDraft(userId: string, draft: StoredDraft): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+    localStorage.setItem(storageKey(userId), JSON.stringify(draft));
   } catch {
     // Private-mode Safari and a full quota both throw here. Losing the backup
     // is not a reason to break the form the climber is typing into.
   }
 }
 
-export function clearSessionDraft(): void {
+export function clearSessionDraft(userId: string): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKey(userId));
+  } catch {
+    // See writeSessionDraft.
+  }
+}
+
+/**
+ * Drop every account's draft. Called on sign-out, alongside clearing the query
+ * cache — a draft is server-shaped data that simply has not been sent yet, and
+ * it should not survive into the next person's session any more than a cached
+ * response would.
+ */
+export function clearAllSessionDrafts(): void {
+  try {
+    // startsWith, so this also catches the unscoped legacy key.
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(KEY_PREFIX)) localStorage.removeItem(key);
+    }
   } catch {
     // See writeSessionDraft.
   }

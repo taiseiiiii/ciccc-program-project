@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { formatDate, formatMonthLong, todayString } from "../lib/date";
 
 import type Performance from "../types/PerformanceType";
 import type { PerformanceUpdate } from "../types/PerformanceType";
@@ -10,7 +11,8 @@ import type { TrainingDrill, TrainingUpdate } from "../types/TrainingType";
 import type ClimbingStats from "../types/ClimbingStatsType";
 import Card from "../components/Card";
 import Button from "../components/Button";
-import ReportNotes from "../components/ReportNotes";
+import ReportCard from "../components/ReportCard";
+import ConfirmDialog from "../components/ConfirmDialog";
 import {
   BarChart,
   Bar,
@@ -32,33 +34,17 @@ const PRIORITY_STYLES: Record<TrainingDrill["priority"], string> = {
   low: "text-on-surface-variant bg-surface-container-high",
 };
 
-const formatDate = (date: string) =>
-  // The T00:00:00 pins the date to local midnight; bare YYYY-MM-DD would be
-  // parsed as UTC and could render as the previous day.
-  new Date(`${date.slice(0, 10)}T00:00:00`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-const formatPeriod = (performance: Performance) =>
-  performance.period_type === "daily"
-    ? formatDate(performance.period_start)
-    : new Date(`${performance.period_start}T00:00:00`).toLocaleDateString(
-        "en-US",
-        { month: "long", year: "numeric" },
-      );
-
-/** Split plain-text report into paragraphs for rendering. */
-const paragraphs = (text: string | null) =>
-  (text ?? "").split(/\n{2,}/).filter((p) => p.trim() !== "");
-
 const chartTooltipStyle = {
   backgroundColor: "var(--color-surface-container-highest)",
   borderColor: "var(--color-outline-variant)",
   borderRadius: "8px",
   color: "var(--color-on-surface)",
 } as const;
+
+const formatPeriod = (performance: Performance) =>
+  performance.period_type === "daily"
+    ? formatDate(performance.period_start)
+    : formatMonthLong(performance.period_start.slice(0, 7));
 
 /**
  * Tries and sends per grade, straight from the report's own stats snapshot.
@@ -159,24 +145,109 @@ const TagChart = ({
   );
 };
 
+/** A row of headline figures from a report's stats snapshot. */
+const StatRow = ({ stats }: { stats: ClimbingStats }) => (
+  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-3 border-t border-outline-variant text-on-surface-variant">
+    <p>
+      Sessions:{" "}
+      <span className="font-bold text-on-surface tabular-nums">
+        {stats.total_sessions}
+      </span>
+    </p>
+    <p>
+      Tries:{" "}
+      <span className="font-bold text-on-surface tabular-nums">
+        {stats.total_attempts}
+      </span>
+    </p>
+    <p>
+      Sends:{" "}
+      <span className="font-bold text-on-surface tabular-nums">
+        {stats.total_sends}
+      </span>
+    </p>
+    <p>
+      Success rate:{" "}
+      <span className="font-bold text-primary tabular-nums">
+        {stats.success_rate}%
+      </span>
+    </p>
+    {stats.flash_count !== undefined && stats.flash_count > 0 && (
+      <p>
+        Flashes:{" "}
+        <span className="font-bold text-on-surface tabular-nums">
+          {stats.flash_count}
+        </span>
+      </p>
+    )}
+    {stats.highest_sent_grade && (
+      <p>
+        Highest send:{" "}
+        <span className="font-bold text-on-surface">
+          {stats.highest_sent_grade}
+        </span>
+      </p>
+    )}
+  </div>
+);
+
+/** The row of buttons that switches between saved reports. */
+const ReportSwitcher = <T,>({
+  items,
+  getKey,
+  getLabel,
+  isPinned,
+  isSelected,
+  onSelect,
+}: {
+  items: T[];
+  getKey: (item: T) => number;
+  getLabel: (item: T) => string;
+  isPinned: (item: T) => boolean;
+  isSelected: (item: T) => boolean;
+  onSelect: (item: T) => void;
+}) => {
+  if (items.length <= 1) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {items.map((item) => (
+        <Button
+          key={getKey(item)}
+          variant="secondary"
+          onClick={() => onSelect(item)}
+          className={
+            isSelected(item) ? "bg-primary text-on-primary hover:bg-primary-container" : ""
+          }
+        >
+          {isPinned(item) && "★ "}
+          {getLabel(item)}
+        </Button>
+      ))}
+    </div>
+  );
+};
+
+/** What the confirm dialog is currently asking about. */
+type PendingDelete =
+  | { kind: "performance"; id: number }
+  | { kind: "training"; id: number }
+  | null;
+
 const AICoach = () => {
-  const today = new Date().toLocaleDateString("sv-SE");
+  const today = todayString();
   const [periodType, setPeriodType] = useState<"daily" | "monthly">("monthly");
-  const [selectedPerformanceId, setSelectedPerformanceId] = useState<
-    number | null
-  >(null);
-  const [selectedTrainingId, setSelectedTrainingId] = useState<number | null>(
+  const [selectedPerformanceId, setSelectedPerformanceId] = useState<number | null>(
     null,
   );
+  const [selectedTrainingId, setSelectedTrainingId] = useState<number | null>(null);
   // Which report's long-form text is expanded, rather than a bare boolean:
   // storing the id means switching reports collapses the disclosure without an
   // effect to reset it.
-  const [detailForPerformanceId, setDetailForPerformanceId] = useState<
-    number | null
-  >(null);
-  const [detailForTrainingId, setDetailForTrainingId] = useState<number | null>(
+  const [detailForPerformanceId, setDetailForPerformanceId] = useState<number | null>(
     null,
   );
+  const [detailForTrainingId, setDetailForTrainingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
 
   const queryClient = useQueryClient();
 
@@ -205,12 +276,6 @@ const AICoach = () => {
   const training =
     trainings.find((t) => t.training_id === selectedTrainingId) ?? trainings[0];
 
-  const showPerformanceDetail =
-    performance !== undefined &&
-    detailForPerformanceId === performance.performance_id;
-  const showTrainingDetail =
-    training !== undefined && detailForTrainingId === training.training_id;
-
   // Generation is synchronous on the server (one model round-trip), so the
   // mutation typically resolves in a few seconds — the button shows progress.
   const { mutate: generateAnalysis, isPending: isAnalyzing } = useMutation({
@@ -226,11 +291,7 @@ const AICoach = () => {
       setSelectedPerformanceId(res.data.performance_id);
       toast.success("Performance analysis ready");
     },
-    onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to generate analysis",
-      );
-    },
+    onError: (err) => toast.error(err.message),
   });
 
   const { mutate: generatePlan, isPending: isPlanning } = useMutation({
@@ -244,28 +305,18 @@ const AICoach = () => {
       setSelectedTrainingId(res.data.training_id);
       toast.success("Training plan ready");
     },
-    onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to generate training plan",
-      );
-    },
+    onError: (err) => toast.error(err.message),
   });
 
-  const { mutate: savePerformance, isPending: isSavingPerformance } =
-    useMutation({
-      mutationFn: ({ id, patch }: { id: number; patch: PerformanceUpdate }) =>
-        api(`/performances/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify(patch),
-        }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["performances"] });
-        toast.success("Saved");
-      },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : "Failed to save");
-      },
-    });
+  const { mutate: savePerformance, isPending: isSavingPerformance } = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: PerformanceUpdate }) =>
+      api(`/performances/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["performances"] });
+      toast.success("Saved");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const { mutate: saveTraining, isPending: isSavingTraining } = useMutation({
     mutationFn: ({ id, patch }: { id: number; patch: TrainingUpdate }) =>
@@ -274,34 +325,30 @@ const AICoach = () => {
       queryClient.invalidateQueries({ queryKey: ["trainings"] });
       toast.success("Saved");
     },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
-    },
+    onError: (err) => toast.error(err.message),
   });
 
-  const { mutate: deletePerformance } = useMutation({
-    mutationFn: (id: number) =>
-      api(`/performances/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performances"] });
-      setSelectedPerformanceId(null);
-      toast.success("Report deleted");
+  const { mutate: deleteReport, isPending: isDeleting } = useMutation({
+    mutationFn: (target: NonNullable<PendingDelete>) =>
+      api(
+        target.kind === "performance"
+          ? `/performances/${target.id}`
+          : `/trainings/${target.id}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_res, target) => {
+      if (target.kind === "performance") {
+        queryClient.invalidateQueries({ queryKey: ["performances"] });
+        setSelectedPerformanceId(null);
+        toast.success("Report deleted");
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["trainings"] });
+        setSelectedTrainingId(null);
+        toast.success("Training plan deleted");
+      }
+      setPendingDelete(null);
     },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
-    },
-  });
-
-  const { mutate: deleteTraining } = useMutation({
-    mutationFn: (id: number) => api(`/trainings/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["trainings"] });
-      setSelectedTrainingId(null);
-      toast.success("Training plan deleted");
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
-    },
+    onError: (err) => toast.error(err.message),
   });
 
   const analysis = performance?.analysis_data;
@@ -326,9 +373,7 @@ const AICoach = () => {
       performances
         .filter((p) => p.period_type === "monthly" && p.analysis_data?.stats)
         .map((p) => ({
-          period: new Date(
-            `${p.period_start}T00:00:00`,
-          ).toLocaleDateString("en-US", { month: "short" }),
+          period: formatMonthLong(p.period_start.slice(0, 7)).split(" ")[0],
           successRate: p.analysis_data!.stats.success_rate,
           sends: p.analysis_data!.stats.total_sends,
         }))
@@ -338,6 +383,21 @@ const AICoach = () => {
 
   return (
     <div className="max-w-5xl mx-auto">
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteReport(pendingDelete)}
+        title={
+          pendingDelete?.kind === "training"
+            ? "Delete this training plan?"
+            : "Delete this report?"
+        }
+        // A generated report is a snapshot: regenerating gives a new one from
+        // today's data, not this one back.
+        message="This deletes the AI's text, the stats it was based on, and any notes you wrote next to it. It cannot be regenerated as it was."
+        isPending={isDeleting}
+      />
+
       <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
         AI Coach
       </h1>
@@ -353,12 +413,14 @@ const AICoach = () => {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             onClick={() => setPeriodType("daily")}
+            aria-pressed={periodType === "daily"}
             className={periodType === "daily" ? "" : UNSELECTED_BUTTON}
           >
             Today
           </Button>
           <Button
             onClick={() => setPeriodType("monthly")}
+            aria-pressed={periodType === "monthly"}
             className={periodType === "monthly" ? "" : UNSELECTED_BUTTON}
           >
             This Month
@@ -377,60 +439,62 @@ const AICoach = () => {
         <Card className="mt-3">
           <p className="font-bold">No analysis yet</p>
           <p className="text-on-surface-variant mt-1">
-            Pick a period and hit “Generate Analysis” — the AI coach will
-            review the sessions you logged and report on your strengths,
-            weaknesses and grade trajectory.
+            Pick a period and hit “Generate Analysis” — the AI coach will review
+            the sessions you logged and report on your strengths, weaknesses and
+            grade trajectory.
           </p>
         </Card>
       ) : (
-        <Card className="mt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-primary bg-primary/10 font-bold px-2.5 py-1 rounded-full text-xs uppercase tracking-wide">
-              {performance.period_type} report · {formatPeriod(performance)}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                aria-pressed={performance.is_pinned}
-                title={performance.is_pinned ? "Unpin" : "Pin to the top"}
-                onClick={() =>
-                  savePerformance({
-                    id: performance.performance_id,
-                    patch: { is_pinned: !performance.is_pinned },
-                  })
-                }
-                className={`cursor-pointer text-lg leading-none ${
-                  performance.is_pinned
-                    ? "text-primary"
-                    : "text-on-surface-variant hover:text-on-surface"
-                }`}
-              >
-                {performance.is_pinned ? "★" : "☆"}
-              </button>
-              <span className="text-on-surface-variant text-xs">
-                {performance.ai_model} · generated{" "}
-                {formatDate(performance.created_at)}
-              </span>
-            </div>
-          </div>
-
-          {/* The two lines. Everything else on this card is optional reading. */}
-          {performanceSummary && (
-            <p className="text-on-surface text-headline-sm font-medium mt-3 leading-snug">
-              {performanceSummary}
-            </p>
-          )}
-
-          {analysis && (
-            <p className="text-on-surface-variant mt-2">
-              Trending toward{" "}
-              <span className="text-primary font-bold">
-                {analysis.grade_projection}
-              </span>
-              . {analysis.focus_advice}
-            </p>
-          )}
-
+        <ReportCard
+          reportId={performance.performance_id}
+          label={`${performance.period_type} report · ${formatPeriod(performance)}`}
+          aiModel={performance.ai_model}
+          createdAt={performance.created_at}
+          isPinned={performance.is_pinned}
+          onTogglePin={() =>
+            savePerformance({
+              id: performance.performance_id,
+              patch: { is_pinned: !performance.is_pinned },
+            })
+          }
+          summary={performanceSummary}
+          subtitle={
+            analysis && (
+              <>
+                Trending toward{" "}
+                <span className="text-primary font-bold">
+                  {analysis.grade_projection}
+                </span>
+                . {analysis.focus_advice}
+              </>
+            )
+          }
+          detail={performance.performance_report}
+          isDetailOpen={detailForPerformanceId === performance.performance_id}
+          onToggleDetail={() =>
+            setDetailForPerformanceId(
+              detailForPerformanceId === performance.performance_id
+                ? null
+                : performance.performance_id,
+            )
+          }
+          showLabel="Read the full analysis"
+          hideLabel="Hide the full analysis"
+          titlePlaceholder="Name this report — e.g. 'the month I got V5'"
+          notePlaceholder="Was the coach right? What did you change, and what happened?"
+          initialTitle={performance.title}
+          initialNote={performance.user_note}
+          isSaving={isSavingPerformance}
+          onSaveNotes={(patch) =>
+            savePerformance({ id: performance.performance_id, patch })
+          }
+          onDelete={() =>
+            setPendingDelete({
+              kind: "performance",
+              id: performance.performance_id,
+            })
+          }
+        >
           {stats && <GradeChart stats={stats} />}
           {stats?.wall_breakdown && (
             <TagChart
@@ -452,8 +516,10 @@ const AICoach = () => {
                   Strengths
                 </p>
                 <ul className="mt-2 list-disc list-inside">
-                  {analysis.strengths.map((item) => (
-                    <li key={item}>{item}</li>
+                  {/* Keyed by index: these are model-generated strings and two
+                      of them can legitimately be identical. */}
+                  {analysis.strengths.map((item, i) => (
+                    <li key={i}>{item}</li>
                   ))}
                 </ul>
               </div>
@@ -462,8 +528,8 @@ const AICoach = () => {
                   Weaknesses
                 </p>
                 <ul className="mt-2 list-disc list-inside">
-                  {analysis.weaknesses.map((item) => (
-                    <li key={item}>{item}</li>
+                  {analysis.weaknesses.map((item, i) => (
+                    <li key={i}>{item}</li>
                   ))}
                 </ul>
               </div>
@@ -490,95 +556,8 @@ const AICoach = () => {
               </div>
             )}
 
-          {stats && (
-            <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-3 border-t border-outline-variant text-on-surface-variant">
-              <p>
-                Sessions:{" "}
-                <span className="font-bold text-on-surface">
-                  {stats.total_sessions}
-                </span>
-              </p>
-              <p>
-                Tries:{" "}
-                <span className="font-bold text-on-surface">
-                  {stats.total_attempts}
-                </span>
-              </p>
-              <p>
-                Sends:{" "}
-                <span className="font-bold text-on-surface">
-                  {stats.total_sends}
-                </span>
-              </p>
-              <p>
-                Success rate:{" "}
-                <span className="font-bold text-primary">
-                  {stats.success_rate}%
-                </span>
-              </p>
-              {stats.flash_count !== undefined && stats.flash_count > 0 && (
-                <p>
-                  Flashes:{" "}
-                  <span className="font-bold text-on-surface">
-                    {stats.flash_count}
-                  </span>
-                </p>
-              )}
-              {stats.highest_sent_grade && (
-                <p>
-                  Highest send:{" "}
-                  <span className="font-bold text-on-surface">
-                    {stats.highest_sent_grade}
-                  </span>
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* The long version, collapsed. */}
-          {paragraphs(performance.performance_report).length > 0 && (
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() =>
-                  setDetailForPerformanceId(
-                    showPerformanceDetail ? null : performance.performance_id,
-                  )
-                }
-                className="text-primary text-label-md hover:underline cursor-pointer"
-              >
-                {showPerformanceDetail
-                  ? "Hide the full analysis"
-                  : "Read the full analysis"}
-              </button>
-              {showPerformanceDetail &&
-                paragraphs(performance.performance_report).map((text, i) => (
-                  <p key={i} className="mt-3">
-                    {text}
-                  </p>
-                ))}
-            </div>
-          )}
-
-          {/*
-            The climber's own layer. The AI text above is never editable —
-            comparing what it predicted with what happened only works if it
-            still says what it said. Keyed by report id so switching reports
-            remounts it with that report's note.
-          */}
-          <ReportNotes
-            key={performance.performance_id}
-            initialTitle={performance.title}
-            initialNote={performance.user_note}
-            titlePlaceholder="Name this report — e.g. 'the month I got V5'"
-            notePlaceholder="Was the coach right? What did you change, and what happened?"
-            isSaving={isSavingPerformance}
-            onSave={(patch) =>
-              savePerformance({ id: performance.performance_id, patch })
-            }
-            onDelete={() => deletePerformance(performance.performance_id)}
-          />
-        </Card>
+          {stats && <StatRow stats={stats} />}
+        </ReportCard>
       )}
 
       {/* ---------------- Review ---------------- */}
@@ -590,11 +569,7 @@ const AICoach = () => {
           <div className="h-52 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
-                <XAxis
-                  dataKey="period"
-                  stroke="var(--color-outline)"
-                  fontSize={12}
-                />
+                <XAxis dataKey="period" stroke="var(--color-outline)" fontSize={12} />
                 <YAxis
                   stroke="var(--color-outline)"
                   fontSize={12}
@@ -618,26 +593,17 @@ const AICoach = () => {
         </Card>
       )}
 
-      {performances.length > 1 && (
-        <div className="flex flex-wrap gap-2 mt-3">
-          {performances.map((p) => (
-            <Button
-              key={p.performance_id}
-              variant="secondary"
-              onClick={() => setSelectedPerformanceId(p.performance_id)}
-              className={
-                p.performance_id === performance?.performance_id
-                  ? "bg-primary text-on-primary hover:bg-primary-container"
-                  : ""
-              }
-            >
-              {p.is_pinned && "★ "}
-              {p.title ??
-                `${p.period_type === "daily" ? "Daily" : "Monthly"} · ${formatPeriod(p)}`}
-            </Button>
-          ))}
-        </div>
-      )}
+      <ReportSwitcher
+        items={performances}
+        getKey={(p) => p.performance_id}
+        getLabel={(p) =>
+          p.title ??
+          `${p.period_type === "daily" ? "Daily" : "Monthly"} · ${formatPeriod(p)}`
+        }
+        isPinned={(p) => p.is_pinned}
+        isSelected={(p) => p.performance_id === performance?.performance_id}
+        onSelect={(p) => setSelectedPerformanceId(p.performance_id)}
+      />
 
       {/* ---------------- Training plan ---------------- */}
       <div className="mt-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -657,50 +623,48 @@ const AICoach = () => {
         <Card className="mt-3">
           <p className="font-bold">No training plan yet</p>
           <p className="text-on-surface-variant mt-1">
-            Hit “Generate Training Plan” and the AI coach will design drills
-            for the coming weeks from your last 30 days of climbing and your
-            goals.
+            Hit “Generate Training Plan” and the AI coach will design drills for
+            the coming weeks from your last 30 days of climbing and your goals.
           </p>
         </Card>
       ) : (
-        <Card className="mt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-primary bg-primary/10 font-bold px-2.5 py-1 rounded-full text-xs uppercase tracking-wide">
-              Training plan
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                aria-pressed={training.is_pinned}
-                title={training.is_pinned ? "Unpin" : "Pin to the top"}
-                onClick={() =>
-                  saveTraining({
-                    id: training.training_id,
-                    patch: { is_pinned: !training.is_pinned },
-                  })
-                }
-                className={`cursor-pointer text-lg leading-none ${
-                  training.is_pinned
-                    ? "text-primary"
-                    : "text-on-surface-variant hover:text-on-surface"
-                }`}
-              >
-                {training.is_pinned ? "★" : "☆"}
-              </button>
-              <span className="text-on-surface-variant text-xs">
-                {training.ai_model} · generated{" "}
-                {formatDate(training.created_at)}
-              </span>
-            </div>
-          </div>
-
-          {planSummary && (
-            <p className="text-on-surface text-headline-sm font-medium mt-3 leading-snug">
-              {planSummary}
-            </p>
-          )}
-          {plan && <p className="text-on-surface-variant mt-2">{plan.focus}</p>}
-
+        <ReportCard
+          reportId={training.training_id}
+          label="Training plan"
+          aiModel={training.ai_model}
+          createdAt={training.created_at}
+          isPinned={training.is_pinned}
+          onTogglePin={() =>
+            saveTraining({
+              id: training.training_id,
+              patch: { is_pinned: !training.is_pinned },
+            })
+          }
+          summary={planSummary}
+          subtitle={plan?.focus}
+          detail={training.training_report}
+          isDetailOpen={detailForTrainingId === training.training_id}
+          onToggleDetail={() =>
+            setDetailForTrainingId(
+              detailForTrainingId === training.training_id
+                ? null
+                : training.training_id,
+            )
+          }
+          showLabel="Read the full plan"
+          hideLabel="Hide the full plan"
+          titlePlaceholder="Name this plan — e.g. 'winter power block'"
+          notePlaceholder="Which drills did you actually do? What worked?"
+          initialTitle={training.title}
+          initialNote={training.user_note}
+          isSaving={isSavingTraining}
+          onSaveNotes={(patch) =>
+            saveTraining({ id: training.training_id, patch })
+          }
+          onDelete={() =>
+            setPendingDelete({ kind: "training", id: training.training_id })
+          }
+        >
           {/*
             Drills the server dropped because they would have loaded an injured
             body part. Said out loud rather than hidden — a plan that quietly
@@ -708,9 +672,7 @@ const AICoach = () => {
           */}
           {plan?.removed_for_injury && plan.removed_for_injury.length > 0 && (
             <div className="mt-3 p-3 rounded-lg bg-error-container text-on-error-container">
-              <p className="font-bold text-body-sm">
-                Adjusted around your injury
-              </p>
+              <p className="font-bold text-body-sm">Adjusted around your injury</p>
               <p className="text-body-sm opacity-90 mt-1">
                 Removed: {plan.removed_for_injury.join(", ")}. See a doctor or
                 physiotherapist if the pain persists or worsens.
@@ -720,11 +682,8 @@ const AICoach = () => {
 
           {plan && (
             <div className="flex flex-col gap-3 mt-4">
-              {plan.drills.map((drill) => (
-                <div
-                  key={drill.title}
-                  className="bg-surface-container-high rounded-lg p-4"
-                >
+              {plan.drills.map((drill, i) => (
+                <div key={i} className="bg-surface-container-high rounded-lg p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-bold">{drill.title}</p>
                     <span
@@ -743,70 +702,21 @@ const AICoach = () => {
               ))}
             </div>
           )}
-
-          {paragraphs(training.training_report).length > 0 && (
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() =>
-                  setDetailForTrainingId(
-                    showTrainingDetail ? null : training.training_id,
-                  )
-                }
-                className="text-primary text-label-md hover:underline cursor-pointer"
-              >
-                {showTrainingDetail
-                  ? "Hide the full plan"
-                  : "Read the full plan"}
-              </button>
-              {showTrainingDetail &&
-                paragraphs(training.training_report).map((text, i) => (
-                  <p key={i} className="mt-3">
-                    {text}
-                  </p>
-                ))}
-            </div>
-          )}
-
-          <ReportNotes
-            key={training.training_id}
-            initialTitle={training.title}
-            initialNote={training.user_note}
-            titlePlaceholder="Name this plan — e.g. 'winter power block'"
-            notePlaceholder="Which drills did you actually do? What worked?"
-            isSaving={isSavingTraining}
-            onSave={(patch) =>
-              saveTraining({ id: training.training_id, patch })
-            }
-            onDelete={() => deleteTraining(training.training_id)}
-          />
-        </Card>
+        </ReportCard>
       )}
 
-      {trainings.length > 1 && (
-        <div className="flex flex-wrap gap-2 mt-3">
-          {trainings.map((t) => (
-            <Button
-              key={t.training_id}
-              variant="secondary"
-              onClick={() => setSelectedTrainingId(t.training_id)}
-              className={
-                t.training_id === training?.training_id
-                  ? "bg-primary text-on-primary hover:bg-primary-container"
-                  : ""
-              }
-            >
-              {t.is_pinned && "★ "}
-              {t.title ?? formatDate(t.created_at)}
-            </Button>
-          ))}
-        </div>
-      )}
+      <ReportSwitcher
+        items={trainings}
+        getKey={(t) => t.training_id}
+        getLabel={(t) => t.title ?? formatDate(t.created_at)}
+        isPinned={(t) => t.is_pinned}
+        isSelected={(t) => t.training_id === training?.training_id}
+        onSelect={(t) => setSelectedTrainingId(t.training_id)}
+      />
 
       <p className="text-on-surface-variant text-body-sm mt-8">
-        AI coaching is generated from your logged data and is not medical
-        advice. If something hurts, rest it and see a doctor or
-        physiotherapist.
+        AI coaching is generated from your logged data and is not medical advice.
+        If something hurts, rest it and see a doctor or physiotherapist.
       </p>
     </div>
   );

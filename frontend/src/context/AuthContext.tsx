@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { api } from "../lib/api";
+import { clearAllSessionDrafts } from "../lib/sessionDraft";
 import { AuthContext, type AuthContextValue } from "../hooks/useAuth";
 import type User from "../types/UserType";
 
@@ -34,8 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       // Drop all cached server data whenever the user signs out — whether via
       // the sign-out button or an expired session — so an account signing in
-      // afterwards can never see the previous account's data.
-      if (event === "SIGNED_OUT") queryClient.clear();
+      // afterwards can never see the previous account's data. The unsaved log
+      // draft goes with it, for the same reason: it is server-shaped data that
+      // simply has not been sent yet.
+      if (event === "SIGNED_OUT") {
+        queryClient.clear();
+        clearAllSessionDrafts();
+      }
       setSession(s);
     });
     return () => sub.subscription.unsubscribe();

@@ -1,4 +1,5 @@
 import { query } from "../db/pool";
+import { buildUpdate } from "../utils/buildUpdate";
 
 /** Shape of a row in the `goals` table (a user's target grade). */
 export interface Goal {
@@ -85,8 +86,8 @@ export const goalRepository = {
   },
 
   /**
-   * Partial update. Builds the SET clause only from the fields provided so a
-   * missing field is left untouched (rather than overwritten with NULL).
+   * Partial update. Only the fields provided are written, so a missing field is
+   * left untouched rather than overwritten with NULL. See utils/buildUpdate.
    *
    * `achieved_at` is derived from `is_achieved`: it is stamped with now() when a
    * goal flips to achieved and cleared when it flips back, so the two stay
@@ -97,44 +98,29 @@ export const goalRepository = {
     userId: number,
     input: UpdateGoalInput,
   ): Promise<Goal | null> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-
-    if (input.grade_id !== undefined) {
-      values.push(input.grade_id);
-      fields.push(`grade_id = $${values.length}`);
-    }
-    if (input.goal_description !== undefined) {
-      values.push(input.goal_description);
-      fields.push(`goal_description = $${values.length}`);
-    }
-    if (input.target_date !== undefined) {
-      values.push(input.target_date);
-      fields.push(`target_date = $${values.length}`);
-    }
-    if (input.is_achieved !== undefined) {
-      values.push(input.is_achieved);
-      fields.push(`is_achieved = $${values.length}`);
-      // Keep achieved_at in lockstep with the flag.
-      fields.push(
-        `achieved_at = CASE WHEN $${values.length} THEN now() ELSE NULL END`,
-      );
-    }
-
-    if (fields.length === 0) {
-      return this.findById(id, userId);
-    }
-
-    values.push(id);
-    const idIdx = values.length;
-    values.push(userId);
-    const userIdx = values.length;
-    const { rows } = await query<Goal>(
-      `UPDATE goals SET ${fields.join(", ")}
-       WHERE goal_id = $${idIdx} AND user_id = $${userIdx}
-       RETURNING *`,
-      values,
+    const statement = buildUpdate(
+      "goals",
+      {
+        grade_id: input.grade_id,
+        goal_description: input.goal_description,
+        target_date: input.target_date,
+        is_achieved: input.is_achieved,
+      },
+      { goal_id: id, user_id: userId },
+      {
+        returning: "*",
+        // Keep achieved_at in lockstep with the flag.
+        extra: (bind) =>
+          input.is_achieved === undefined
+            ? []
+            : [
+                `achieved_at = CASE WHEN ${bind(input.is_achieved)} THEN now() ELSE NULL END`,
+              ],
+      },
     );
+    if (!statement) return this.findById(id, userId);
+
+    const { rows } = await query<Goal>(statement.text, statement.values);
     return rows[0] ?? null;
   },
 
