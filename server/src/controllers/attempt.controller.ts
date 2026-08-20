@@ -3,6 +3,8 @@ import { attemptRepository } from "../repositories/attempt.repository";
 import { gradeRepository } from "../repositories/grade.repository";
 import { taxonomyRepository } from "../repositories/taxonomy.repository";
 import { weaknessRepository } from "../repositories/weakness.repository";
+import { mediaRepository } from "../repositories/media.repository";
+import { deleteObjects } from "../services/r2.service";
 import { HttpError } from "../utils/HttpError";
 import {
   optionalIdArray,
@@ -191,10 +193,20 @@ export const attemptController = {
   // DELETE /api/v1/attempts/:id
   async remove(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
+
+    // Read before deleting: the cascade takes the media rows with the climb,
+    // and nothing afterwards remembers which files were attached to it.
+    const paths = await mediaRepository.findPathsByAttempt(
+      id,
+      req.user!.user_id,
+    );
+
     const deleted = await attemptRepository.remove(id, req.user!.user_id);
     if (!deleted) {
       throw HttpError.notFound(`Attempt ${id} not found`);
     }
+
+    await deleteObjects(paths);
     res.status(204).send();
   },
 };

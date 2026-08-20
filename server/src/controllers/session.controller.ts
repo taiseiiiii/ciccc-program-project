@@ -5,6 +5,8 @@ import {
 } from "../repositories/session.repository";
 import { taxonomyRepository } from "../repositories/taxonomy.repository";
 import { weaknessRepository } from "../repositories/weakness.repository";
+import { mediaRepository } from "../repositories/media.repository";
+import { deleteObjects } from "../services/r2.service";
 import { HttpError } from "../utils/HttpError";
 import {
   optionalDate,
@@ -212,10 +214,24 @@ export const sessionController = {
   // DELETE /api/v1/sessions/:id
   async remove(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
+
+    // Read the object keys first: deleting the session cascades the media rows
+    // away, and after that nothing remembers which files belonged to it. They
+    // used to be stranded in the bucket for exactly this reason — the server
+    // had no way to reach storage at all.
+    const paths = await mediaRepository.findPathsBySession(
+      id,
+      req.user!.user_id,
+    );
+
     const deleted = await sessionRepository.remove(id, req.user!.user_id);
     if (!deleted) {
       throw HttpError.notFound(`Session ${id} not found`);
     }
+
+    // After the rows are gone, and best effort: the delete the climber asked
+    // for has happened, and a file that outlives it costs quota, not data.
+    await deleteObjects(paths);
     res.status(204).send();
   },
 };

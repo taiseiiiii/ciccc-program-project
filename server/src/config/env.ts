@@ -28,6 +28,13 @@ export const env = {
   // the AI endpoints then answer 503 instead of taking the whole API down.
   openaiApiKey: process.env.OPENAI_API_KEY || undefined,
   openaiModel: process.env.OPENAI_MODEL || "gpt-4o",
+  // Cloudflare R2 (photo/video storage). Optional for the same reason as the
+  // OpenAI key: a server without it still runs, and only the media endpoints
+  // answer 503. See ../services/r2.service.ts.
+  r2AccountId: process.env.R2_ACCOUNT_ID || undefined,
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || undefined,
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || undefined,
+  r2Bucket: process.env.R2_BUCKET || undefined,
 } as const;
 
 export const isProduction = env.nodeEnv === "production";
