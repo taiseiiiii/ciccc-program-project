@@ -1,14 +1,11 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import Button from "./Button";
 import Card from "./Card";
-import ReportNotes from "./ReportNotes";
+import Input from "./Input";
+import Textarea from "./Textarea";
 import { formatDate } from "../lib/date";
 
 interface ReportCardProps {
-  /**
-   * The report this card is showing. Used as the notes editor's remount key —
-   * see the note on `<ReportNotes>` below.
-   */
-  reportId: number;
   /** The pill in the top-left — "monthly report · August 2026", "Training plan". */
   label: string;
   /** Model name and generation date, shown small in the corner. */
@@ -54,9 +51,14 @@ function paragraphs(text: string | null): string[] {
  * long-form disclosure, same notes footer. Only the middle differs, so that
  * part is `children` and everything around it is shared. Behaviour that used to
  * be duplicated is now identical by construction.
+ *
+ * **Mount this with `key={reportId}`.** The title and note drafts start from
+ * props and live in local state, so switching reports has to remount the card
+ * to reseed them. Without that key the previous report's half-typed note stays
+ * in the boxes, and saving writes it onto the wrong report. The key used to sit
+ * on an inner notes component; it moved out here when the title did.
  */
 export default function ReportCard({
-  reportId,
   label,
   aiModel,
   createdAt,
@@ -78,7 +80,19 @@ export default function ReportCard({
   onSaveNotes,
   onDelete,
 }: ReportCardProps) {
+  const [title, setTitle] = useState(initialTitle ?? "");
+  const [note, setNote] = useState(initialNote ?? "");
   const body = paragraphs(detail);
+
+  const isDirty = title !== (initialTitle ?? "") || note !== (initialNote ?? "");
+
+  const save = () =>
+    onSaveNotes({
+      // Empty means "no note", not an empty string — the column is nullable and
+      // the UI checks for null to decide what to show.
+      title: title.trim() || null,
+      user_note: note.trim() || null,
+    });
 
   return (
     <Card className="mt-3">
@@ -104,6 +118,24 @@ export default function ReportCard({
             {aiModel} · generated {formatDate(createdAt)}
           </span>
         </div>
+      </div>
+
+      {/*
+        Naming a report is what makes an archive of them navigable — the browser
+        lists reports by their title, falling back to a date. At the bottom of
+        the card, below the charts and a collapsed essay, nobody found it, so
+        every report was called "Aug 19, 2026". Here it reads as what it is: the
+        heading of the thing you are looking at.
+      */}
+      <div className="mt-3">
+        <Input
+          type="text"
+          label="Name this report"
+          placeholder={titlePlaceholder}
+          maxLength={120}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </div>
 
       {/* The two lines. Everything else on this card is optional reading. */}
@@ -135,25 +167,30 @@ export default function ReportCard({
       )}
 
       {/*
-        The climber's own layer. The AI text above is never editable — comparing
-        what it predicted with what happened only works if it still says what it
-        said.
-
-        `key` is load-bearing, not decoration. ReportNotes seeds its local draft
-        from these props once, so without a key that changes per report,
-        switching reports leaves the previous one's half-typed note in the
-        boxes — and saving would then write it onto the wrong report.
+        What actually happened, written afterwards. The AI text above is never
+        editable — comparing what it predicted with what happened only works if
+        it still says what it said.
       */}
-      <ReportNotes
-        key={reportId}
-        initialTitle={initialTitle}
-        initialNote={initialNote}
-        titlePlaceholder={titlePlaceholder}
-        notePlaceholder={notePlaceholder}
-        isSaving={isSaving}
-        onSave={onSaveNotes}
-        onDelete={onDelete}
-      />
+      <div className="mt-4 pt-4 border-t border-outline-variant">
+        <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
+          Your notes
+        </p>
+        <Textarea
+          placeholder={notePlaceholder}
+          className="min-h-24"
+          maxLength={4000}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div className="flex justify-between items-center mt-3">
+          <Button variant="error" onClick={onDelete}>
+            Delete
+          </Button>
+          <Button disabled={!isDirty || isSaving} onClick={save}>
+            {isSaving ? "Saving..." : "Save notes"}
+          </Button>
+        </div>
+      </div>
     </Card>
   );
 }

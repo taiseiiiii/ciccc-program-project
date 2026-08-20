@@ -9,13 +9,16 @@ interface ModalProps {
   /** Buttons along the bottom. Laid out by the caller. */
   footer?: ReactNode;
   /** Roughly how much content it holds. */
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
 }
 
 const WIDTHS = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-xl",
+  // For a list of things to choose between, where lg forces every row to wrap.
+  "2xl": "max-w-2xl",
 } as const;
 
 /**

@@ -12,6 +12,7 @@ import type ClimbingStats from "../types/ClimbingStatsType";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import ReportCard from "../components/ReportCard";
+import ReportBrowserModal from "../components/ReportBrowserModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import {
   BarChart,
@@ -191,42 +192,6 @@ const StatRow = ({ stats }: { stats: ClimbingStats }) => (
   </div>
 );
 
-/** The row of buttons that switches between saved reports. */
-const ReportSwitcher = <T,>({
-  items,
-  getKey,
-  getLabel,
-  isPinned,
-  isSelected,
-  onSelect,
-}: {
-  items: T[];
-  getKey: (item: T) => number;
-  getLabel: (item: T) => string;
-  isPinned: (item: T) => boolean;
-  isSelected: (item: T) => boolean;
-  onSelect: (item: T) => void;
-}) => {
-  if (items.length <= 1) return null;
-  return (
-    <div className="flex flex-wrap gap-2 mt-3">
-      {items.map((item) => (
-        <Button
-          key={getKey(item)}
-          variant="secondary"
-          onClick={() => onSelect(item)}
-          className={
-            isSelected(item) ? "bg-primary text-on-primary hover:bg-primary-container" : ""
-          }
-        >
-          {isPinned(item) && "★ "}
-          {getLabel(item)}
-        </Button>
-      ))}
-    </div>
-  );
-};
-
 /** What the confirm dialog is currently asking about. */
 type PendingDelete =
   | { kind: "performance"; id: number }
@@ -248,6 +213,8 @@ const AICoach = () => {
   );
   const [detailForTrainingId, setDetailForTrainingId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
+  const [browsingPerformances, setBrowsingPerformances] = useState(false);
+  const [browsingTrainings, setBrowsingTrainings] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -268,13 +235,38 @@ const AICoach = () => {
     [performancesData],
   );
   const trainings = trainingsData?.data ?? [];
+
+  // A report chosen in the browser may be older than the first page these
+  // queries hold, in which case it has to be fetched on its own. Without this
+  // the page would silently fall back to the newest report and look as though
+  // the choice had not registered.
+  const { data: pickedPerformance } = useQuery({
+    queryKey: ["performances", selectedPerformanceId],
+    queryFn: () =>
+      api<{ data: Performance }>(`/performances/${selectedPerformanceId}`),
+    enabled:
+      selectedPerformanceId !== null &&
+      !performances.some((p) => p.performance_id === selectedPerformanceId),
+  });
+
+  const { data: pickedTraining } = useQuery({
+    queryKey: ["trainings", selectedTrainingId],
+    queryFn: () => api<{ data: Training }>(`/trainings/${selectedTrainingId}`),
+    enabled:
+      selectedTrainingId !== null &&
+      !trainings.some((t) => t.training_id === selectedTrainingId),
+  });
+
   // Lists are pinned-first then newest-first, so with nothing selected we show
   // whatever the climber flagged as worth keeping, or else the latest.
   const performance =
     performances.find((p) => p.performance_id === selectedPerformanceId) ??
+    pickedPerformance?.data ??
     performances[0];
   const training =
-    trainings.find((t) => t.training_id === selectedTrainingId) ?? trainings[0];
+    trainings.find((t) => t.training_id === selectedTrainingId) ??
+    pickedTraining?.data ??
+    trainings[0];
 
   // Generation is synchronous on the server (one model round-trip), so the
   // mutation typically resolves in a few seconds — the button shows progress.
@@ -446,7 +438,7 @@ const AICoach = () => {
         </Card>
       ) : (
         <ReportCard
-          reportId={performance.performance_id}
+          key={performance.performance_id}
           label={`${performance.period_type} report · ${formatPeriod(performance)}`}
           aiModel={performance.ai_model}
           createdAt={performance.created_at}
@@ -593,18 +585,13 @@ const AICoach = () => {
         </Card>
       )}
 
-      <ReportSwitcher
-        items={performances}
-        getKey={(p) => p.performance_id}
-        // Same shape as the training list: a full date, so the two rows read
-        // alike. A monthly report used to label itself "Monthly · August 2026",
-        // which gave no way to tell two reports for the same month apart. The
-        // period it covers is still on the card's own header pill.
-        getLabel={(p) => p.title ?? formatDate(p.created_at)}
-        isPinned={(p) => p.is_pinned}
-        isSelected={(p) => p.performance_id === performance?.performance_id}
-        onSelect={(p) => setSelectedPerformanceId(p.performance_id)}
-      />
+      {performances.length > 1 && (
+        <div className="mt-3">
+          <Button variant="secondary" onClick={() => setBrowsingPerformances(true)}>
+            Browse past reports
+          </Button>
+        </div>
+      )}
 
       {/* ---------------- Training plan ---------------- */}
       <div className="mt-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -630,7 +617,7 @@ const AICoach = () => {
         </Card>
       ) : (
         <ReportCard
-          reportId={training.training_id}
+          key={training.training_id}
           label="Training plan"
           aiModel={training.ai_model}
           createdAt={training.created_at}
@@ -706,19 +693,71 @@ const AICoach = () => {
         </ReportCard>
       )}
 
-      <ReportSwitcher
-        items={trainings}
-        getKey={(t) => t.training_id}
-        getLabel={(t) => t.title ?? formatDate(t.created_at)}
-        isPinned={(t) => t.is_pinned}
-        isSelected={(t) => t.training_id === training?.training_id}
-        onSelect={(t) => setSelectedTrainingId(t.training_id)}
-      />
+      {trainings.length > 1 && (
+        <div className="mt-3">
+          <Button variant="secondary" onClick={() => setBrowsingTrainings(true)}>
+            Browse past plans
+          </Button>
+        </div>
+      )}
 
       <p className="text-on-surface-variant text-body-sm mt-8">
         AI coaching is generated from your logged data and is not medical advice.
         If something hurts, rest it and see a doctor or physiotherapist.
       </p>
+
+      {/*
+        Both browsers page through the full archive on their own, rather than
+        reading the first-page lists above — that is the point of them.
+      */}
+      <ReportBrowserModal
+        open={browsingPerformances}
+        onClose={() => setBrowsingPerformances(false)}
+        title="Past performance reports"
+        endpoint="/performances"
+        toReport={(row: Performance) => ({
+          id: row.performance_id,
+          title: row.title,
+          createdAt: row.created_at,
+          isPinned: row.is_pinned,
+          periodLabel: `${row.period_type} · ${formatPeriod(row)}`,
+          summary:
+            row.analysis_data?.summary ?? row.analysis_data?.headline,
+          detail: row.performance_report,
+          note: row.user_note,
+        })}
+        extraFilters={[
+          { label: "Daily", param: "period_type", value: "daily" },
+          { label: "Monthly", param: "period_type", value: "monthly" },
+        ]}
+        onOpenReport={setSelectedPerformanceId}
+        onTogglePin={(report) =>
+          savePerformance({
+            id: report.id,
+            patch: { is_pinned: !report.isPinned },
+          })
+        }
+      />
+
+      <ReportBrowserModal
+        open={browsingTrainings}
+        onClose={() => setBrowsingTrainings(false)}
+        title="Past training plans"
+        endpoint="/trainings"
+        toReport={(row: Training) => ({
+          id: row.training_id,
+          title: row.title,
+          createdAt: row.created_at,
+          isPinned: row.is_pinned,
+          summary: row.analysis_data?.summary,
+          detail: row.training_report,
+          note: row.user_note,
+        })}
+        onOpenReport={setSelectedTrainingId}
+        onTogglePin={(report) =>
+          saveTraining({ id: report.id, patch: { is_pinned: !report.isPinned } })
+        }
+      />
     </div>
   );
 };

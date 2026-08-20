@@ -300,6 +300,33 @@ describe("session list paging", () => {
   });
 });
 
+describe("report browsing filters", () => {
+  it.each(["performances", "trainings"])(
+    "GET /%s rejects a non-boolean is_pinned",
+    async (resource) => {
+      const res = await request(app)
+        .get(`/api/v1/${resource}?is_pinned=yes`)
+        .set("Authorization", TOKEN);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain("is_pinned");
+    },
+  );
+
+  it.each(["performances", "trainings"])(
+    "GET /%s reports how many matched",
+    async (resource) => {
+      const res = await request(app)
+        .get(`/api/v1/${resource}?is_pinned=true&limit=5&offset=0`)
+        .set("Authorization", TOKEN);
+
+      expect(res.status).toBe(200);
+      expect(res.body.meta).toMatchObject({ limit: 5, offset: 0 });
+      expect(res.body.meta.total).toBeDefined();
+    },
+  );
+});
+
 describe("POST /sessions/:id/attempts", () => {
   it("validates the climb the same way a nested one is validated", async () => {
     const res = await request(app)

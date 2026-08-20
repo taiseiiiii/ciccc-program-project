@@ -814,7 +814,13 @@ paths:
     get:
       tags: [Performances]
       summary: List performance reports
-      description: The authenticated user's AI performance reports, newest first.
+      description: |
+        One page of the authenticated user's AI performance reports, pinned
+        ones first and then newest first — a climber keeps a handful to check
+        back against, and those should not sink below a month of newer ones.
+
+        `meta.total` is how many matched the filters, so the caller can page
+        and say how many exist.
       operationId: listPerformances
       parameters:
         - name: period_type
@@ -824,6 +830,14 @@ paths:
           schema:
             type: string
             enum: [daily, monthly]
+        - name: is_pinned
+          in: query
+          required: false
+          description: >-
+            `true` returns only pinned reports, `false` only unpinned. Omit for
+            both.
+          schema:
+            type: boolean
         - name: limit
           in: query
           required: false
@@ -832,19 +846,36 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
-          description: The user's performance reports.
+          description: One page of the user's performance reports.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Performance'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                        description: Rows matching the filters, before paging.
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -971,9 +1002,20 @@ paths:
     get:
       tags: [Trainings]
       summary: List training plans
-      description: The authenticated user's AI training plans, newest first.
+      description: >-
+        One page of the authenticated user's AI training plans, pinned first
+        and then newest first. Same shape and reasoning as
+        `GET /performances`.
       operationId: listTrainings
       parameters:
+        - name: is_pinned
+          in: query
+          required: false
+          description: >-
+            `true` returns only pinned plans, `false` only unpinned. Omit for
+            both.
+          schema:
+            type: boolean
         - name: limit
           in: query
           required: false
@@ -982,19 +1024,36 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
-          description: The user's training plans.
+          description: One page of the user's training plans.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Training'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                        description: Rows matching the filters, before paging.
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

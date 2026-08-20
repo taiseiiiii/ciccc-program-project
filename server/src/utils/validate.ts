@@ -75,6 +75,23 @@ export function parseOffset(value: unknown): number | undefined {
 }
 
 /**
+ * A `?flag=true|false` query parameter.
+ *
+ * Absent stays undefined, which callers read as "no filter" rather than
+ * "filter on false" — the difference between browsing every report and
+ * browsing only the unpinned ones.
+ */
+export function parseQueryBoolean(
+  value: unknown,
+  field: string,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw HttpError.badRequest(`${field} must be 'true' or 'false'`);
+}
+
+/**
  * One of a fixed set of string values — the shape every status/side/kind field
  * takes. Returns undefined for an absent optional field and null for an
  * explicit null, matching the other optional* helpers.
