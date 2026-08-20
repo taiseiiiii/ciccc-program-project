@@ -95,7 +95,9 @@ export default function ImportCsv() {
         const attempts = session.climbs.map((climb) => {
           const gradeId = gradeIdByName(climb.grade_name);
           if (gradeId === undefined) {
-            throw new Error(`Unknown grade ${climb.grade_name}`);
+            throw new Error(
+              t("import.error.unknownGrade", { grade: climb.grade_name }),
+            );
           }
           return {
             grade_id: gradeId,
@@ -125,7 +127,10 @@ export default function ImportCsv() {
           imported,
           failedAt: {
             session,
-            message: err instanceof Error ? err.message : "Request failed",
+            message:
+              err instanceof Error
+                ? err.message
+                : t("import.error.requestFailed"),
           },
         });
         setPhase("done");
@@ -137,7 +142,7 @@ export default function ImportCsv() {
     setOutcome({ imported, failedAt: null });
     setPhase("done");
     invalidate();
-    toast.success(`Imported ${imported} session${imported === 1 ? "" : "s"}`);
+    toast.success(t("import.toast.imported", { count: imported }));
   };
 
   const invalidate = () => {
@@ -149,42 +154,39 @@ export default function ImportCsv() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-headline-lg-mobile md:text-headline-lg font-bold text-on-surface">
-        Import your climbing history
+        {t("import.title")}
       </h1>
-      <p className="text-on-surface-variant mt-1">
-        Bring in what you have logged elsewhere, one row per route, so your
-        trends and your coach start from the whole picture.
-      </p>
+      <p className="text-on-surface-variant mt-1">{t("import.subtitle")}</p>
 
       {phase === "choose" && (
         <>
           <Card className="mt-6">
             <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-              The format
+              {t("import.format.heading")}
             </h2>
             <p className="text-on-surface-variant text-body-sm">
-              A CSV with these columns. One row is one route; repeat the date and
-              gym on every row of the same visit, and they are grouped into one
-              session for you.
+              {t("import.format.body")}
             </p>
             <p className="font-mono text-label-sm bg-surface-container-high/40 border border-outline-variant/30 rounded-lg p-3 mt-3 overflow-x-auto">
               {CSV_COLUMNS.join(",")}
             </p>
             <p className="text-on-surface-variant text-body-sm mt-3">
-              Only <span className="font-bold">visit_date</span> and{" "}
-              <span className="font-bold">grade</span> are required. Dates are
-              YYYY-MM-DD; grades are V0 to V17.
+              <Trans
+                t={t}
+                i18nKey="import.format.required"
+                components={{ b: <span className="font-bold" /> }}
+              />
             </p>
             <div className="mt-4">
               <Button variant="secondary" onClick={downloadTemplate}>
-                Download a template
+                {t("import.format.download")}
               </Button>
             </div>
           </Card>
 
           <Card className="mt-4">
             <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-              Your file
+              {t("import.file.heading")}
             </h2>
             <input
               ref={fileInput}
@@ -198,7 +200,7 @@ export default function ImportCsv() {
               className="block w-full text-body-md text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-label-md file:bg-primary file:text-on-primary hover:file:bg-primary-container file:cursor-pointer"
             />
             <p className="text-on-surface-variant text-body-sm mt-2">
-              Nothing is saved until you have seen what it found.
+              {t("import.file.hint")}
             </p>
           </Card>
         </>
@@ -208,22 +210,23 @@ export default function ImportCsv() {
         <>
           <Card className="mt-6">
             <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-              What {fileName} contains
+              {t("import.preview.heading", { fileName })}
             </h2>
             <p className="text-on-surface">
               <span className="font-bold tabular-nums">
-                {result.sessions.length}
-              </span>{" "}
-              session{result.sessions.length === 1 ? "" : "s"} ·{" "}
-              <span className="font-bold tabular-nums">{result.climbCount}</span>{" "}
-              route{result.climbCount === 1 ? "" : "s"}
+                {t("import.sessionCount", { count: result.sessions.length })}
+              </span>
+              {" · "}
+              <span className="font-bold tabular-nums">
+                {t("common:climb.routes", { count: result.climbCount })}
+              </span>
               {result.problems.length > 0 && (
                 <>
                   {" · "}
                   <span className="text-error font-bold tabular-nums">
-                    {result.problems.length}
-                  </span>{" "}
-                  row{result.problems.length === 1 ? "" : "s"} skipped
+                    {t("import.rowCount", { count: result.problems.length })}
+                  </span>
+                  {t("import.skippedSuffix")}
                 </>
               )}
             </p>
@@ -232,7 +235,7 @@ export default function ImportCsv() {
           {result.problems.length > 0 && (
             <Card className="mt-4 border-error/40">
               <h2 className="text-label-md font-bold text-error uppercase tracking-wide mb-2">
-                Rows that will be skipped
+                {t("import.preview.problemsHeading")}
               </h2>
               <ul className="flex flex-col gap-1.5 list-none p-0 max-h-64 overflow-y-auto">
                 {result.problems.map((problem) => (
@@ -241,16 +244,14 @@ export default function ImportCsv() {
                     className="text-body-sm"
                   >
                     <span className="text-on-surface-variant tabular-nums">
-                      Row {problem.line}:
+                      {t("import.preview.problemRow", { line: problem.line })}
                     </span>{" "}
                     {problem.message}
                   </li>
                 ))}
               </ul>
               <p className="text-on-surface-variant text-body-sm mt-3">
-                Everything else still imports. Fix these in your file and run it
-                again if you want them too — nothing is imported twice unless the
-                rows are.
+                {t("import.preview.problemsNote")}
               </p>
             </Card>
           )}
@@ -258,7 +259,7 @@ export default function ImportCsv() {
           {result.sessions.length > 0 && (
             <Card className="mt-4">
               <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-                Sessions to create
+                {t("import.preview.sessionsHeading")}
               </h2>
               <ul className="flex flex-col gap-2 list-none p-0 max-h-80 overflow-y-auto">
                 {result.sessions.map((session) => (
@@ -271,14 +272,18 @@ export default function ImportCsv() {
                         {formatDate(session.visit_date)}
                       </span>
                       <span className="font-bold truncate">
-                        {session.gym_name || "Climbing session"}
+                        {session.gym_name || t("common:climb.climbingSession")}
                       </span>
                     </span>
                     <span className="text-on-surface-variant text-body-sm shrink-0">
-                      {session.climbs.length} route
-                      {session.climbs.length === 1 ? "" : "s"} ·{" "}
-                      {session.climbs.reduce((sum, c) => sum + c.send_count, 0)}{" "}
-                      sent
+                      {`${t("common:climb.routes", {
+                        count: session.climbs.length,
+                      })} · ${t("import.sentCount", {
+                        sends: session.climbs.reduce(
+                          (sum, c) => sum + c.send_count,
+                          0,
+                        ),
+                      })}`}
                     </span>
                   </li>
                 ))}
@@ -291,11 +296,12 @@ export default function ImportCsv() {
               onClick={() => void runImport()}
               disabled={result.sessions.length === 0}
             >
-              Import {result.sessions.length} session
-              {result.sessions.length === 1 ? "" : "s"}
+              {t("import.preview.importButton", {
+                count: result.sessions.length,
+              })}
             </Button>
             <Button variant="secondary" onClick={reset}>
-              Choose a different file
+              {t("import.preview.chooseAnother")}
             </Button>
           </div>
         </>

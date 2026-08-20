@@ -740,15 +740,26 @@ const AICoach = () => {
           title: row.title,
           createdAt: row.created_at,
           isPinned: row.is_pinned,
-          periodLabel: `${row.period_type} · ${formatPeriod(row)}`,
+          periodLabel: t("performance.periodLabel", {
+            period: t(`performance.period.${row.period_type}`),
+            date: formatPeriod(row),
+          }),
           summary:
             row.analysis_data?.summary ?? row.analysis_data?.headline,
           detail: row.performance_report,
           note: row.user_note,
         })}
         extraFilters={[
-          { label: "Daily", param: "period_type", value: "daily" },
-          { label: "Monthly", param: "period_type", value: "monthly" },
+          {
+            label: t("performance.period.daily"),
+            param: "period_type",
+            value: "daily",
+          },
+          {
+            label: t("performance.period.monthly"),
+            param: "period_type",
+            value: "monthly",
+          },
         ]}
         onOpenReport={setSelectedPerformanceId}
         onTogglePin={(report) =>
@@ -762,7 +773,7 @@ const AICoach = () => {
       <ReportBrowserModal
         open={browsingTrainings}
         onClose={() => setBrowsingTrainings(false)}
-        title="Past training plans"
+        title={t("training.browserTitle")}
         endpoint="/trainings"
         toReport={(row: Training) => ({
           id: row.training_id,

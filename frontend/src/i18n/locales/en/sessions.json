@@ -133,8 +133,8 @@
     "sessionCount_other": "{{count}} sessions",
     "rowCount_one": "{{count}} row",
     "rowCount_other": "{{count}} rows",
-    "skippedSuffix": "skipped",
-    "sentCount": "{{count}} sent",
+    "skippedSuffix": " skipped",
+    "sentCount": "{{sends}} sent",
     "format": {
       "heading": "The format",
       "body": "A CSV with these columns. One row is one route; repeat the date and gym on every row of the same visit, and they are grouped into one session for you.",
@@ -162,7 +162,7 @@
     "done": {
       "heading": "Done",
       "headingFailed": "Stopped partway",
-      "importedSuffix": "imported.",
+      "importedSuffix": " imported.",
       "failure": "The session dated {{date}} was rejected: {{message}}. Sessions are imported oldest first, so everything before that date is saved — remove those rows from your file and import the rest.",
       "again": "Import another file"
     },

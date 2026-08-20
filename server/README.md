@@ -146,6 +146,33 @@ token on every request (except `/health`):
    never from request bodies — and scope every query to it, so one user can
    never read or modify another user's data (foreign rows look like 404s).
 
+## File storage
+
+Photos and videos live in **Cloudflare R2**, and no byte of one passes through
+this server. Uploading is two requests:
+
+1. `POST /media/presign` — the client describes the file. Every rule is checked
+   here: type, per-file size, per-account quota, and whether the session it is
+   being pinned to belongs to the caller. The response carries the object key
+   (chosen here, not by the client) and a URL good for exactly one upload.
+2. `POST /media` — after the browser has PUT the bytes. The server asks storage
+   what is actually there before writing the row, because the quota is computed
+   from these rows and a row describing a file that was never uploaded would
+   corrupt it.
+
+The declared size and content type are **signed into** the upload URL, so
+storage itself refuses anything that does not match. That is what makes the
+size trustworthy; it used to be a number the client supplied and nothing ever
+verified.
+
+Reading is `POST /media/urls`, which signs display URLs in a batch and only for
+keys the caller has a row for. And because the server holds the credentials, it
+can delete: removing a session, a climb, or one attachment takes the stored
+files with it.
+
+Without `R2_*` configured the server still boots and only the media endpoints
+answer 503 — the same treatment as a missing `OPENAI_API_KEY`.
+
 ## API
 
 Base path: `/api/v1`

@@ -129,7 +129,7 @@
     "sessionCount_other": "{{count}}件のセッション",
     "rowCount_other": "{{count}}行",
     "skippedSuffix": "をスキップ",
-    "sentCount": "{{count}}完登",
+    "sentCount": "{{sends}}完登",
     "format": {
       "heading": "ファイル形式",
       "body": "次の列を持つCSVです。1行が1課題で、同じセッションの行には同じ日付とジム名を入れてください。自動的に1つのセッションにまとめられます。",
