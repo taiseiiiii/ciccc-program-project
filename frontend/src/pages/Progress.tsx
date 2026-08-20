@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { api } from "../lib/api";
 import {
@@ -14,6 +15,8 @@ import type Stats from "../types/StatsType";
 import type Goal from "../types/GoalType";
 import type { GoalCreate, GoalUpdate } from "../types/GoalType";
 import type Grade from "../types/GradeType";
+import type { SessionSummary } from "../types/SessionType";
+import SessionDetail from "../components/SessionDetail";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Input from "../components/Input";
@@ -67,6 +70,9 @@ const Delta = ({
   );
 };
 
+/** Enough to recognise the last few visits, not enough to become a list screen. */
+const RECENT_SESSIONS = 4;
+
 const Progress = () => {
   const queryClient = useQueryClient();
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
@@ -75,6 +81,7 @@ const Progress = () => {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<number | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [openSession, setOpenSession] = useState<SessionSummary | null>(null);
   const [showAllGoals, setShowAllGoals] = useState(false);
 
   const month = currentMonthKey();
@@ -118,9 +125,19 @@ const Progress = () => {
     staleTime: Infinity,
   });
 
+  // The latest few visits, as a way into the session screen. Four rather than
+  // the whole history: this page is about the aggregate, and the list is here
+  // to open one, not to browse them.
+  const { data: recentSessionsData } = useQuery({
+    queryKey: ["sessions", { limit: RECENT_SESSIONS }],
+    queryFn: () =>
+      api<{ data: SessionSummary[] }>(`/sessions?limit=${RECENT_SESSIONS}`),
+  });
+
   const goals = goalsData?.data ?? [];
   const grades = gradesData?.data ?? [];
   const stats = statsData?.data;
+  const recentSessions = recentSessionsData?.data ?? [];
 
   const isLoading = isStatsLoading || isGoalsLoading || isGradesLoading;
   const isError = isStatsError || isGoalsError || isGradesError;
@@ -478,6 +495,51 @@ const Progress = () => {
         )}
       </Card>
 
+      <Card className="p-4 mb-6 border border-outline-variant/30">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold tracking-wider text-on-surface-variant uppercase">
+            Recent Sessions
+          </h2>
+          <Link
+            to="/sessions"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            View all sessions
+          </Link>
+        </div>
+
+        {recentSessions.length === 0 ? (
+          <p className="text-on-surface-variant text-body-sm">
+            No sessions logged yet.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {recentSessions.map((session) => (
+              <button
+                key={session.session_id}
+                type="button"
+                onClick={() => setOpenSession(session)}
+                className="w-full flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-left cursor-pointer rounded-lg px-2 py-1.5 hover:bg-surface-container-high/40"
+              >
+                <span className="flex items-baseline gap-3 min-w-0">
+                  <span className="tabular-nums text-on-surface-variant text-body-sm shrink-0">
+                    {formatDate(session.visit_date)}
+                  </span>
+                  <span className="font-bold truncate">
+                    {session.gym_name ?? "Climbing session"}
+                  </span>
+                </span>
+                <span className="text-on-surface-variant text-body-sm shrink-0">
+                  {session.climb_count === 0
+                    ? "No climbs"
+                    : `${pluralize(session.climb_count, "route")} · ${session.total_sends}/${session.total_attempts} sent`}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
@@ -750,6 +812,11 @@ const Progress = () => {
           </div>
         </Card>
       </div>
+
+      <SessionDetail
+        session={openSession}
+        onClose={() => setOpenSession(null)}
+      />
     </div>
   );
 };

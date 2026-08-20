@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { currentMonthKey, daysUntil, pluralize, todayString } from "../lib/date";
+import {
+  currentMonthKey,
+  daysUntil,
+  formatDate,
+  pluralize,
+  todayString,
+} from "../lib/date";
 import type Stats from "../types/StatsType";
 import type SessionType from "../types/SessionType";
 import type Performance from "../types/PerformanceType";
@@ -383,9 +389,17 @@ const Dashboard = () => {
       </div>
 
       <div className="mt-6">
-        <h2 className="text-on-surface text-headline-md font-bold tracking-tight">
-          Recent Activity
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-on-surface text-headline-md font-bold tracking-tight">
+            Recent Activity
+          </h2>
+          <Link
+            to="/sessions"
+            className="text-label-md font-medium text-primary hover:underline"
+          >
+            View all sessions
+          </Link>
+        </div>
         <div className="flex flex-col gap-3 mt-3">
           {stats.recent_sessions.length === 0 && (
             <p className="text-on-surface-variant">No sessions logged yet.</p>
@@ -398,7 +412,9 @@ const Dashboard = () => {
                 className="w-full p-4 flex flex-row items-center justify-between gap-4 text-left cursor-pointer rounded-xl hover:bg-surface-container-high/40"
               >
                 <div className="flex flex-row gap-4 min-w-0">
-                  <span className="tabular-nums">{session.visit_date}</span>
+                  <span className="tabular-nums text-on-surface-variant">
+                    {formatDate(session.visit_date)}
+                  </span>
                   <span className="font-bold truncate">
                     {session.gym_name ?? "Climbing session"}
                   </span>

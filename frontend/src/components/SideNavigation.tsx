@@ -1,13 +1,21 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { Link, NavLink } from "react-router-dom";
 import SignoutButton from "./SignoutButton";
-import { LuLayoutDashboard, LuBotMessageSquare, LuBandage } from "react-icons/lu";
+import {
+  LuLayoutDashboard,
+  LuBotMessageSquare,
+  LuBandage,
+  LuHistory,
+} from "react-icons/lu";
 import { MdOutlineAddToPhotos } from "react-icons/md";
 import { BsGraphUpArrow } from "react-icons/bs";
 
 const LINKS = [
   { to: "/", end: true, label: "Dashboard", Icon: LuLayoutDashboard },
   { to: "/log-session", label: "Log session", Icon: MdOutlineAddToPhotos },
+  // Desktop only, deliberately: the bottom bar on mobile is already at five
+  // items, and this screen is reachable from Dashboard and Progress there.
+  { to: "/sessions", label: "Sessions", Icon: LuHistory },
   { to: "/progress", label: "Progress", Icon: BsGraphUpArrow },
   { to: "/ai-coach", label: "AI coach", Icon: LuBotMessageSquare },
   { to: "/injuries", label: "Injuries", Icon: LuBandage },

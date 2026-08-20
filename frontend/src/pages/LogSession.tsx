@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { uploadMedia } from "../lib/storage";
 import {
@@ -11,19 +11,15 @@ import {
 } from "../lib/sessionDraft";
 
 import { useAuth } from "../hooks/useAuth";
+import { useClimbTaxonomies } from "../hooks/useClimbTaxonomies";
 import { todayString } from "../lib/date";
 import Modal from "../components/Modal";
 import type AttemptType from "../types/AttemptType";
-import type Grade from "../types/GradeType";
-import type TaxonomyTerm from "../types/TaxonomyType";
-import type WeaknessType from "../types/WeaknessType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import Textarea from "../components/Textarea";
-import TagSelector from "../components/TagSelector";
-import Counter from "../components/Counter";
-import WeaknessPicker from "../components/WeaknessPicker";
+import ClimbFields, { type ClimbFieldsProps } from "../components/ClimbFields";
 
 /**
  * A climb being drafted, plus the files staged against it.
@@ -193,42 +189,11 @@ const LogSession = () => {
   const queryClient = useQueryClient();
 
   // Master data. None of it changes while the app is open, so it is fetched
-  // once and never refetched — same treatment the grade list already had.
-  const masterQuery = { staleTime: Infinity } as const;
-
-  const {
-    data: gradesData,
-    isPending: isGradesLoading,
-    isError: isGradesError,
-    refetch: refetchGrades,
-  } = useQuery({
-    queryKey: ["grades"],
-    queryFn: () => api<{ data: Grade[] }>("/grades"),
-    ...masterQuery,
-  });
-
-  const { data: wallTypesData, isPending: isWallTypesLoading } = useQuery({
-    queryKey: ["wall-types"],
-    queryFn: () => api<{ data: TaxonomyTerm[] }>("/wall-types"),
-    ...masterQuery,
-  });
-
-  const { data: holdTypesData, isPending: isHoldTypesLoading } = useQuery({
-    queryKey: ["hold-types"],
-    queryFn: () => api<{ data: TaxonomyTerm[] }>("/hold-types"),
-    ...masterQuery,
-  });
-
-  // Not master data: this list grows every time the climber types a new label.
-  const { data: weaknessesData, isPending: isWeaknessesLoading } = useQuery({
-    queryKey: ["weaknesses"],
-    queryFn: () => api<{ data: WeaknessType[] }>("/weaknesses"),
-  });
-
-  const grades = gradesData?.data ?? [];
-  const wallTypes = wallTypesData?.data ?? [];
-  const holdTypes = holdTypesData?.data ?? [];
-  const weaknesses = weaknessesData?.data ?? [];
+  // The vocabularies the route form offers. ClimbFields fetches them itself, so
+  // this page reads from the same cache: the grade lookup to translate a
+  // draft's grade names on save, and the tag lists to label the saved-climb
+  // summary rows.
+  const { gradeIdByName, wallTypes, holdTypes } = useClimbTaxonomies();
 
   /**
    * One request saves the whole visit: POST /sessions accepts the climbs
@@ -248,10 +213,12 @@ const LogSession = () => {
       climbs: DraftClimb[];
     }) => {
       const attempts = input.climbs.map((climb) => {
-        const grade = grades.find((g) => g.grade_name === climb.grade_name);
-        if (!grade) throw new Error(`Unknown grade ${climb.grade_name}`);
+        const gradeId = gradeIdByName(climb.grade_name);
+        if (gradeId === undefined) {
+          throw new Error(`Unknown grade ${climb.grade_name}`);
+        }
         return {
-          grade_id: grade.grade_id,
+          grade_id: gradeId,
           route_name: climb.route_name,
           attempt_count: climb.attempt_count,
           send_count: climb.send_count,
@@ -432,7 +399,7 @@ const LogSession = () => {
       rejectSave("Add at least one route before saving");
       return;
     }
-    if (grades.length === 0) {
+    if (toSave.some((climb) => gradeIdByName(climb.grade_name) === undefined)) {
       // Fetched once with staleTime: Infinity, so a failed load stays failed —
       // say what unsticks it instead of stating the problem.
       rejectSave("Grades have not loaded — tap Retry above, then save again");
@@ -447,104 +414,22 @@ const LogSession = () => {
     });
   };
 
-  /** The route form, shared by the new-climb card and the edit modal. */
+  /**
+   * The route form, shared by the new-climb card and the edit modal.
+   *
+   * The cast narrows AttemptType's updater to DraftClimb's. ClimbFields only
+   * ever writes the fields it renders, none of which is `files` — the extra
+   * property a draft carries and a saved climb does not — so widening the
+   * updater to accept it is the safe direction.
+   */
   const renderClimbFields = (
     climb: DraftClimb,
     update: <K extends keyof DraftClimb>(field: K, value: DraftClimb[K]) => void,
   ) => (
-    <>
-      <Input
-        type="text"
-        label="Route Name"
-        required
-        placeholder="e.g. yellow overhang by the door"
-        value={climb.route_name}
-        onChange={(e) => update("route_name", e.target.value)}
-      />
-
-      <div className="mt-3">
-        <p className="text-label-md text-on-surface-variant mb-2">
-          Grade (V-scale)
-        </p>
-        <div className="flex flex-row gap-2 overflow-x-auto py-2">
-          {isGradesLoading && (
-            <p className="text-on-surface-variant py-2">Loading grades...</p>
-          )}
-          {isGradesError && (
-            <>
-              <p className="text-error self-center">Failed to load grades</p>
-              <Button variant="secondary" onClick={() => refetchGrades()}>
-                Retry
-              </Button>
-            </>
-          )}
-          {grades.map((grade) => (
-            <Button
-              key={grade.grade_id}
-              onClick={() => update("grade_name", grade.grade_name)}
-              className={
-                climb.grade_name === grade.grade_name
-                  ? ""
-                  : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-              }
-            >
-              {grade.grade_name}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/*
-        The counts replace the old Sent/Attempted toggle. One row per route
-        instead of one row per try: working a project eight times is an 8 here,
-        not eight trips through this form.
-      */}
-      <div className="flex gap-3 mt-3">
-        <Counter
-          label="Tries"
-          value={climb.attempt_count}
-          min={1}
-          onChange={(next) => update("attempt_count", next)}
-        />
-        <Counter
-          label="Sends"
-          value={climb.send_count}
-          max={climb.attempt_count}
-          emphasis
-          onChange={(next) => update("send_count", next)}
-          hint={
-            climb.attempt_count === 1 && climb.send_count === 1
-              ? "Flash!"
-              : undefined
-          }
-        />
-      </div>
-
-      <TagSelector
-        label="Wall type"
-        options={wallTypes.map((w) => ({ id: w.id, label: w.label }))}
-        value={climb.wall_type_ids}
-        onChange={(next) => update("wall_type_ids", next)}
-        isLoading={isWallTypesLoading}
-      />
-
-      <TagSelector
-        label="Hold types"
-        options={holdTypes.map((h) => ({ id: h.id, label: h.label }))}
-        value={climb.hold_type_ids}
-        onChange={(next) => update("hold_type_ids", next)}
-        isLoading={isHoldTypesLoading}
-      />
-
-      <WeaknessPicker
-        options={weaknesses}
-        selectedIds={climb.weakness_type_ids}
-        customLabels={climb.weakness_labels}
-        onChangeIds={(next) => update("weakness_type_ids", next)}
-        onChangeLabels={(next) => update("weakness_labels", next)}
-        isLoading={isWeaknessesLoading}
-      />
-    </>
+    <ClimbFields
+      climb={climb}
+      update={update as ClimbFieldsProps["update"]}
+    />
   );
 
   /** Staged files for one climb. Uploaded only once the session is saved. */

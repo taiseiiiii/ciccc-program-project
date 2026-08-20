@@ -19,6 +19,7 @@ const Progress = lazy(() => import("../pages/Progress"));
 const AICoach = lazy(() => import("../pages/AICoach"));
 const Injuries = lazy(() => import("../pages/Injuries"));
 const LogSession = lazy(() => import("../pages/LogSession"));
+const Sessions = lazy(() => import("../pages/Sessions"));
 const Profile = lazy(() => import("../pages/Profile"));
 
 /** Shown while a screen's chunk arrives. */
@@ -78,6 +79,7 @@ const AppRoutes = () => {
           <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="log-session" element={<LogSession />} />
+            <Route path="sessions" element={<Sessions />} />
             <Route path="progress" element={<Progress />} />
             <Route path="ai-coach" element={<AICoach />} />
             <Route path="injuries" element={<Injuries />} />

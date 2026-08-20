@@ -14,6 +14,10 @@ const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
     title: "Log Session",
     subtitle: "Record today's attempts, routes, and notes",
   },
+  "/sessions": {
+    title: "Your Sessions",
+    subtitle: "Search, read back, and correct any visit you have logged",
+  },
   "/progress": {
     title: "Performance Analytics",
     subtitle: "Track your send rates, consistency, and active goals",
