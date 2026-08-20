@@ -1,0 +1,59 @@
+{
+  "state": {
+    "loading": "Loading stats...",
+    "errorTitle": "Could not load your dashboard",
+    "errorBody": "The server did not answer. Your logged sessions are safe — try reloading in a moment."
+  },
+  "injuries": {
+    "oneHealing": "{{bodyPart}} is still healing",
+    "manyHealing": "{{count}} injuries still healing",
+    "avoiding": "Your training plans are being kept away from {{bodyParts}}.",
+    "checkIn": "Check in"
+  },
+  "welcome": {
+    "title": "Welcome back!",
+    "titleNamed": "Welcome back, {{name}}!",
+    "paceFirstSession": "Log your first session to start tracking your progress.",
+    "paceAhead": "You're ahead of last month — keep it going!",
+    "paceBehind": "You're behind last month's pace. Time to get back on the wall.",
+    "paceMatching": "You're matching last month's pace.",
+    "streak_one": "{{count}} week climbing in a row — don't break it now.",
+    "streak_other": "{{count}} weeks climbing in a row — don't break it now."
+  },
+  "stats": {
+    "sessionsThisMonth": "SESSIONS THIS MONTH",
+    "vsLastMonth": "{{delta}} vs last month",
+    "highestGrade": "HIGHEST GRADE",
+    "goalDueIn_one": "Goal due in {{count}} day",
+    "goalDueIn_other": "Goal due in {{count}} days",
+    "goalOverdue_one": "Goal was due {{count}} day ago",
+    "goalOverdue_other": "Goal was due {{count}} days ago",
+    "totalTries": "TOTAL TRIES",
+    "sentAcross": "{{sends}} sent across {{routes}}"
+  },
+  "coach": {
+    "title": "AI COACH",
+    "noAnalysis": "No analysis yet",
+    "noAnalysisBody": "Generate one from your logged sessions.",
+    "readAnalysis": "Read the analysis",
+    "open": "Open AI Coach"
+  },
+  "charts": {
+    "monthlyVolume": "MONTHLY VOLUME",
+    "gradeProgress": "GRADE PROGRESS",
+    "maxGrade": "Max grade",
+    "successRateTitle": "SUCCESS RATE",
+    "rate": "Rate",
+    "success": "Success",
+    "failed": "Failed",
+    "noData": "No data",
+    "noAttempts": "No attempts yet"
+  },
+  "recentSessions": {
+    "title": "Recent Activity",
+    "viewAll": "View all sessions",
+    "empty": "No sessions logged yet.",
+    "durationMinutes": "{{count}} min",
+    "view": "View"
+  }
+}

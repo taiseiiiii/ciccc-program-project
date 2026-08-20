@@ -9,6 +9,7 @@ import {
   toGoalSummaries,
 } from "../services/ai.service";
 import { env } from "../config/env";
+import { toLocale } from "../config/locales";
 import { HttpError } from "../utils/HttpError";
 import { daysBefore, isDateString, todayString } from "../utils/period";
 import {
@@ -82,7 +83,11 @@ export const trainingController = {
     }
 
     const goals = toGoalSummaries(await goalRepository.findAllWithGrade(userId));
-    const { detail, ...plan } = await aiService.generateTrainingPlan(stats, goals);
+    const { detail, ...plan } = await aiService.generateTrainingPlan(
+      stats,
+      goals,
+      toLocale(req.user!.locale),
+    );
 
     // Second line of defence on the injury guardrail. The prompt already tells
     // the model not to load an injured body part; this checks that it did not,

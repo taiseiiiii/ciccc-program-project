@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { uploadMedia } from "../lib/storage";
@@ -87,16 +88,8 @@ const isClimbDirty = (climb: DraftClimb): boolean =>
   climb.weakness_labels.length > 0 ||
   climb.files.length > 0;
 
-/** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
-const describeResult = (climb: AttemptType): string => {
-  if (climb.send_count === 0) {
-    return `${climb.attempt_count} ${climb.attempt_count === 1 ? "try" : "tries"}`;
-  }
-  if (climb.attempt_count === 1 && climb.send_count === 1) return "Flash";
-  return `Sent ${climb.send_count}/${climb.attempt_count}`;
-};
-
 const LogSession = () => {
+  const { t } = useTranslation("sessions");
   const today = todayString();
   const { session } = useAuth();
   // Drafts are stored per account, so the id is part of every call below.
@@ -142,15 +135,17 @@ const LogSession = () => {
 
     toast.success(
       restored.climbs.length > 0
-        ? `Unsaved session restored — ${restored.climbs.length} route${
-            restored.climbs.length === 1 ? "" : "s"
-          } still waiting to be saved`
-        : "Unsaved session restored",
+        ? t("log.restore.withRoutes", {
+            routes: t("common:climb.routes", {
+              count: restored.climbs.length,
+            }),
+          })
+        : t("log.restore.plain"),
     );
     if (restored.had_files) {
-      toast.error("Photos and videos could not be restored — pick them again");
+      toast.error(t("log.restore.filesLost"));
     }
-  }, [restored]);
+  }, [restored, t]);
 
   // Mirror the form after every change. Nothing here reaches the server until
   // Save Session, so without this a reload, a tab close or a tap on the nav bar
@@ -215,7 +210,9 @@ const LogSession = () => {
       const attempts = input.climbs.map((climb) => {
         const gradeId = gradeIdByName(climb.grade_name);
         if (gradeId === undefined) {
-          throw new Error(`Unknown grade ${climb.grade_name}`);
+          throw new Error(
+            t("log.error.unknownGrade", { grade: climb.grade_name }),
+          );
         }
         return {
           grade_id: gradeId,
@@ -280,20 +277,32 @@ const LogSession = () => {
       clearSessionDraft(userId);
 
       if (failedUploads > 0) {
-        toast.success("Session saved");
-        toast.error(
-          `${failedUploads} file${failedUploads === 1 ? "" : "s"} could not be uploaded`,
-        );
+        toast.success(t("log.toast.savedWithFailedUploads"));
+        toast.error(t("log.toast.uploadFailed", { count: failedUploads }));
       } else {
-        toast.success("Session successfully saved");
+        toast.success(t("log.toast.saved"));
       }
     },
     onError: (err) => {
       toast.error(
-        err instanceof Error ? err.message : "Failed to save session",
+        err instanceof Error ? err.message : t("log.toast.saveFailed"),
       );
     },
   });
+
+  /** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
+  const describeResult = (climb: AttemptType): string => {
+    if (climb.send_count === 0) {
+      return t("common:climb.tries", { count: climb.attempt_count });
+    }
+    if (climb.attempt_count === 1 && climb.send_count === 1) {
+      return t("common:climb.flash");
+    }
+    return t("common:climb.sentOf", {
+      sends: climb.send_count,
+      tries: climb.attempt_count,
+    });
+  };
 
   const updateDraft = <K extends keyof DraftClimb>(
     field: K,
@@ -307,34 +316,34 @@ const LogSession = () => {
 
   const handleAddClimb = () => {
     if (!draft.route_name.trim()) {
-      toast.error("Give the route a name so you can recognise it later");
+      toast.error(t("log.error.nameRoute"));
       return;
     }
     if (draft.send_count > draft.attempt_count) {
-      toast.error("You cannot send a route more times than you tried it");
+      toast.error(t("log.error.sendsOverTries"));
       return;
     }
 
     setClimbs([{ ...draft, id: newClimbId() }, ...climbs]);
     setDraft(emptyClimb());
-    toast.success("Route added — press Save Session when the visit is done");
+    toast.success(t("log.toast.routeAdded"));
   };
 
   const handleUpdateClimb = () => {
     if (!editing) return;
     if (editing.send_count > editing.attempt_count) {
-      toast.error("You cannot send a route more times than you tried it");
+      toast.error(t("log.error.sendsOverTries"));
       return;
     }
     setClimbs(climbs.map((c) => (c.id === editing.id ? editing : c)));
     setEditing(null);
-    toast.success("Route updated");
+    toast.success(t("log.toast.routeUpdated"));
   };
 
   const handleDeleteClimb = () => {
     setClimbs(climbs.filter((c) => c.id !== editing?.id));
     setEditing(null);
-    toast.success("Route removed");
+    toast.success(t("log.toast.routeRemoved"));
   };
 
   /** Refuse the save and take the climber to the field that refused it. */
@@ -355,7 +364,7 @@ const LogSession = () => {
     // climber never knew was required. It reads as "Save did nothing", and the
     // neighbouring blank duration field takes the blame.
     if (!gymName.trim()) {
-      rejectSave("Where did you climb? Add the gym to save", gymNameRef.current);
+      rejectSave(t("log.error.missingGym"), gymNameRef.current);
       return;
     }
 
@@ -371,9 +380,7 @@ const LogSession = () => {
         duration < 1 ||
         duration > MAX_SESSION_MINUTES)
     ) {
-      rejectSave(
-        `Time on the wall must be a whole number of minutes, 1–${MAX_SESSION_MINUTES}`,
-      );
+      rejectSave(t("log.error.duration", { max: MAX_SESSION_MINUTES }));
       return;
     }
 
@@ -384,11 +391,11 @@ const LogSession = () => {
     const pending = isClimbDirty(draft) ? draft : null;
     if (pending) {
       if (!pending.route_name.trim()) {
-        rejectSave("Name the route still in the form, or clear it, before saving");
+        rejectSave(t("log.error.namePendingRoute"));
         return;
       }
       if (pending.send_count > pending.attempt_count) {
-        rejectSave("You cannot send a route more times than you tried it");
+        rejectSave(t("log.error.sendsOverTries"));
         return;
       }
     }
@@ -396,13 +403,13 @@ const LogSession = () => {
     const toSave = pending ? [pending, ...climbs] : climbs;
 
     if (toSave.length === 0) {
-      rejectSave("Add at least one route before saving");
+      rejectSave(t("log.error.noRoutes"));
       return;
     }
     if (toSave.some((climb) => gradeIdByName(climb.grade_name) === undefined)) {
       // Fetched once with staleTime: Infinity, so a failed load stays failed —
       // say what unsticks it instead of stating the problem.
-      rejectSave("Grades have not loaded — tap Retry above, then save again");
+      rejectSave(t("log.error.gradesNotLoaded"));
       return;
     }
 
@@ -439,7 +446,7 @@ const LogSession = () => {
   ) => (
     <div className="mt-3">
       <p className="text-label-md text-on-surface-variant mb-2">
-        Photos & video
+        {t("log.media.label")}
       </p>
       <input
         type="file"
@@ -463,7 +470,7 @@ const LogSession = () => {
               <span className="truncate">{file.name}</span>
               <button
                 type="button"
-                aria-label={`Remove ${file.name}`}
+                aria-label={t("log.media.remove", { name: file.name })}
                 onClick={() =>
                   update(
                     "files",
@@ -479,7 +486,7 @@ const LogSession = () => {
         </ul>
       )}
       <p className="text-label-sm text-on-surface-variant mt-1.5">
-        Photos are shrunk before upload. Videos: 60s or so, 50 MB max.
+        {t("log.media.hint")}
       </p>
     </div>
   );
@@ -487,12 +494,9 @@ const LogSession = () => {
   return (
     <div className="max-w-5xl mx-auto">
       <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-        New Performance Entry
+        {t("log.title")}
       </h1>
-      <p>
-        Log your latest sends and track your progress through technical
-        analytics.
-      </p>
+      <p>{t("log.subtitle")}</p>
 
       {/*
         Grid, not flex-row: a date input's native spinner fields give it a
@@ -504,9 +508,9 @@ const LogSession = () => {
         <Input
           ref={gymNameRef}
           type="text"
-          label="Location"
+          label={t("field.gym")}
           required
-          placeholder="The Hive"
+          placeholder={t("field.gymPlaceholder")}
           value={gymName}
           autoCapitalize="words"
           className="capitalize"
@@ -514,14 +518,14 @@ const LogSession = () => {
         />
         <Input
           type="date"
-          label="Session Date"
+          label={t("field.date")}
           value={visitDate}
           onChange={(e) => setVisitDate(e.target.value)}
         />
         <Input
           type="number"
           inputMode="numeric"
-          label="Time on the wall (min)"
+          label={t("field.duration")}
           placeholder="90"
           min={1}
           max={1440}
@@ -535,8 +539,8 @@ const LogSession = () => {
 
         <div className="mt-3">
           <Textarea
-            label="Climber's Note"
-            placeholder="Describe the feeling, the beta you used, or why it didn't go..."
+            label={t("note.label")}
+            placeholder={t("note.placeholder")}
             className="min-h-30"
             value={draft.note}
             onChange={(e) => updateDraft("note", e.target.value)}
@@ -547,10 +551,10 @@ const LogSession = () => {
 
         <div className="flex flex-col items-end">
           <Button className="mt-3" onClick={handleAddClimb}>
-            Add Route
+            {t("log.addRoute")}
           </Button>
           <p className="text-label-sm text-on-surface-variant mt-1.5 text-right">
-            Adds it to the list below. The visit itself is saved at the bottom.
+            {t("log.addRouteHint")}
           </p>
         </div>
       </Card>
@@ -558,7 +562,9 @@ const LogSession = () => {
       {climbs.length > 0 && (
         <div className="mt-6">
           <h2 className="text-on-surface text-headline-sm font-bold tracking-tight">
-            This session — {climbs.length} route{climbs.length === 1 ? "" : "s"}
+            {t("log.sessionHeading", {
+              routes: t("common:climb.routes", { count: climbs.length }),
+            })}
           </h2>
           <div className="flex flex-col gap-3 mt-3">
             {climbs.map((climb) => (
@@ -595,12 +601,12 @@ const LogSession = () => {
                         .filter(Boolean)
                         .join(" · ")}
                       {climb.files.length > 0 &&
-                        ` · ${climb.files.length} file${climb.files.length === 1 ? "" : "s"}`}
+                        ` · ${t("log.fileCount", { count: climb.files.length })}`}
                     </p>
                   )}
                 </div>
                 <Button variant="secondary" onClick={() => setEditing(climb)}>
-                  Edit
+                  {t("common:action.edit")}
                 </Button>
               </Card>
             ))}
@@ -616,30 +622,34 @@ const LogSession = () => {
       */}
       <div className="flex flex-col items-end gap-1.5 mt-6">
         <Button onClick={handleSaveSession} disabled={isSavingSession}>
-          {isSavingSession ? "Saving..." : "Save Session"}
+          {isSavingSession ? t("common:action.saving") : t("log.saveSession")}
         </Button>
         <p className="text-label-sm text-on-surface-variant text-right">
           {climbs.length === 0
-            ? "Nothing is saved to your account until you press this."
-            : `${climbs.length} route${climbs.length === 1 ? "" : "s"} waiting to be saved.`}
+            ? t("log.saveHintEmpty")
+            : t("log.saveHintWaiting", {
+                routes: t("common:climb.routes", { count: climbs.length }),
+              })}
         </p>
       </div>
 
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title="Edit route"
+        title={t("log.editTitle")}
         size="lg"
         footer={
           <>
             <Button variant="error" onClick={handleDeleteClimb}>
-              Remove route
+              {t("log.removeRoute")}
             </Button>
             <div className="flex gap-3">
               <Button variant="secondary" onClick={() => setEditing(null)}>
-                Cancel
+                {t("common:action.cancel")}
               </Button>
-              <Button onClick={handleUpdateClimb}>Save</Button>
+              <Button onClick={handleUpdateClimb}>
+                {t("common:action.save")}
+              </Button>
             </div>
           </>
         }

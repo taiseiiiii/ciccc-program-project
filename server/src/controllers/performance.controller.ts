@@ -4,6 +4,7 @@ import { statsRepository } from "../repositories/stats.repository";
 import { goalRepository } from "../repositories/goal.repository";
 import { aiService, toGoalSummaries } from "../services/ai.service";
 import { env } from "../config/env";
+import { toLocale } from "../config/locales";
 import { HttpError } from "../utils/HttpError";
 import { isDateString, monthBounds, todayString } from "../utils/period";
 import {
@@ -98,10 +99,14 @@ export const performanceController = {
     // `detail` is the long-form text and lands in the TEXT column; everything
     // else — including the two-line `summary` the screen leads with — is
     // structured and lands in analysis_data.
+    // The climber's saved language, not a request parameter: a report generated
+    // in one language and read in another is the kind of thing that would go
+    // unnoticed until someone opened an old one.
     const { detail, ...analysis } = await aiService.generatePerformanceAnalysis(
       period_type,
       stats,
       goals,
+      toLocale(req.user!.locale),
     );
 
     const performance = await performanceRepository.create({

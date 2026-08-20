@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { userRepository } from '../repositories/user.repository';
 import { HttpError } from '../utils/HttpError';
-import { optionalString } from '../utils/validate';
+import { optionalEnum, optionalString } from '../utils/validate';
+import { SUPPORTED_LOCALES } from '../config/locales';
 
 /**
  * HTTP layer for users. The row is loaded (and provisioned on first request)
@@ -16,14 +17,14 @@ export const userController = {
   },
 
   // PATCH /api/v1/users/me
-  // Body: { first_name?, last_name? }
+  // Body: { first_name?, last_name?, locale? }
   //
   // Email is not editable here: it belongs to Supabase Auth, and changing only
   // this copy would leave the two disagreeing about who the account is. Use
   // supabase.auth.updateUser() for that; the next request re-provisions this row
   // from the token.
   async update(req: Request, res: Response): Promise<void> {
-    const { first_name, last_name } = req.body ?? {};
+    const { first_name, last_name, locale } = req.body ?? {};
 
     for (const frozen of ['email', 'status', 'auth_user_id', 'user_id']) {
       if (req.body?.[frozen] !== undefined) {
@@ -31,9 +32,18 @@ export const userController = {
       }
     }
 
+    // The interface remembers the language locally, so this is not what makes
+    // the app appear in Japanese. It is what a new device inherits, and what
+    // the AI coach writes its reports in.
+    const parsedLocale = optionalEnum(locale, 'locale', SUPPORTED_LOCALES);
+    if (parsedLocale === null) {
+      throw HttpError.badRequest('locale cannot be cleared');
+    }
+
     const user = await userRepository.update(req.user!.user_id, {
       first_name: optionalString(first_name, 'first_name', 100),
       last_name: optionalString(last_name, 'last_name', 100),
+      locale: parsedLocale,
     });
     if (!user) throw HttpError.notFound('Profile not found');
     res.json({ data: user });

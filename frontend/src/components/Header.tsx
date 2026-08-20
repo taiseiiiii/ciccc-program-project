@@ -1,43 +1,26 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { ComponentPropsWithoutRef } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useTheme } from "../hooks/useTheme";
 import { CgProfile } from "react-icons/cg";
 import { FiSun, FiMoon } from "react-icons/fi";
 
-const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
-  "/": {
-    title: "Dashboard",
-    subtitle: "Overview of your recent climbing activities",
-  },
-  "/log-session": {
-    title: "Log Session",
-    subtitle: "Record today's attempts, routes, and notes",
-  },
-  "/sessions": {
-    title: "Your Sessions",
-    subtitle: "Search, read back, and correct any visit you have logged",
-  },
-  "/import": {
-    title: "Import History",
-    subtitle: "Bring in what you have logged elsewhere from a CSV",
-  },
-  "/progress": {
-    title: "Performance Analytics",
-    subtitle: "Track your send rates, consistency, and active goals",
-  },
-  "/ai-coach": {
-    title: "AI Coaching Intelligence",
-    subtitle: "Personalized insights and drill recommendations",
-  },
-  "/injuries": {
-    title: "Injuries",
-    subtitle: "Track what hurts and keep training away from it",
-  },
-  "/profile": {
-    title: "Profile & Settings",
-    subtitle: "Manage your climbing grades and account preferences",
-  },
+/**
+ * Route to catalogue key. The text itself lives in common.json under
+ * `shell.pages`, because this map is module-level and cannot call `t` — a new
+ * route needs an entry here *and* there, or its header falls back to the app
+ * name.
+ */
+const PAGE_KEYS: Record<string, string> = {
+  "/": "dashboard",
+  "/log-session": "logSession",
+  "/sessions": "sessions",
+  "/import": "import",
+  "/progress": "progress",
+  "/ai-coach": "aiCoach",
+  "/injuries": "injuries",
+  "/profile": "profile",
 };
 
 export default function Header({
@@ -46,15 +29,19 @@ export default function Header({
 }: ComponentPropsWithoutRef<"header">) {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const { t } = useTranslation();
 
-  const currentPage = PAGE_TITLES[location.pathname] ?? {
-    title: "ClimbLog AI",
-    subtitle: "Elite Climbing Progression",
-  };
+  const pageKey = PAGE_KEYS[location.pathname];
+  const currentPage = pageKey
+    ? {
+        title: t(`shell.pages.${pageKey}.title`),
+        subtitle: t(`shell.pages.${pageKey}.subtitle`),
+      }
+    : { title: t("app.name"), subtitle: t("shell.tagline") };
 
   useEffect(() => {
-    document.title = `${currentPage.title} | ClimbLog AI`;
-  }, [currentPage.title]);
+    document.title = `${currentPage.title} | ${t("app.name")}`;
+  }, [currentPage.title, t]);
 
   return (
     <header
@@ -66,7 +53,7 @@ export default function Header({
           to="/"
           className="text-headline-lg-mobile text-primary font-bold tracking-tight"
         >
-          ClimbLog AI
+          {t("app.name")}
         </Link>
       </div>
 
@@ -88,15 +75,15 @@ export default function Header({
           type="button"
           className="cursor-pointer rounded-lg p-2 text-on-surface-variant hover:text-primary"
           onClick={toggleTheme}
-          aria-label={
-            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-          }
+          aria-label={t(
+            theme === "dark" ? "shell.theme.toLight" : "shell.theme.toDark",
+          )}
         >
           {theme === "dark" ? <FiSun size={22} /> : <FiMoon size={22} />}
         </button>
         <NavLink
           to="/profile"
-          aria-label="Profile"
+          aria-label={t("nav.profile")}
           className={({ isActive }) =>
             `rounded-lg p-2 ${
               isActive

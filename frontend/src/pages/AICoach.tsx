@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
@@ -55,6 +56,7 @@ const formatPeriod = (performance: Performance) =>
  * the text above it even after the underlying sessions change.
  */
 const GradeChart = ({ stats }: { stats: ClimbingStats }) => {
+  const { t } = useTranslation("coach");
   const data = stats.grade_breakdown.map((g) => ({
     grade: g.grade_name,
     Tries: g.attempts,
@@ -65,7 +67,7 @@ const GradeChart = ({ stats }: { stats: ClimbingStats }) => {
   return (
     <div className="mt-4">
       <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-        Tries vs sends by grade
+        {t("chart.gradeTitle")}
       </p>
       <div className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -80,11 +82,13 @@ const GradeChart = ({ stats }: { stats: ClimbingStats }) => {
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar
               dataKey="Tries"
+              name={t("chart.tries")}
               fill="var(--color-secondary-container)"
               radius={[4, 4, 0, 0]}
             />
             <Bar
               dataKey="Sends"
+              name={t("chart.sends")}
               fill="var(--color-primary)"
               radius={[4, 4, 0, 0]}
             />
@@ -103,6 +107,7 @@ const TagChart = ({
   title: string;
   data: NonNullable<ClimbingStats["wall_breakdown"]>;
 }) => {
+  const { t } = useTranslation("coach");
   if (!data || data.length === 0) return null;
 
   return (
@@ -129,8 +134,11 @@ const TagChart = ({
             />
             <Tooltip
               formatter={(value, _name, item) => [
-                `${value}% of ${item?.payload?.attempts ?? 0} tries`,
-                "Success rate",
+                t("chart.pctOfTries", {
+                  pct: String(value),
+                  count: Number(item?.payload?.attempts ?? 0),
+                }),
+                t("chart.successRate"),
               ]}
               contentStyle={chartTooltipStyle}
             />
@@ -147,50 +155,54 @@ const TagChart = ({
 };
 
 /** A row of headline figures from a report's stats snapshot. */
-const StatRow = ({ stats }: { stats: ClimbingStats }) => (
-  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-3 border-t border-outline-variant text-on-surface-variant">
-    <p>
-      Sessions:{" "}
-      <span className="font-bold text-on-surface tabular-nums">
-        {stats.total_sessions}
-      </span>
-    </p>
-    <p>
-      Tries:{" "}
-      <span className="font-bold text-on-surface tabular-nums">
-        {stats.total_attempts}
-      </span>
-    </p>
-    <p>
-      Sends:{" "}
-      <span className="font-bold text-on-surface tabular-nums">
-        {stats.total_sends}
-      </span>
-    </p>
-    <p>
-      Success rate:{" "}
-      <span className="font-bold text-primary tabular-nums">
-        {stats.success_rate}%
-      </span>
-    </p>
-    {stats.flash_count !== undefined && stats.flash_count > 0 && (
+const StatRow = ({ stats }: { stats: ClimbingStats }) => {
+  const { t } = useTranslation("coach");
+
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-3 border-t border-outline-variant text-on-surface-variant">
       <p>
-        Flashes:{" "}
+        {t("stats.sessions")}{" "}
         <span className="font-bold text-on-surface tabular-nums">
-          {stats.flash_count}
+          {stats.total_sessions}
         </span>
       </p>
-    )}
-    {stats.highest_sent_grade && (
       <p>
-        Highest send:{" "}
-        <span className="font-bold text-on-surface">
-          {stats.highest_sent_grade}
+        {t("stats.tries")}{" "}
+        <span className="font-bold text-on-surface tabular-nums">
+          {stats.total_attempts}
         </span>
       </p>
-    )}
-  </div>
-);
+      <p>
+        {t("stats.sends")}{" "}
+        <span className="font-bold text-on-surface tabular-nums">
+          {stats.total_sends}
+        </span>
+      </p>
+      <p>
+        {t("stats.successRate")}{" "}
+        <span className="font-bold text-primary tabular-nums">
+          {stats.success_rate}%
+        </span>
+      </p>
+      {stats.flash_count !== undefined && stats.flash_count > 0 && (
+        <p>
+          {t("stats.flashes")}{" "}
+          <span className="font-bold text-on-surface tabular-nums">
+            {stats.flash_count}
+          </span>
+        </p>
+      )}
+      {stats.highest_sent_grade && (
+        <p>
+          {t("stats.highestSend")}{" "}
+          <span className="font-bold text-on-surface">
+            {stats.highest_sent_grade}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+};
 
 /** What the confirm dialog is currently asking about. */
 type PendingDelete =
@@ -199,6 +211,7 @@ type PendingDelete =
   | null;
 
 const AICoach = () => {
+  const { t } = useTranslation("coach");
   const today = todayString();
   const [periodType, setPeriodType] = useState<"daily" | "monthly">("monthly");
   const [selectedPerformanceId, setSelectedPerformanceId] = useState<number | null>(
@@ -281,7 +294,7 @@ const AICoach = () => {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["performances"] });
       setSelectedPerformanceId(res.data.performance_id);
-      toast.success("Performance analysis ready");
+      toast.success(t("toast.analysisReady"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -295,7 +308,7 @@ const AICoach = () => {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["trainings"] });
       setSelectedTrainingId(res.data.training_id);
-      toast.success("Training plan ready");
+      toast.success(t("toast.planReady"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -305,7 +318,7 @@ const AICoach = () => {
       api(`/performances/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["performances"] });
-      toast.success("Saved");
+      toast.success(t("toast.saved"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -315,7 +328,7 @@ const AICoach = () => {
       api(`/trainings/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trainings"] });
-      toast.success("Saved");
+      toast.success(t("toast.saved"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -332,11 +345,11 @@ const AICoach = () => {
       if (target.kind === "performance") {
         queryClient.invalidateQueries({ queryKey: ["performances"] });
         setSelectedPerformanceId(null);
-        toast.success("Report deleted");
+        toast.success(t("toast.reportDeleted"));
       } else {
         queryClient.invalidateQueries({ queryKey: ["trainings"] });
         setSelectedTrainingId(null);
-        toast.success("Training plan deleted");
+        toast.success(t("toast.planDeleted"));
       }
       setPendingDelete(null);
     },
@@ -381,26 +394,25 @@ const AICoach = () => {
         onConfirm={() => pendingDelete && deleteReport(pendingDelete)}
         title={
           pendingDelete?.kind === "training"
-            ? "Delete this training plan?"
-            : "Delete this report?"
+            ? t("delete.planTitle")
+            : t("delete.reportTitle")
         }
         // A generated report is a snapshot: regenerating gives a new one from
         // today's data, not this one back.
-        message="This deletes the AI's text, the stats it was based on, and any notes you wrote next to it. It cannot be regenerated as it was."
+        message={t("delete.message")}
+        confirmLabel={t("common:action.delete")}
         isPending={isDeleting}
       />
 
       <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-        AI Coach
+        {t("title")}
       </h1>
-      <p>
-        Personalized coaching intelligence generated from your logged sessions.
-      </p>
+      <p>{t("subtitle")}</p>
 
       {/* ---------------- Performance analysis ---------------- */}
       <div className="mt-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <h2 className="text-on-surface text-headline-sm font-bold">
-          Performance Update
+          {t("performance.heading")}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -408,38 +420,41 @@ const AICoach = () => {
             aria-pressed={periodType === "daily"}
             className={periodType === "daily" ? "" : UNSELECTED_BUTTON}
           >
-            Today
+            {t("performance.today")}
           </Button>
           <Button
             onClick={() => setPeriodType("monthly")}
             aria-pressed={periodType === "monthly"}
             className={periodType === "monthly" ? "" : UNSELECTED_BUTTON}
           >
-            This Month
+            {t("performance.thisMonth")}
           </Button>
           <Button onClick={() => generateAnalysis()} disabled={isAnalyzing}>
-            {isAnalyzing ? "Analyzing..." : "Generate Analysis"}
+            {isAnalyzing
+              ? t("performance.generating")
+              : t("performance.generate")}
           </Button>
         </div>
       </div>
 
       {isPerformancesLoading ? (
         <Card className="mt-3">
-          <p className="text-on-surface-variant">Loading reports...</p>
+          <p className="text-on-surface-variant">{t("performance.loading")}</p>
         </Card>
       ) : !performance ? (
         <Card className="mt-3">
-          <p className="font-bold">No analysis yet</p>
+          <p className="font-bold">{t("performance.emptyTitle")}</p>
           <p className="text-on-surface-variant mt-1">
-            Pick a period and hit “Generate Analysis” — the AI coach will review
-            the sessions you logged and report on your strengths, weaknesses and
-            grade trajectory.
+            {t("performance.emptyBody")}
           </p>
         </Card>
       ) : (
         <ReportCard
           key={performance.performance_id}
-          label={`${performance.period_type} report · ${formatPeriod(performance)}`}
+          label={t("performance.label", {
+            period: t(`performance.period.${performance.period_type}`),
+            date: formatPeriod(performance),
+          })}
           aiModel={performance.ai_model}
           createdAt={performance.created_at}
           isPinned={performance.is_pinned}
@@ -453,11 +468,15 @@ const AICoach = () => {
           subtitle={
             analysis && (
               <>
-                Trending toward{" "}
-                <span className="text-primary font-bold">
-                  {analysis.grade_projection}
-                </span>
-                . {analysis.focus_advice}
+                <Trans
+                  i18nKey="performance.trending"
+                  ns="coach"
+                  values={{ grade: analysis.grade_projection }}
+                  components={{
+                    grade: <span className="text-primary font-bold" />,
+                  }}
+                />{" "}
+                {analysis.focus_advice}
               </>
             )
           }
@@ -470,10 +489,10 @@ const AICoach = () => {
                 : performance.performance_id,
             )
           }
-          showLabel="Read the full analysis"
-          hideLabel="Hide the full analysis"
-          titlePlaceholder="Name this report — e.g. 'the month I got V5'"
-          notePlaceholder="Was the coach right? What did you change, and what happened?"
+          showLabel={t("performance.showDetail")}
+          hideLabel={t("performance.hideDetail")}
+          titlePlaceholder={t("performance.titlePlaceholder")}
+          notePlaceholder={t("performance.notePlaceholder")}
           initialTitle={performance.title}
           initialNote={performance.user_note}
           isSaving={isSavingPerformance}
@@ -490,13 +509,13 @@ const AICoach = () => {
           {stats && <GradeChart stats={stats} />}
           {stats?.wall_breakdown && (
             <TagChart
-              title="Success rate by wall angle"
+              title={t("chart.byWallAngle")}
               data={stats.wall_breakdown}
             />
           )}
           {stats?.hold_breakdown && (
             <TagChart
-              title="Success rate by hold type"
+              title={t("chart.byHoldType")}
               data={stats.hold_breakdown}
             />
           )}
@@ -505,7 +524,7 @@ const AICoach = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
               <div className="bg-primary/10 rounded-lg p-4">
                 <p className="text-label-md font-bold text-primary uppercase tracking-wide">
-                  Strengths
+                  {t("analysis.strengths")}
                 </p>
                 <ul className="mt-2 list-disc list-inside">
                   {/* Keyed by index: these are model-generated strings and two
@@ -517,7 +536,7 @@ const AICoach = () => {
               </div>
               <div className="bg-surface-container-high rounded-lg p-4">
                 <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide">
-                  Weaknesses
+                  {t("analysis.weaknesses")}
                 </p>
                 <ul className="mt-2 list-disc list-inside">
                   {analysis.weaknesses.map((item, i) => (
@@ -533,7 +552,7 @@ const AICoach = () => {
             stats.self_reported_weaknesses.length > 0 && (
               <div className="mt-4">
                 <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-                  What you blamed
+                  {t("analysis.selfReported")}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {stats.self_reported_weaknesses.map((w) => (
@@ -556,7 +575,7 @@ const AICoach = () => {
       {trendData.length > 1 && (
         <Card className="mt-3">
           <h3 className="text-sm font-medium text-on-surface-variant mb-3">
-            SUCCESS RATE ACROSS YOUR MONTHLY REPORTS
+            {t("trend.heading")}
           </h3>
           <div className="h-52 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -569,7 +588,7 @@ const AICoach = () => {
                   unit="%"
                 />
                 <Tooltip
-                  formatter={(value) => [`${value}%`, "Success rate"]}
+                  formatter={(value) => [`${value}%`, t("chart.successRate")]}
                   contentStyle={chartTooltipStyle}
                 />
                 <Line
@@ -588,7 +607,7 @@ const AICoach = () => {
       {performances.length > 1 && (
         <div className="mt-3">
           <Button variant="secondary" onClick={() => setBrowsingPerformances(true)}>
-            Browse past reports
+            {t("performance.browse")}
           </Button>
         </div>
       )}
@@ -596,29 +615,28 @@ const AICoach = () => {
       {/* ---------------- Training plan ---------------- */}
       <div className="mt-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <h2 className="text-on-surface text-headline-sm font-bold">
-          Training Protocol
+          {t("training.heading")}
         </h2>
         <Button onClick={() => generatePlan()} disabled={isPlanning}>
-          {isPlanning ? "Building plan..." : "Generate Training Plan"}
+          {isPlanning ? t("training.generating") : t("training.generate")}
         </Button>
       </div>
 
       {isTrainingsLoading ? (
         <Card className="mt-3">
-          <p className="text-on-surface-variant">Loading training plans...</p>
+          <p className="text-on-surface-variant">{t("training.loading")}</p>
         </Card>
       ) : !training ? (
         <Card className="mt-3">
-          <p className="font-bold">No training plan yet</p>
+          <p className="font-bold">{t("training.emptyTitle")}</p>
           <p className="text-on-surface-variant mt-1">
-            Hit “Generate Training Plan” and the AI coach will design drills for
-            the coming weeks from your last 30 days of climbing and your goals.
+            {t("training.emptyBody")}
           </p>
         </Card>
       ) : (
         <ReportCard
           key={training.training_id}
-          label="Training plan"
+          label={t("training.label")}
           aiModel={training.ai_model}
           createdAt={training.created_at}
           isPinned={training.is_pinned}
@@ -639,10 +657,10 @@ const AICoach = () => {
                 : training.training_id,
             )
           }
-          showLabel="Read the full plan"
-          hideLabel="Hide the full plan"
-          titlePlaceholder="Name this plan — e.g. 'winter power block'"
-          notePlaceholder="Which drills did you actually do? What worked?"
+          showLabel={t("training.showDetail")}
+          hideLabel={t("training.hideDetail")}
+          titlePlaceholder={t("training.titlePlaceholder")}
+          notePlaceholder={t("training.notePlaceholder")}
           initialTitle={training.title}
           initialNote={training.user_note}
           isSaving={isSavingTraining}
@@ -660,10 +678,13 @@ const AICoach = () => {
           */}
           {plan?.removed_for_injury && plan.removed_for_injury.length > 0 && (
             <div className="mt-3 p-3 rounded-lg bg-error-container text-on-error-container">
-              <p className="font-bold text-body-sm">Adjusted around your injury</p>
+              <p className="font-bold text-body-sm">
+                {t("training.adjustedTitle")}
+              </p>
               <p className="text-body-sm opacity-90 mt-1">
-                Removed: {plan.removed_for_injury.join(", ")}. See a doctor or
-                physiotherapist if the pain persists or worsens.
+                {t("training.adjustedBody", {
+                  drills: plan.removed_for_injury.join(", "),
+                })}
               </p>
             </div>
           )}
@@ -677,7 +698,7 @@ const AICoach = () => {
                     <span
                       className={`${PRIORITY_STYLES[drill.priority]} font-bold px-2.5 py-1 rounded-full text-xs uppercase tracking-wide`}
                     >
-                      {drill.priority} priority
+                      {t(`training.priority.${drill.priority}`)}
                     </span>
                     <span className="text-on-surface-variant text-xs ml-auto">
                       {drill.frequency}
@@ -696,14 +717,13 @@ const AICoach = () => {
       {trainings.length > 1 && (
         <div className="mt-3">
           <Button variant="secondary" onClick={() => setBrowsingTrainings(true)}>
-            Browse past plans
+            {t("training.browse")}
           </Button>
         </div>
       )}
 
       <p className="text-on-surface-variant text-body-sm mt-8">
-        AI coaching is generated from your logged data and is not medical advice.
-        If something hurts, rest it and see a doctor or physiotherapist.
+        {t("disclaimer")}
       </p>
 
       {/*
@@ -713,7 +733,7 @@ const AICoach = () => {
       <ReportBrowserModal
         open={browsingPerformances}
         onClose={() => setBrowsingPerformances(false)}
-        title="Past performance reports"
+        title={t("performance.browserTitle")}
         endpoint="/performances"
         toReport={(row: Performance) => ({
           id: row.performance_id,

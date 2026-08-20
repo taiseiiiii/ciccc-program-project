@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { formatDate } from "../lib/date";
@@ -66,6 +67,7 @@ export default function ReportBrowserModal<T>({
   onOpenReport,
   onTogglePin,
 }: ReportBrowserModalProps<T>) {
+  const { t } = useTranslation("coach");
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [extra, setExtra] = useState<string | null>(null);
   const [reading, setReading] = useState<BrowsableReport | null>(null);
@@ -121,7 +123,7 @@ export default function ReportBrowserModal<T>({
         reading ? (
           <>
             <Button variant="secondary" onClick={() => setReading(null)}>
-              ← Back to list
+              {t("browser.backToList")}
             </Button>
             <Button
               onClick={() => {
@@ -129,7 +131,7 @@ export default function ReportBrowserModal<T>({
                 close();
               }}
             >
-              Open in page
+              {t("browser.openInPage")}
             </Button>
           </>
         ) : (
@@ -137,10 +139,10 @@ export default function ReportBrowserModal<T>({
             <span className="text-label-md text-on-surface-variant">
               {total === 0
                 ? ""
-                : `${reports.length} of ${total} shown`}
+                : t("browser.shown", { shown: reports.length, total })}
             </span>
             <Button variant="secondary" onClick={close}>
-              Close
+              {t("common:action.close")}
             </Button>
           </>
         )
@@ -152,7 +154,7 @@ export default function ReportBrowserModal<T>({
         <>
           <div className="flex flex-wrap gap-2">
             <FilterChip
-              label="All"
+              label={t("browser.all")}
               active={!pinnedOnly && extra === null}
               onClick={() => {
                 setPinnedOnly(false);
@@ -160,7 +162,7 @@ export default function ReportBrowserModal<T>({
               }}
             />
             <FilterChip
-              label="★ Pinned"
+              label={t("browser.pinned")}
               active={pinnedOnly}
               onClick={() => setPinnedOnly((on) => !on)}
             />
@@ -179,14 +181,14 @@ export default function ReportBrowserModal<T>({
           </div>
 
           {isPending ? (
-            <p className="text-on-surface-variant animate-pulse">Loading...</p>
+            <p className="text-on-surface-variant animate-pulse">
+              {t("common:state.loading")}
+            </p>
           ) : isError ? (
-            <p className="text-error">Could not load your reports.</p>
+            <p className="text-error">{t("browser.loadError")}</p>
           ) : reports.length === 0 ? (
             <p className="text-on-surface-variant">
-              {pinnedOnly
-                ? "You have not pinned any reports yet. The star on a report keeps it at the top of this list."
-                : "No reports here yet."}
+              {pinnedOnly ? t("browser.emptyPinned") : t("browser.empty")}
             </p>
           ) : (
             <ul className="flex flex-col gap-2 list-none p-0">
@@ -199,7 +201,10 @@ export default function ReportBrowserModal<T>({
                   >
                     <span className="flex flex-wrap items-center gap-2">
                       {report.isPinned && (
-                        <span className="text-primary" aria-label="Pinned">
+                        <span
+                          className="text-primary"
+                          aria-label={t("browser.pinnedAria")}
+                        >
                           ★
                         </span>
                       )}
@@ -233,7 +238,9 @@ export default function ReportBrowserModal<T>({
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
               >
-                {isFetchingNextPage ? "Loading..." : "Load more"}
+                {isFetchingNextPage
+                  ? t("common:state.loading")
+                  : t("common:action.loadMore")}
               </Button>
             </div>
           )}
@@ -276,6 +283,7 @@ function ReadView({
   report: BrowsableReport;
   onTogglePin: () => void;
 }) {
+  const { t } = useTranslation("coach");
   const body = (report.detail ?? "")
     .split(/\n{2,}/)
     .filter((p) => p.trim() !== "");
@@ -284,13 +292,19 @@ function ReadView({
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-on-surface-variant text-label-md">
-          {report.periodLabel ? `${report.periodLabel} · ` : ""}
-          generated {formatDate(report.createdAt)}
+          {report.periodLabel
+            ? t("browser.periodGenerated", {
+                period: report.periodLabel,
+                date: formatDate(report.createdAt),
+              })
+            : t("browser.generated", {
+                date: formatDate(report.createdAt),
+              })}
         </span>
         <button
           type="button"
           aria-pressed={report.isPinned}
-          title={report.isPinned ? "Unpin" : "Pin to the top"}
+          title={report.isPinned ? t("pin.unpin") : t("pin.pin")}
           onClick={onTogglePin}
           className={`cursor-pointer text-lg leading-none ${
             report.isPinned
@@ -317,7 +331,7 @@ function ReadView({
       {report.note && (
         <div className="pt-4 border-t border-outline-variant">
           <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-            Your notes
+            {t("card.yourNotes")}
           </p>
           <p className="whitespace-pre-line">{report.note}</p>
         </div>

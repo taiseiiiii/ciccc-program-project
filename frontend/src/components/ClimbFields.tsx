@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import Button from "./Button";
 import Counter from "./Counter";
 import Input from "./Input";
@@ -28,6 +29,7 @@ export interface ClimbFieldsProps {
 }
 
 export default function ClimbFields({ climb, update }: ClimbFieldsProps) {
+  const { t } = useTranslation("sessions");
   const {
     grades,
     wallTypes,
@@ -45,26 +47,30 @@ export default function ClimbFields({ climb, update }: ClimbFieldsProps) {
     <>
       <Input
         type="text"
-        label="Route Name"
+        label={t("climbForm.routeName")}
         required
-        placeholder="e.g. yellow overhang by the door"
+        placeholder={t("climbForm.routeNamePlaceholder")}
         value={climb.route_name}
         onChange={(e) => update("route_name", e.target.value)}
       />
 
       <div className="mt-3">
         <p className="text-label-md text-on-surface-variant mb-2">
-          Grade (V-scale)
+          {t("climbForm.grade")}
         </p>
         <div className="flex flex-row gap-2 overflow-x-auto py-2">
           {isGradesLoading && (
-            <p className="text-on-surface-variant py-2">Loading grades...</p>
+            <p className="text-on-surface-variant py-2">
+              {t("climbForm.gradesLoading")}
+            </p>
           )}
           {isGradesError && (
             <>
-              <p className="text-error self-center">Failed to load grades</p>
+              <p className="text-error self-center">
+                {t("climbForm.gradesError")}
+              </p>
               <Button variant="secondary" onClick={() => refetchGrades()}>
-                Retry
+                {t("common:action.retry")}
               </Button>
             </>
           )}
@@ -91,27 +97,27 @@ export default function ClimbFields({ climb, update }: ClimbFieldsProps) {
       */}
       <div className="flex gap-3 mt-3">
         <Counter
-          label="Tries"
+          label={t("climbForm.tries")}
           value={climb.attempt_count}
           min={1}
           onChange={(next) => update("attempt_count", next)}
         />
         <Counter
-          label="Sends"
+          label={t("climbForm.sends")}
           value={climb.send_count}
           max={climb.attempt_count}
           emphasis
           onChange={(next) => update("send_count", next)}
           hint={
             climb.attempt_count === 1 && climb.send_count === 1
-              ? "Flash!"
+              ? t("climbForm.flashHint")
               : undefined
           }
         />
       </div>
 
       <TagSelector
-        label="Wall type"
+        label={t("climbForm.wallType")}
         options={wallTypes.map((w) => ({ id: w.id, label: w.label }))}
         value={climb.wall_type_ids}
         onChange={(next) => update("wall_type_ids", next)}
@@ -119,7 +125,7 @@ export default function ClimbFields({ climb, update }: ClimbFieldsProps) {
       />
 
       <TagSelector
-        label="Hold types"
+        label={t("climbForm.holdTypes")}
         options={holdTypes.map((h) => ({ id: h.id, label: h.label }))}
         value={climb.hold_type_ids}
         onChange={(next) => update("hold_type_ids", next)}

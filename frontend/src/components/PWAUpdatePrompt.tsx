@@ -1,5 +1,8 @@
 import { useEffect } from "react";
 import toast from "react-hot-toast";
+// Read from the instance rather than the hook: these render inside a toast
+// callback, outside this component's own render.
+import i18n from "../i18n";
 import { useRegisterSW } from "virtual:pwa-register/react";
 
 /**
@@ -21,7 +24,7 @@ export default function PWAUpdatePrompt() {
 
   useEffect(() => {
     if (!offlineReady) return;
-    toast.success("Ready to work offline.");
+    toast.success(i18n.t("pwa.offlineReady"));
     setOfflineReady(false);
   }, [offlineReady, setOfflineReady]);
 
@@ -31,7 +34,7 @@ export default function PWAUpdatePrompt() {
     const id = toast(
       (t) => (
         <div className="flex items-center gap-3">
-          <span className="text-body-md">A new version is available.</span>
+          <span className="text-body-md">{i18n.t("pwa.updateAvailable")}</span>
           <button
             type="button"
             onClick={() => {
@@ -41,7 +44,7 @@ export default function PWAUpdatePrompt() {
             }}
             className="px-3 py-1 rounded-lg bg-primary text-on-primary text-label-md cursor-pointer"
           >
-            Reload
+            {i18n.t("errorBoundary.reload")}
           </button>
         </div>
       ),

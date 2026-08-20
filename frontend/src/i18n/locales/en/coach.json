@@ -1,0 +1,111 @@
+{
+  "title": "AI Coach",
+  "subtitle": "Personalized coaching intelligence generated from your logged sessions.",
+  "disclaimer": "AI coaching is generated from your logged data and is not medical advice. If something hurts, rest it and see a doctor or physiotherapist.",
+  "toast": {
+    "saved": "Saved",
+    "analysisReady": "Performance analysis ready",
+    "planReady": "Training plan ready",
+    "reportDeleted": "Report deleted",
+    "planDeleted": "Training plan deleted"
+  },
+  "delete": {
+    "reportTitle": "Delete this report?",
+    "planTitle": "Delete this training plan?",
+    "message": "This deletes the AI's text, the stats it was based on, and any notes you wrote next to it. It cannot be regenerated as it was."
+  },
+  "performance": {
+    "heading": "Performance Update",
+    "today": "Today",
+    "thisMonth": "This Month",
+    "generate": "Generate Analysis",
+    "generating": "Analyzing...",
+    "loading": "Loading reports...",
+    "emptyTitle": "No analysis yet",
+    "emptyBody": "Pick a period and hit “Generate Analysis” — the AI coach will review the sessions you logged and report on your strengths, weaknesses and grade trajectory.",
+    "period": {
+      "daily": "Daily",
+      "monthly": "Monthly"
+    },
+    "label": "{{period}} report · {{date}}",
+    "periodLabel": "{{period}} · {{date}}",
+    "trending": "Trending toward <grade>{{grade}}</grade>.",
+    "showDetail": "Read the full analysis",
+    "hideDetail": "Hide the full analysis",
+    "titlePlaceholder": "Name this report — e.g. 'the month I got V5'",
+    "notePlaceholder": "Was the coach right? What did you change, and what happened?",
+    "browse": "Browse past reports",
+    "browserTitle": "Past performance reports"
+  },
+  "analysis": {
+    "strengths": "Strengths",
+    "weaknesses": "Weaknesses",
+    "selfReported": "What you blamed"
+  },
+  "chart": {
+    "gradeTitle": "Tries vs sends by grade",
+    "tries": "Tries",
+    "sends": "Sends",
+    "byWallAngle": "Success rate by wall angle",
+    "byHoldType": "Success rate by hold type",
+    "successRate": "Success rate",
+    "pctOfTries_one": "{{pct}}% of {{count}} try",
+    "pctOfTries_other": "{{pct}}% of {{count}} tries"
+  },
+  "stats": {
+    "sessions": "Sessions:",
+    "tries": "Tries:",
+    "sends": "Sends:",
+    "successRate": "Success rate:",
+    "flashes": "Flashes:",
+    "highestSend": "Highest send:"
+  },
+  "trend": {
+    "heading": "SUCCESS RATE ACROSS YOUR MONTHLY REPORTS"
+  },
+  "training": {
+    "heading": "Training Protocol",
+    "generate": "Generate Training Plan",
+    "generating": "Building plan...",
+    "loading": "Loading training plans...",
+    "emptyTitle": "No training plan yet",
+    "emptyBody": "Hit “Generate Training Plan” and the AI coach will design drills for the coming weeks from your last 30 days of climbing and your goals.",
+    "label": "Training plan",
+    "showDetail": "Read the full plan",
+    "hideDetail": "Hide the full plan",
+    "titlePlaceholder": "Name this plan — e.g. 'winter power block'",
+    "notePlaceholder": "Which drills did you actually do? What worked?",
+    "browse": "Browse past plans",
+    "browserTitle": "Past training plans",
+    "adjustedTitle": "Adjusted around your injury",
+    "adjustedBody": "Removed: {{drills}}. See a doctor or physiotherapist if the pain persists or worsens.",
+    "priority": {
+      "high": "high priority",
+      "medium": "medium priority",
+      "low": "low priority"
+    }
+  },
+  "card": {
+    "modelGenerated": "{{model}} · generated {{date}}",
+    "nameLabel": "Name this report",
+    "yourNotes": "Your notes",
+    "saveNotes": "Save notes"
+  },
+  "pin": {
+    "pin": "Pin to the top",
+    "unpin": "Unpin"
+  },
+  "browser": {
+    "backToList": "← Back to list",
+    "openInPage": "Open in page",
+    "shown": "{{shown}} of {{total}} shown",
+    "all": "All",
+    "pinned": "★ Pinned",
+    "pinnedAria": "Pinned",
+    "loadError": "Could not load your reports.",
+    "empty": "No reports here yet.",
+    "emptyPinned": "You have not pinned any reports yet. The star on a report keeps it at the top of this list.",
+    "generated": "generated {{date}}",
+    "periodGenerated": "{{period}} · generated {{date}}"
+  }
+}

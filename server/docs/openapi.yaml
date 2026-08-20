@@ -1871,8 +1871,8 @@ components:
     UserUpdate:
       type: object
       description: >-
-        The climber's own display name. `email`, `status`, `auth_user_id` and
-        `user_id` are rejected with `400`.
+        The climber's own display name and language. `email`, `status`,
+        `auth_user_id` and `user_id` are rejected with `400`.
       properties:
         first_name:
           type: string
@@ -1882,6 +1882,13 @@ components:
           type: string
           nullable: true
           maxLength: 100
+        locale:
+          type: string
+          enum: [en, ja]
+          description: >-
+            Cannot be cleared. The interface remembers its own language
+            locally; this is what a new device inherits and what the AI coach
+            writes in.
 
     PeriodTotals:
       type: object
@@ -2057,7 +2064,9 @@ components:
     User:
       type: object
       description: The app-side profile of a Supabase Auth user.
-      required: [user_id, auth_user_id, email, first_name, last_name, status, created_at, updated_at]
+      required:
+        [user_id, auth_user_id, email, first_name, last_name, status, locale,
+         created_at, updated_at]
       properties:
         user_id:
           type: integer
@@ -2083,6 +2092,13 @@ components:
           type: string
           enum: [active, withdrawn, suspended]
           example: active
+        locale:
+          type: string
+          enum: [en, ja]
+          description: >-
+            Language for the interface on a new device, and the language AI
+            reports are written in.
+          example: en
         created_at:
           type: string
           format: date-time

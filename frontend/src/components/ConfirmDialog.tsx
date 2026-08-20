@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import Button from "./Button";
 import Modal from "./Modal";
 
@@ -29,10 +30,16 @@ export default function ConfirmDialog({
   onConfirm,
   title,
   message,
-  confirmLabel = "Delete",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   isPending = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
+  // Defaults resolved here rather than as parameter defaults, so they follow
+  // the active language instead of freezing at module load.
+  const confirm = confirmLabel ?? t("action.delete");
+  const cancel = cancelLabel ?? t("action.cancel");
+
   return (
     <Modal
       open={open}
@@ -42,10 +49,10 @@ export default function ConfirmDialog({
       footer={
         <>
           <Button variant="secondary" onClick={onCancel} disabled={isPending}>
-            {cancelLabel}
+            {cancel}
           </Button>
           <Button variant="error" onClick={onConfirm} disabled={isPending}>
-            {isPending ? `${confirmLabel}...` : confirmLabel}
+            {isPending ? `${confirm}...` : confirm}
           </Button>
         </>
       }

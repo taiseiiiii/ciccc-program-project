@@ -1,3 +1,4 @@
+import type { Locale } from '../config/locales';
 import { query } from '../db/pool';
 import { buildUpdate } from '../utils/buildUpdate';
 
@@ -13,6 +14,8 @@ export interface User {
   first_name: string | null;
   last_name: string | null;
   status: 'active' | 'withdrawn' | 'suspended';
+  /** Language for the interface and for AI-generated reports. */
+  locale: Locale;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +37,7 @@ export interface ProvisionUserInput {
 export interface UpdateUserInput {
   first_name?: string | null;
   last_name?: string | null;
+  locale?: Locale;
 }
 
 /**
@@ -69,7 +73,11 @@ export const userRepository = {
   async update(userId: number, input: UpdateUserInput): Promise<User | null> {
     const statement = buildUpdate(
       'users',
-      { first_name: input.first_name, last_name: input.last_name },
+      {
+        first_name: input.first_name,
+        last_name: input.last_name,
+        locale: input.locale,
+      },
       { user_id: userId },
       { returning: '*' },
     );

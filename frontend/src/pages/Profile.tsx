@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import Card from "../components/Card";
 import PasskeyCard from "../components/PasskeyCard";
+import LanguageCard from "../components/LanguageCard";
 import Button from "../components/Button";
 import Input from "../components/Input";
 import SignoutButton from "../components/SignoutButton";
@@ -226,6 +227,8 @@ const Profile = () => {
               </p>
             </Card>
           )}
+
+          <LanguageCard />
 
           <Card>
             <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">

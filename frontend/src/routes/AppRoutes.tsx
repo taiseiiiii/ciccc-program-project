@@ -1,4 +1,5 @@
 import { Suspense, lazy } from "react";
+import { useTranslation } from "react-i18next";
 import { Routes, Route, Navigate, Outlet, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import AppLayout from "../layouts/AppLayout";
@@ -24,9 +25,12 @@ const ImportCsv = lazy(() => import("../pages/ImportCsv"));
 const Profile = lazy(() => import("../pages/Profile"));
 
 /** Shown while a screen's chunk arrives. */
-const ScreenFallback = () => (
-  <p className="text-on-surface-variant animate-pulse">Loading...</p>
-);
+const ScreenFallback = () => {
+  const { t } = useTranslation();
+  return (
+    <p className="text-on-surface-variant animate-pulse">{t("state.loading")}</p>
+  );
+};
 
 /**
  * Route guards.
@@ -35,11 +39,16 @@ const ScreenFallback = () => (
  * before, meant a blank screen on every cold start; a spinner at least says
  * the app is doing something.
  */
-const AuthPending = () => (
-  <div className="min-h-screen flex items-center justify-center bg-background">
-    <p className="text-on-surface-variant animate-pulse">Loading ClimbLog...</p>
-  </div>
-);
+const AuthPending = () => {
+  const { t } = useTranslation();
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <p className="text-on-surface-variant animate-pulse">
+        {t("state.loading")}
+      </p>
+    </div>
+  );
+};
 
 const RequireAuth = () => {
   const { session, loading } = useAuth();
@@ -54,19 +63,20 @@ const RedirectIfAuthed = () => {
 };
 
 /** Anything the router does not recognise. Previously a blank page. */
-const NotFound = () => (
-  <Card className="max-w-md mx-auto mt-10 flex flex-col gap-3">
-    <h1 className="text-headline-sm font-bold text-on-surface">
-      That page does not exist
-    </h1>
-    <p className="text-on-surface-variant">
-      The link may be out of date, or there may be a typo in the address.
-    </p>
-    <Link to="/" className="text-primary font-medium hover:underline">
-      Back to the dashboard
-    </Link>
-  </Card>
-);
+const NotFound = () => {
+  const { t } = useTranslation();
+  return (
+    <Card className="max-w-md mx-auto mt-10 flex flex-col gap-3">
+      <h1 className="text-headline-sm font-bold text-on-surface">
+        {t("notFound.title")}
+      </h1>
+      <p className="text-on-surface-variant">{t("notFound.body")}</p>
+      <Link to="/" className="text-primary font-medium hover:underline">
+        {t("notFound.back")}
+      </Link>
+    </Card>
+  );
+};
 
 const AppRoutes = () => {
   return (

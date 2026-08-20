@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import Button from "./Button";
 import Card from "./Card";
 import Input from "./Input";
@@ -80,6 +81,7 @@ export default function ReportCard({
   onSaveNotes,
   onDelete,
 }: ReportCardProps) {
+  const { t } = useTranslation("coach");
   const [title, setTitle] = useState(initialTitle ?? "");
   const [note, setNote] = useState(initialNote ?? "");
   const body = paragraphs(detail);
@@ -104,7 +106,7 @@ export default function ReportCard({
           <button
             type="button"
             aria-pressed={isPinned}
-            title={isPinned ? "Unpin" : "Pin to the top"}
+            title={isPinned ? t("pin.unpin") : t("pin.pin")}
             onClick={onTogglePin}
             className={`cursor-pointer text-lg leading-none ${
               isPinned
@@ -115,7 +117,10 @@ export default function ReportCard({
             {isPinned ? "★" : "☆"}
           </button>
           <span className="text-on-surface-variant text-xs">
-            {aiModel} · generated {formatDate(createdAt)}
+            {t("card.modelGenerated", {
+              model: aiModel ?? "",
+              date: formatDate(createdAt),
+            })}
           </span>
         </div>
       </div>
@@ -130,7 +135,7 @@ export default function ReportCard({
       <div className="mt-3">
         <Input
           type="text"
-          label="Name this report"
+          label={t("card.nameLabel")}
           placeholder={titlePlaceholder}
           maxLength={120}
           value={title}
@@ -173,7 +178,7 @@ export default function ReportCard({
       */}
       <div className="mt-4 pt-4 border-t border-outline-variant">
         <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-          Your notes
+          {t("card.yourNotes")}
         </p>
         <Textarea
           placeholder={notePlaceholder}
@@ -184,10 +189,10 @@ export default function ReportCard({
         />
         <div className="flex justify-between items-center mt-3">
           <Button variant="error" onClick={onDelete}>
-            Delete
+            {t("common:action.delete")}
           </Button>
           <Button disabled={!isDirty || isSaving} onClick={save}>
-            {isSaving ? "Saving..." : "Save notes"}
+            {isSaving ? t("common:action.saving") : t("card.saveNotes")}
           </Button>
         </div>
       </div>

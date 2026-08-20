@@ -16,6 +16,8 @@
  * `YYYY-MM-DD`, which is what the API takes.
  */
 
+import { currentLocale } from "../i18n";
+
 /** Today, in the browser's timezone, as `YYYY-MM-DD`. */
 export function todayString(): string {
   return new Date().toLocaleDateString("sv-SE");
@@ -26,14 +28,26 @@ export function currentMonthKey(): string {
   return todayString().slice(0, 7);
 }
 
+/**
+ * The locale to format dates in.
+ *
+ * Read from i18next at call time rather than captured once, so switching
+ * language re-renders every date with it — "Aug 19, 2026" becomes
+ * "2026年8月19日" without a reload. The BCP 47 tag Intl wants happens to be the
+ * same string as the catalogue key for both languages here.
+ */
+function dateLocale(): string {
+  return currentLocale();
+}
+
 /** Parse a `YYYY-MM-DD` at local midnight, never UTC. */
 export function parseLocalDate(date: string): Date {
   return new Date(`${date.slice(0, 10)}T00:00:00`);
 }
 
-/** "2026-08-19" -> "Aug 19, 2026". */
+/** "2026-08-19" -> "Aug 19, 2026", or "2026年8月19日" in Japanese. */
 export function formatDate(date: string): string {
-  return parseLocalDate(date).toLocaleDateString("en-US", {
+  return parseLocalDate(date).toLocaleDateString(dateLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -42,7 +56,7 @@ export function formatDate(date: string): string {
 
 /** "2026-08-19" -> "Aug 19". */
 export function formatDayMonth(date: string): string {
-  return parseLocalDate(date).toLocaleDateString("en-US", {
+  return parseLocalDate(date).toLocaleDateString(dateLocale(), {
     month: "short",
     day: "numeric",
   });
@@ -50,14 +64,14 @@ export function formatDayMonth(date: string): string {
 
 /** "2026-08" -> "Aug". */
 export function formatMonthShort(month: string): string {
-  return new Date(`${month}-01T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString(dateLocale(), {
     month: "short",
   });
 }
 
 /** "2026-08" -> "August 2026". */
 export function formatMonthLong(month: string): string {
-  return new Date(`${month}-01T00:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString(dateLocale(), {
     month: "long",
     year: "numeric",
   });

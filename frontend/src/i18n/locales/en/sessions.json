@@ -1,0 +1,178 @@
+{
+  "field": {
+    "gym": "Location",
+    "gymPlaceholder": "The Hive",
+    "date": "Session Date",
+    "duration": "Time on the wall (min)"
+  },
+  "note": {
+    "label": "Climber's Note",
+    "placeholder": "Describe the feeling, the beta you used, or why it didn't go..."
+  },
+  "log": {
+    "title": "New Performance Entry",
+    "subtitle": "Log your latest sends and track your progress through technical analytics.",
+    "addRoute": "Add Route",
+    "addRouteHint": "Adds it to the list below. The visit itself is saved at the bottom.",
+    "sessionHeading": "This session — {{routes}}",
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files",
+    "saveSession": "Save Session",
+    "saveHintEmpty": "Nothing is saved to your account until you press this.",
+    "saveHintWaiting": "{{routes}} waiting to be saved.",
+    "editTitle": "Edit route",
+    "removeRoute": "Remove route",
+    "media": {
+      "label": "Photos & video",
+      "remove": "Remove {{name}}",
+      "hint": "Photos are shrunk before upload. Videos: 60s or so, 50 MB max."
+    },
+    "restore": {
+      "plain": "Unsaved session restored",
+      "withRoutes": "Unsaved session restored — {{routes}} still waiting to be saved",
+      "filesLost": "Photos and videos could not be restored — pick them again"
+    },
+    "toast": {
+      "saved": "Session successfully saved",
+      "savedWithFailedUploads": "Session saved",
+      "uploadFailed_one": "{{count}} file could not be uploaded",
+      "uploadFailed_other": "{{count}} files could not be uploaded",
+      "saveFailed": "Failed to save session",
+      "routeAdded": "Route added — press Save Session when the visit is done",
+      "routeUpdated": "Route updated",
+      "routeRemoved": "Route removed"
+    },
+    "error": {
+      "nameRoute": "Give the route a name so you can recognise it later",
+      "sendsOverTries": "You cannot send a route more times than you tried it",
+      "missingGym": "Where did you climb? Add the gym to save",
+      "duration": "Time on the wall must be a whole number of minutes, 1–{{max}}",
+      "namePendingRoute": "Name the route still in the form, or clear it, before saving",
+      "noRoutes": "Add at least one route before saving",
+      "gradesNotLoaded": "Grades have not loaded — tap Try again above, then save again",
+      "unknownGrade": "Unknown grade {{grade}}"
+    }
+  },
+  "list": {
+    "title": "Your sessions",
+    "subtitle": "Every visit you have logged. Open one to read it back or correct it.",
+    "searchLabel": "Search",
+    "searchPlaceholder": "Gym or route name",
+    "from": "From",
+    "to": "To",
+    "grade": "Grade",
+    "anyGrade": "Any grade",
+    "noMatches": "No sessions match",
+    "matchCount_one": "{{count}} matching session",
+    "matchCount_other": "{{count}} matching sessions",
+    "clearFilters": "Clear filters",
+    "loading": "Loading sessions...",
+    "loadError": "Could not load your sessions.",
+    "emptyFiltered": "Nothing matches those filters. Try widening the dates or clearing the search.",
+    "empty": "No sessions logged yet. Your first visit will show up here.",
+    "noClimbs": "No climbs logged",
+    "loadMore": "Load more ({{loaded}} of {{total}})"
+  },
+  "detail": {
+    "fallbackTitle": "Session",
+    "onTheWall": "{{duration}} on the wall",
+    "editDetails": "Edit details",
+    "saveDetails": "Save details",
+    "loadingClimbs": "Loading climbs...",
+    "noClimbs": "No climbs were logged on this visit.",
+    "sentFromTries": "{{sends}} sent from {{tries}} tries",
+    "addClimb": "+ Add a climb",
+    "deleteSession": "Delete this session",
+    "confirmDelete": {
+      "title": "Delete this session?",
+      "message": "Every climb logged on this visit, and every photo and video attached to them, is deleted for good."
+    },
+    "toast": {
+      "updated": "Session updated",
+      "deleted": "Session deleted",
+      "saveFailed": "Could not save",
+      "deleteFailed": "Could not delete"
+    }
+  },
+  "climbForm": {
+    "routeName": "Route Name",
+    "routeNamePlaceholder": "e.g. yellow overhang by the door",
+    "grade": "Grade (V-scale)",
+    "gradesLoading": "Loading grades...",
+    "gradesError": "Failed to load grades",
+    "tries": "Tries",
+    "sends": "Sends",
+    "flashHint": "Flash!",
+    "wallType": "Wall type",
+    "holdTypes": "Hold types"
+  },
+  "climbEdit": {
+    "editTitle": "Edit climb",
+    "addTitle": "Add a climb",
+    "removeClimb": "Remove climb",
+    "confirmRemove": {
+      "title": "Remove this climb?",
+      "message": "The climb and any photos or videos on it are deleted for good. The rest of the session is left alone."
+    },
+    "toast": {
+      "updated": "Climb updated",
+      "added": "Climb added",
+      "removed": "Climb removed",
+      "saveFailed": "Could not save",
+      "removeFailed": "Could not remove"
+    },
+    "error": {
+      "gradesNotLoaded": "Grades have not loaded — try again in a moment",
+      "sendsOverTries": "Sends cannot be more than tries"
+    }
+  },
+  "import": {
+    "title": "Import your climbing history",
+    "subtitle": "Bring in what you have logged elsewhere, one row per route, so your trends and your coach start from the whole picture.",
+    "sessionCount_one": "{{count}} session",
+    "sessionCount_other": "{{count}} sessions",
+    "rowCount_one": "{{count}} row",
+    "rowCount_other": "{{count}} rows",
+    "skippedSuffix": "skipped",
+    "sentCount": "{{count}} sent",
+    "format": {
+      "heading": "The format",
+      "body": "A CSV with these columns. One row is one route; repeat the date and gym on every row of the same visit, and they are grouped into one session for you.",
+      "required": "Only <b>visit_date</b> and <b>grade</b> are required. Dates are YYYY-MM-DD; grades are V0 to V17.",
+      "download": "Download a template"
+    },
+    "file": {
+      "heading": "Your file",
+      "hint": "Nothing is saved until you have seen what it found."
+    },
+    "preview": {
+      "heading": "What {{fileName}} contains",
+      "problemsHeading": "Rows that will be skipped",
+      "problemRow": "Row {{line}}:",
+      "problemsNote": "Everything else still imports. Fix these in your file and run it again if you want them too — nothing is imported twice unless the rows are.",
+      "sessionsHeading": "Sessions to create",
+      "importButton_one": "Import {{count}} session",
+      "importButton_other": "Import {{count}} sessions",
+      "chooseAnother": "Choose a different file"
+    },
+    "importing": {
+      "heading": "Importing",
+      "progress": "{{done}} of {{total}} sessions saved. Leave this tab open until it finishes."
+    },
+    "done": {
+      "heading": "Done",
+      "headingFailed": "Stopped partway",
+      "importedSuffix": "imported.",
+      "failure": "The session dated {{date}} was rejected: {{message}}. Sessions are imported oldest first, so everything before that date is saved — remove those rows from your file and import the rest.",
+      "again": "Import another file"
+    },
+    "toast": {
+      "imported_one": "Imported {{count}} session",
+      "imported_other": "Imported {{count}} sessions"
+    },
+    "error": {
+      "unknownGrade": "Unknown grade {{grade}}",
+      "requestFailed": "Request failed"
+    }
+  }
+}

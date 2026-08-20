@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { api } from "../lib/api";
@@ -8,7 +9,6 @@ import {
   formatDate,
   formatDayMonth,
   formatMinutes,
-  pluralize,
   todayString,
 } from "../lib/date";
 import type Stats from "../types/StatsType";
@@ -61,11 +61,13 @@ const Delta = ({
   value: number;
   format?: (n: number) => string;
 }) => {
+  const { t } = useTranslation("progress");
   if (value === 0) return null;
   return (
     <p className={value > 0 ? "text-primary" : "text-error"}>
-      {value > 0 ? "+" : "−"}
-      {format(Math.abs(value))} from last month
+      {t("stats.fromLastMonth", {
+        delta: `${value > 0 ? "+" : "−"}${format(Math.abs(value))}`,
+      })}
     </p>
   );
 };
@@ -74,6 +76,7 @@ const Delta = ({
 const RECENT_SESSIONS = 4;
 
 const Progress = () => {
+  const { t } = useTranslation("progress");
   const queryClient = useQueryClient();
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
   const [goalDescription, setGoalDescription] = useState("");
@@ -162,7 +165,7 @@ const Progress = () => {
       api("/goals", { method: "POST", body: JSON.stringify(newGoal) }),
     onSuccess: () => {
       invalidateGoals();
-      toast.success("Goal created");
+      toast.success(t("goals.created"));
       handleCloseModal();
     },
     onError: (error) => toast.error(error.message),
@@ -180,7 +183,7 @@ const Progress = () => {
       }),
     onSuccess: () => {
       invalidateGoals();
-      toast.success("Goal updated");
+      toast.success(t("goals.updated"));
       handleCloseModal();
     },
     onError: (error) => toast.error(error.message),
@@ -190,7 +193,7 @@ const Progress = () => {
     mutationFn: (goalId) => api(`/goals/${goalId}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidateGoals();
-      toast.success("Goal deleted");
+      toast.success(t("goals.deleted"));
       setIsDeleteConfirmOpen(false);
       handleCloseModal();
     },
@@ -198,11 +201,12 @@ const Progress = () => {
   });
 
   const getGradeName = (gradeId: number) =>
-    grades.find((g) => g.grade_id === gradeId)?.grade_name ?? `Grade ${gradeId}`;
+    grades.find((g) => g.grade_id === gradeId)?.grade_name ??
+    t("goals.gradeFallback", { id: gradeId });
 
   const handleSaveGoal = () => {
     if (!selectedGradeId) {
-      toast.error("Pick a target grade first");
+      toast.error(t("goals.pickGradeFirst"));
       return;
     }
 
@@ -246,7 +250,7 @@ const Progress = () => {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-sm text-on-surface-variant animate-pulse">
-          Loading analytics data...
+          {t("state.loading")}
         </p>
       </div>
     );
@@ -255,13 +259,8 @@ const Progress = () => {
   if (isError || !stats) {
     return (
       <Card className="mt-3">
-        <p className="font-bold text-on-surface">
-          Could not load your analytics
-        </p>
-        <p className="text-on-surface-variant mt-1">
-          The server did not answer. Nothing you logged has been lost — try
-          reloading in a moment.
-        </p>
+        <p className="font-bold text-on-surface">{t("state.errorTitle")}</p>
+        <p className="text-on-surface-variant mt-1">{t("state.errorBody")}</p>
       </Card>
     );
   }
@@ -306,15 +305,15 @@ const Progress = () => {
         open={isDeleteConfirmOpen}
         onCancel={() => setIsDeleteConfirmOpen(false)}
         onConfirm={() => editingGoalId && deleteGoalMutation.mutate(editingGoalId)}
-        title="Delete goal"
-        message="This removes the goal and its deadline. Your logged climbs are not affected."
+        title={t("goals.deleteTitle")}
+        message={t("goals.deleteMessage")}
         isPending={deleteGoalMutation.isPending}
       />
 
       <Modal
         open={isGoalModalOpen}
         onClose={handleCloseModal}
-        title={editingGoalId ? "Edit goal" : "Set a new goal"}
+        title={editingGoalId ? t("goals.editTitle") : t("goals.newTitle")}
         footer={
           <>
             {editingGoalId ? (
@@ -323,14 +322,14 @@ const Progress = () => {
                 onClick={() => setIsDeleteConfirmOpen(true)}
                 disabled={deleteGoalMutation.isPending}
               >
-                Delete
+                {t("common:action.delete")}
               </Button>
             ) : (
               <span />
             )}
             <div className="flex gap-2">
               <Button variant="secondary" onClick={handleCloseModal}>
-                Cancel
+                {t("common:action.cancel")}
               </Button>
               <Button
                 onClick={handleSaveGoal}
@@ -339,10 +338,10 @@ const Progress = () => {
                 }
               >
                 {createGoalMutation.isPending || updateGoalMutation.isPending
-                  ? "Saving..."
+                  ? t("common:action.saving")
                   : editingGoalId
-                    ? "Update goal"
-                    : "Save goal"}
+                    ? t("goals.updateGoal")
+                    : t("goals.saveGoal")}
               </Button>
             </div>
           </>
@@ -351,11 +350,11 @@ const Progress = () => {
         <div className="space-y-4">
           <div>
             <p className="text-label-md text-on-surface-variant mb-2">
-              Target grade
+              {t("goals.targetGrade")}
             </p>
             {isGradesLoading ? (
               <p className="text-body-sm text-on-surface-variant">
-                Loading grades...
+                {t("goals.loadingGrades")}
               </p>
             ) : (
               <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
@@ -383,14 +382,14 @@ const Progress = () => {
 
           <Input
             type="date"
-            label="Target date"
+            label={t("goals.targetDate")}
             value={targetDate}
             onChange={(e) => setTargetDate(e.target.value)}
           />
 
           <Textarea
-            label="Description / memo"
-            placeholder="Send V5 in one month!!"
+            label={t("goals.description")}
+            placeholder={t("goals.descriptionPlaceholder")}
             rows={3}
             className="resize-none"
             value={goalDescription}
@@ -400,14 +399,14 @@ const Progress = () => {
       </Modal>
 
       <h1 className="text-primary text-headline-md font-bold tracking-tight mb-4">
-        Performance Analytics
+        {t("title")}
       </h1>
 
       <Card className="p-4 mb-6 border border-outline-variant/30">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold tracking-wider text-on-surface-variant uppercase">
-              Active Goals
+              {t("goals.title")}
             </h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold tabular-nums">
               {sortedActiveGoals.length}
@@ -415,7 +414,7 @@ const Progress = () => {
           </div>
 
           <Button onClick={() => setIsGoalModalOpen(true)} className="text-xs">
-            + Add goal
+            {t("goals.addGoal")}
           </Button>
         </div>
 
@@ -433,11 +432,14 @@ const Progress = () => {
 
                   <div className="flex flex-col min-w-0">
                     <span className="font-semibold text-sm text-on-surface truncate">
-                      {goal.goal_description ?? `Send ${getGradeName(goal.grade_id)}`}
+                      {goal.goal_description ??
+                        t("goals.defaultDescription", {
+                          grade: getGradeName(goal.grade_id),
+                        })}
                     </span>
                     {goal.target_date && (
                       <span className="text-xs text-on-surface-variant">
-                        Due {formatDate(goal.target_date)}
+                        {t("goals.due", { date: formatDate(goal.target_date) })}
                       </span>
                     )}
                   </div>
@@ -449,7 +451,7 @@ const Progress = () => {
                     onClick={() => handleOpenEditModal(goal)}
                     className="text-xs"
                   >
-                    Edit
+                    {t("common:action.edit")}
                   </Button>
                   <Button
                     className="text-xs"
@@ -461,7 +463,7 @@ const Progress = () => {
                       })
                     }
                   >
-                    Complete
+                    {t("goals.complete")}
                   </Button>
                 </div>
               </div>
@@ -469,14 +471,14 @@ const Progress = () => {
           ) : (
             <div className="text-center py-6 px-4 border border-dashed border-outline-variant/40 rounded-xl flex flex-col items-center justify-center gap-2">
               <p className="text-sm text-on-surface-variant">
-                No active goals set yet.
+                {t("goals.empty")}
               </p>
               <Button
                 variant="secondary"
                 className="text-xs"
                 onClick={() => setIsGoalModalOpen(true)}
               >
-                Set your first climbing goal
+                {t("goals.addFirst")}
               </Button>
             </div>
           )}
@@ -489,8 +491,11 @@ const Progress = () => {
             className="w-full mt-3 py-2 text-xs font-medium text-primary hover:underline cursor-pointer"
           >
             {showAllGoals
-              ? "Show less"
-              : `View all ${sortedActiveGoals.length} goals (${hiddenGoalCount} more)`}
+              ? t("goals.showLess")
+              : t("goals.viewAll", {
+                  count: sortedActiveGoals.length,
+                  hidden: hiddenGoalCount,
+                })}
           </button>
         )}
       </Card>
@@ -498,19 +503,19 @@ const Progress = () => {
       <Card className="p-4 mb-6 border border-outline-variant/30">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold tracking-wider text-on-surface-variant uppercase">
-            Recent Sessions
+            {t("recentSessions.title")}
           </h2>
           <Link
             to="/sessions"
             className="text-xs font-medium text-primary hover:underline"
           >
-            View all sessions
+            {t("recentSessions.viewAll")}
           </Link>
         </div>
 
         {recentSessions.length === 0 ? (
           <p className="text-on-surface-variant text-body-sm">
-            No sessions logged yet.
+            {t("recentSessions.empty")}
           </p>
         ) : (
           <div className="flex flex-col gap-2.5">
@@ -526,13 +531,18 @@ const Progress = () => {
                     {formatDate(session.visit_date)}
                   </span>
                   <span className="font-bold truncate">
-                    {session.gym_name ?? "Climbing session"}
+                    {session.gym_name ?? t("common:climb.climbingSession")}
                   </span>
                 </span>
                 <span className="text-on-surface-variant text-body-sm shrink-0">
                   {session.climb_count === 0
-                    ? "No climbs"
-                    : `${pluralize(session.climb_count, "route")} · ${session.total_sends}/${session.total_attempts} sent`}
+                    ? t("recentSessions.noClimbs")
+                    : `${t("common:climb.routes", {
+                        count: session.climb_count,
+                      })} · ${t("common:climb.sentOf", {
+                        sends: session.total_sends,
+                        tries: session.total_attempts,
+                      })}`}
                 </span>
               </button>
             ))}
@@ -543,20 +553,22 @@ const Progress = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            TOTAL SENDS / MONTH
+            {t("stats.sendsThisMonth")}
           </h3>
           <div className="flex flex-col gap-3">
             <p className="text-4xl font-bold mt-2 text-primary tabular-nums">
               {thisMonth.sends}{" "}
               <span className="text-sm font-bold text-primary">
-                / {thisMonth.attempts} tries
+                {t("stats.outOfTries", {
+                  tries: t("common:climb.tries", { count: thisMonth.attempts }),
+                })}
               </span>
             </p>
             <div className="flex flex-col gap-1">
               <Delta value={thisMonth.sends - lastMonth.sends} />
               {thisMonth.flashes > 0 && (
                 <p className="text-xs text-on-surface-variant">
-                  {thisMonth.flashes} flashed first try
+                  {t("stats.flashedFirstTry", { count: thisMonth.flashes })}
                 </p>
               )}
             </div>
@@ -565,7 +577,7 @@ const Progress = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            HIGHEST GRADE / MONTH
+            {t("stats.highestGradeThisMonth")}
           </h3>
           <p className="text-4xl font-bold mt-2 text-secondary">
             {thisMonth.highest_sent_grade ?? "-"}
@@ -574,11 +586,11 @@ const Progress = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            CLIMBING DAYS / MONTH
+            {t("stats.climbingDaysThisMonth")}
           </h3>
           <div className="flex flex-col gap-3">
             <p className="text-4xl font-bold mt-2 text-tertiary tabular-nums">
-              {pluralize(thisMonth.climbing_days, "day")}
+              {t("stats.days", { count: thisMonth.climbing_days })}
             </p>
             <Delta value={thisMonth.climbing_days - lastMonth.climbing_days} />
           </div>
@@ -586,7 +598,7 @@ const Progress = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            TIME ON THE WALL
+            {t("stats.timeOnTheWall")}
           </h3>
           <div className="flex flex-col gap-3">
             <p className="text-4xl font-bold mt-2 text-primary tabular-nums">
@@ -596,7 +608,7 @@ const Progress = () => {
               // Not a zero — it means nobody typed a duration. Saying "0h"
               // would read as "you did not climb", which is a different claim.
               <p className="text-xs text-on-surface-variant">
-                Add a session length when you log
+                {t("stats.addSessionLength")}
               </p>
             ) : (
               <Delta
@@ -611,7 +623,7 @@ const Progress = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant mb-3">
-            Monthly Session Frequency
+            {t("charts.monthlyFrequency")}
           </h3>
           <div className="h-52 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -644,7 +656,7 @@ const Progress = () => {
                   stroke="var(--color-primary)"
                   fillOpacity={1}
                   fill="url(#colorSessions)"
-                  name="Total visits"
+                  name={t("charts.totalVisits")}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -653,7 +665,7 @@ const Progress = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant mb-3">
-            Success Rate by Grade (%)
+            {t("charts.successRateByGrade")}
           </h3>
           <div className="h-60 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -672,14 +684,17 @@ const Progress = () => {
                   fontSize={12}
                 />
                 <Tooltip
-                  formatter={(value) => [`${value ?? 0}%`, "Success rate"]}
+                  formatter={(value) => [
+                    `${value ?? 0}%`,
+                    t("charts.successRate"),
+                  ]}
                   contentStyle={TOOLTIP_STYLE}
                 />
                 <Bar
                   dataKey="successRate"
                   fill="var(--color-primary-container)"
                   radius={[0, 4, 4, 0]}
-                  name="Success rate"
+                  name={t("charts.successRate")}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -693,11 +708,10 @@ const Progress = () => {
         {wallSuccessRateData.length > 0 && (
           <Card className="p-4 flex flex-col justify-center">
             <h3 className="text-sm font-medium text-on-surface-variant mb-1">
-              Success Rate by Wall Angle (%)
+              {t("charts.successRateByWall")}
             </h3>
             <p className="text-label-sm text-on-surface-variant mb-3">
-              A route tagged with two angles counts under both, so these bars do
-              not add up to the month.
+              {t("charts.wallNote")}
             </p>
             <div className="h-60 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -718,8 +732,13 @@ const Progress = () => {
                   />
                   <Tooltip
                     formatter={(value, _name, item) => [
-                      `${value ?? 0}% of ${item?.payload?.tries ?? 0} tries`,
-                      "Success rate",
+                      t("charts.successRateOfTries", {
+                        value: value ?? 0,
+                        tries: t("common:climb.tries", {
+                          count: item?.payload?.tries ?? 0,
+                        }),
+                      }),
+                      t("charts.successRate"),
                     ]}
                     contentStyle={TOOLTIP_STYLE}
                   />
@@ -727,7 +746,7 @@ const Progress = () => {
                     dataKey="successRate"
                     fill="var(--color-tertiary)"
                     radius={[0, 4, 4, 0]}
-                    name="Success rate"
+                    name={t("charts.successRate")}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -738,10 +757,10 @@ const Progress = () => {
         <Card className="p-4 flex flex-col justify-center">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-on-surface-variant">
-              Session Activity Heatmap
+              {t("heatmap.title")}
             </h3>
             <span className="text-xs text-on-surface-variant font-normal">
-              Last 30 days
+              {t("heatmap.lastDays")}
             </span>
           </div>
           <div className="grid grid-cols-7 gap-1.5 my-auto">
@@ -751,7 +770,10 @@ const Progress = () => {
                 className={`aspect-square rounded-md flex flex-col items-center justify-center text-[10px] transition-all ${getTileColor(
                   day.sessions,
                 )}`}
-                title={`${formatDayMonth(day.date)}: ${pluralize(day.sessions, "session")}`}
+                title={t("heatmap.tileTitle", {
+                  date: formatDayMonth(day.date),
+                  sessions: t("heatmap.sessions", { count: day.sessions }),
+                })}
               >
                 <span className="tabular-nums">{Number(day.date.slice(8))}</span>
                 {day.sessions > 1 && (
@@ -764,18 +786,18 @@ const Progress = () => {
           </div>
 
           <div className="flex items-center justify-end gap-1.5 mt-3 text-[10px] text-on-surface-variant">
-            <span>Rest</span>
+            <span>{t("heatmap.rest")}</span>
             <div className="w-2.5 h-2.5 rounded bg-surface-container-high/30" />
             <div className="w-2.5 h-2.5 rounded bg-primary/50" />
             <div className="w-2.5 h-2.5 rounded bg-primary/80" />
             <div className="w-2.5 h-2.5 rounded bg-primary" />
-            <span>Multi-session</span>
+            <span>{t("heatmap.multiSession")}</span>
           </div>
         </Card>
 
         <Card className="p-4 mb-4">
           <h3 className="text-sm font-medium text-on-surface-variant mb-3">
-            PERSONAL RECORDS (TOP 3)
+            {t("personalRecords.title")}
           </h3>
           <div className="flex flex-col gap-3">
             {stats.personal_records.length > 0 ? (
@@ -790,10 +812,10 @@ const Progress = () => {
 
                   <div className="flex-1 mx-4 flex flex-col justify-center min-w-0">
                     <span className="font-semibold text-sm text-on-surface truncate">
-                      {item.route_name || "Unnamed route"}
+                      {item.route_name || t("common:climb.unnamedRoute")}
                     </span>
                     <span className="text-xs text-on-surface-variant truncate">
-                      {item.gym_name || "No location name"}
+                      {item.gym_name || t("personalRecords.noLocation")}
                     </span>
                   </div>
 
@@ -806,7 +828,7 @@ const Progress = () => {
               ))
             ) : (
               <div className="text-center py-6 text-sm text-on-surface-variant border border-dashed border-outline-variant/40 rounded-xl">
-                No sends recorded yet. Keep climbing!
+                {t("personalRecords.empty")}
               </div>
             )}
           </div>

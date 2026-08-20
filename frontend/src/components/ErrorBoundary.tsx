@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import Button from "./Button";
 import Card from "./Card";
 import { captureError } from "../lib/sentry";
+import i18n from "../i18n";
 
 interface Props {
   children: ReactNode;
@@ -75,27 +76,31 @@ export default class ErrorBoundary extends Component<Props, State> {
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Card className="max-w-md flex flex-col gap-3">
           <h1 className="text-headline-sm font-bold text-on-surface">
-            {isStaleBundle
-              ? "A new version is available"
-              : "Something broke on this screen"}
+            {i18n.t(
+              isStaleBundle
+                ? "errorBoundary.staleTitle"
+                : "errorBoundary.title",
+            )}
           </h1>
           <p className="text-on-surface-variant">
-            {isStaleBundle
-              ? "This tab is running an older copy of the app. Reloading picks up the new one — nothing you logged is affected."
-              : "Nothing you logged has been lost — this is a display problem, not a saving one. Reloading usually clears it."}
+            {i18n.t(
+              isStaleBundle ? "errorBoundary.staleBody" : "errorBoundary.body",
+            )}
           </p>
           <p className="text-label-sm text-on-surface-variant font-mono break-words">
             {this.state.error.message}
           </p>
           <div className="flex gap-3">
-            <Button onClick={() => window.location.reload()}>Reload</Button>
+            <Button onClick={() => window.location.reload()}>
+              {i18n.t("errorBoundary.reload")}
+            </Button>
             <Button
               variant="secondary"
               onClick={() => {
                 window.location.href = "/";
               }}
             >
-              Back to dashboard
+              {i18n.t("errorBoundary.backToDashboard")}
             </Button>
           </div>
         </Card>

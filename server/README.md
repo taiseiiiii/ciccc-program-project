@@ -67,12 +67,24 @@ Rules that keep environments in sync:
   Statements that cannot run in a transaction (e.g. `CREATE INDEX
 CONCURRENTLY`) need a different approach.
 
-In production, migrate with the compiled runner as a deploy step, before the
-new server version starts:
+In production this happens in the deploy's **build step**
+(`scripts/vercel-build.sh`), before the new version is published: a deployment
+that cannot migrate never goes live.
 
 ```bash
 pnpm build && pnpm db:migrate:prod
 ```
+
+Two things that step depends on:
+
+- `MIGRATE_DATABASE_URL` must point at a **direct session** connection, not a
+  transaction pooler. The runner takes a session-scoped advisory lock and runs
+  multi-statement transactions, neither of which survives a pooler handing out
+  a different connection per statement. The app itself runs through that
+  pooler, so the two connection strings differ.
+- Its presence is also the switch. Unset, the build skips migrating — which is
+  what preview deployments want, since they should run against the schema
+  production already has rather than moving it.
 
 `0002_lock_down_data_api.sql` exists because this database may be hosted on
 Supabase: it revokes the `anon`/`authenticated` privileges that Supabase's Data

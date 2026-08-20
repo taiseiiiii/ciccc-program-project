@@ -1,5 +1,6 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useClimbTaxonomies } from "../hooks/useClimbTaxonomies";
@@ -70,6 +71,7 @@ export default function ClimbEditModal({
   sessionId,
   attempt,
 }: ClimbEditModalProps) {
+  const { t } = useTranslation("sessions");
   const queryClient = useQueryClient();
   const { gradeIdByName } = useClimbTaxonomies();
   const [draft, setDraft] = useState<AttemptType>(() =>
@@ -99,10 +101,10 @@ export default function ClimbEditModal({
     mutationFn: async () => {
       const gradeId = gradeIdByName(draft.grade_name);
       if (gradeId === undefined) {
-        throw new Error("Grades have not loaded — try again in a moment");
+        throw new Error(t("climbEdit.error.gradesNotLoaded"));
       }
       if (draft.send_count > draft.attempt_count) {
-        throw new Error("Sends cannot be more than tries");
+        throw new Error(t("climbEdit.error.sendsOverTries"));
       }
 
       const body = {
@@ -131,11 +133,15 @@ export default function ClimbEditModal({
       invalidate();
       // Typed-in weaknesses became saved options — pick them up for next time.
       queryClient.invalidateQueries({ queryKey: ["weaknesses"] });
-      toast.success(attempt ? "Climb updated" : "Climb added");
+      toast.success(
+        attempt ? t("climbEdit.toast.updated") : t("climbEdit.toast.added"),
+      );
       onClose();
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Could not save"),
+      toast.error(
+        err instanceof Error ? err.message : t("climbEdit.toast.saveFailed"),
+      ),
   });
 
   const { mutate: remove, isPending: isDeleting } = useMutation({
@@ -143,12 +149,14 @@ export default function ClimbEditModal({
       api(`/attempts/${attempt!.attempt_id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
-      toast.success("Climb removed");
+      toast.success(t("climbEdit.toast.removed"));
       setConfirmingDelete(false);
       onClose();
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Could not remove"),
+      toast.error(
+        err instanceof Error ? err.message : t("climbEdit.toast.removeFailed"),
+      ),
   });
 
   return (
@@ -156,7 +164,9 @@ export default function ClimbEditModal({
       <Modal
         open={open}
         onClose={onClose}
-        title={attempt ? "Edit climb" : "Add a climb"}
+        title={
+          attempt ? t("climbEdit.editTitle") : t("climbEdit.addTitle")
+        }
         size="lg"
         footer={
           <>
@@ -166,17 +176,19 @@ export default function ClimbEditModal({
                 onClick={() => setConfirmingDelete(true)}
                 disabled={isDeleting}
               >
-                Remove climb
+                {t("climbEdit.removeClimb")}
               </Button>
             ) : (
               <span />
             )}
             <div className="flex gap-3">
               <Button variant="secondary" onClick={onClose}>
-                Cancel
+                {t("common:action.cancel")}
               </Button>
               <Button onClick={() => save()} disabled={isSaving}>
-                {isSaving ? "Saving..." : "Save"}
+                {isSaving
+                  ? t("common:action.saving")
+                  : t("common:action.save")}
               </Button>
             </div>
           </>
@@ -186,8 +198,8 @@ export default function ClimbEditModal({
 
         <div className="mt-3">
           <Textarea
-            label="Climber's Note"
-            placeholder="Describe the feeling, the beta you used, or why it didn't go..."
+            label={t("note.label")}
+            placeholder={t("note.placeholder")}
             className="min-h-30"
             maxLength={2000}
             value={draft.note}
@@ -200,9 +212,9 @@ export default function ClimbEditModal({
         open={confirmingDelete}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={() => remove()}
-        title="Remove this climb?"
-        message="The climb and any photos or videos on it are deleted for good. The rest of the session is left alone."
-        confirmLabel="Remove"
+        title={t("climbEdit.confirmRemove.title")}
+        message={t("climbEdit.confirmRemove.message")}
+        confirmLabel={t("common:action.remove")}
         isPending={isDeleting}
       />
     </>

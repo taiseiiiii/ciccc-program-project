@@ -1,8 +1,9 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { formatDate, formatMinutes, pluralize } from "../lib/date";
+import { formatDate, formatMinutes } from "../lib/date";
 import type SessionType from "../types/SessionType";
 import type { AttemptRecord } from "../types/AttemptType";
 import { isFlash } from "../types/AttemptType";
@@ -19,13 +20,6 @@ interface SessionDetailProps {
   onClose: () => void;
 }
 
-/** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
-function describeResult(climb: AttemptRecord): string {
-  if (climb.send_count === 0) return pluralize(climb.attempt_count, "try", "tries");
-  if (isFlash(climb)) return "Flash";
-  return `Sent ${climb.send_count}/${climb.attempt_count}`;
-}
-
 /**
  * One gym visit, in full: what was climbed, how it went, and the photos —
  * and now the place all of that can be corrected.
@@ -35,8 +29,21 @@ function describeResult(climb: AttemptRecord): string {
  * read; the header edits when asked, and each climb has its own way in.
  */
 export default function SessionDetail({ session, onClose }: SessionDetailProps) {
+  const { t } = useTranslation("sessions");
   const queryClient = useQueryClient();
   const sessionId = session?.session_id;
+
+  /** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
+  const describeResult = (climb: AttemptRecord): string => {
+    if (climb.send_count === 0) {
+      return t("common:climb.tries", { count: climb.attempt_count });
+    }
+    if (isFlash(climb)) return t("common:climb.flash");
+    return t("common:climb.sentOf", {
+      sends: climb.send_count,
+      tries: climb.attempt_count,
+    });
+  };
 
   const [editingHeader, setEditingHeader] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -104,11 +111,13 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
       // suspect, not just this one's.
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
-      toast.success("Session updated");
+      toast.success(t("detail.toast.updated"));
       setEditingHeader(false);
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Could not save"),
+      toast.error(
+        err instanceof Error ? err.message : t("detail.toast.saveFailed"),
+      ),
   });
 
   const { mutate: removeSession, isPending: isDeletingSession } = useMutation({
@@ -118,12 +127,14 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["attempts"] });
       queryClient.invalidateQueries({ queryKey: ["media"] });
-      toast.success("Session deleted");
+      toast.success(t("detail.toast.deleted"));
       setConfirmingDelete(false);
       onClose();
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Could not delete"),
+      toast.error(
+        err instanceof Error ? err.message : t("detail.toast.deleteFailed"),
+      ),
   });
 
   return (
@@ -132,7 +143,11 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
         open={session !== null && !climbModalOpen}
         onClose={onClose}
         size="lg"
-        title={session ? (session.gym_name ?? "Climbing session") : "Session"}
+        title={
+          session
+            ? (session.gym_name ?? t("common:climb.climbingSession"))
+            : t("detail.fallbackTitle")
+        }
       >
         {session && (
           <>
@@ -148,27 +163,31 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
                 <p className="text-on-surface-variant">
                   {formatDate(session.visit_date)}
                   {session.duration_minutes !== null &&
-                    ` · ${formatMinutes(session.duration_minutes)} on the wall`}
+                    ` · ${t("detail.onTheWall", {
+                      duration: formatMinutes(session.duration_minutes),
+                    })}`}
                 </p>
                 <Button
                   variant="secondary"
                   onClick={() => setEditingHeader(true)}
                 >
-                  Edit details
+                  {t("detail.editDetails")}
                 </Button>
               </div>
             )}
 
             {isAttemptsLoading ? (
               <p className="mt-4 text-on-surface-variant animate-pulse">
-                Loading climbs...
+                {t("detail.loadingClimbs")}
               </p>
             ) : (
               <>
                 <p className="mt-1 text-label-md text-on-surface-variant">
                   {attempts.length === 0
-                    ? "No climbs were logged on this visit."
-                    : `${pluralize(attempts.length, "route")} · ${sends} sent from ${tries} tries`}
+                    ? t("detail.noClimbs")
+                    : `${t("common:climb.routes", {
+                        count: attempts.length,
+                      })} · ${t("detail.sentFromTries", { sends, tries })}`}
                 </p>
 
                 <ul className="flex flex-col gap-3 mt-4 list-none p-0">
@@ -194,14 +213,14 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
                           </span>
                           <span className="font-bold">{climb.grade_name}</span>
                           <span className="truncate">
-                            {climb.route_name || "Unnamed route"}
+                            {climb.route_name || t("common:climb.unnamedRoute")}
                           </span>
                           <button
                             type="button"
                             onClick={() => openClimb(climb)}
                             className="ml-auto text-label-sm text-primary hover:underline cursor-pointer shrink-0"
                           >
-                            Edit
+                            {t("common:action.edit")}
                           </button>
                         </div>
 
@@ -241,7 +260,7 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
 
                 <div className="mt-4">
                   <Button variant="secondary" onClick={() => openClimb(null)}>
-                    + Add a climb
+                    {t("detail.addClimb")}
                   </Button>
                 </div>
               </>
@@ -259,7 +278,7 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
                 onClick={() => setConfirmingDelete(true)}
                 disabled={isDeletingSession}
               >
-                Delete this session
+                {t("detail.deleteSession")}
               </Button>
             </div>
           </>
@@ -285,9 +304,9 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
         open={confirmingDelete}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={() => removeSession()}
-        title="Delete this session?"
-        message="Every climb logged on this visit, and every photo and video attached to them, is deleted for good."
-        confirmLabel="Delete"
+        title={t("detail.confirmDelete.title")}
+        message={t("detail.confirmDelete.message")}
+        confirmLabel={t("common:action.delete")}
         isPending={isDeletingSession}
       />
     </>
@@ -310,6 +329,7 @@ function SessionHeaderForm({
     duration_minutes: string;
   }) => void;
 }) {
+  const { t } = useTranslation("sessions");
   const [visitDate, setVisitDate] = useState(session.visit_date);
   const [gymName, setGymName] = useState(session.gym_name ?? "");
   const [duration, setDuration] = useState(
@@ -321,7 +341,7 @@ function SessionHeaderForm({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Input
           type="text"
-          label="Location"
+          label={t("field.gym")}
           value={gymName}
           autoCapitalize="words"
           className="capitalize"
@@ -329,14 +349,14 @@ function SessionHeaderForm({
         />
         <Input
           type="date"
-          label="Session Date"
+          label={t("field.date")}
           value={visitDate}
           onChange={(e) => setVisitDate(e.target.value)}
         />
         <Input
           type="number"
           inputMode="numeric"
-          label="Time on the wall (min)"
+          label={t("field.duration")}
           placeholder="90"
           min={1}
           max={1440}
@@ -346,7 +366,7 @@ function SessionHeaderForm({
       </div>
       <div className="flex justify-end gap-3 mt-3">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t("common:action.cancel")}
         </Button>
         <Button
           disabled={isSaving}
@@ -358,7 +378,7 @@ function SessionHeaderForm({
             })
           }
         >
-          {isSaving ? "Saving..." : "Save details"}
+          {isSaving ? t("common:action.saving") : t("detail.saveDetails")}
         </Button>
       </div>
     </div>

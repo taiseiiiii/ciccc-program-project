@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { LuLayoutDashboard, LuBotMessageSquare, LuBandage } from "react-icons/lu";
 import { MdOutlineAddToPhotos } from "react-icons/md";
 import { BsGraphUpArrow } from "react-icons/bs";
@@ -14,24 +15,26 @@ import { BsGraphUpArrow } from "react-icons/bs";
  * on their phone, had no path to record it at all. Five fits at these sizes.
  */
 const LINKS = [
-  { to: "/", end: true, label: "Dashboard", Icon: LuLayoutDashboard },
-  { to: "/log-session", label: "Log", Icon: MdOutlineAddToPhotos },
-  { to: "/progress", label: "Progress", Icon: BsGraphUpArrow },
-  { to: "/ai-coach", label: "Coach", Icon: LuBotMessageSquare },
-  { to: "/injuries", label: "Injuries", Icon: LuBandage },
+  { to: "/", end: true, labelKey: "nav.dashboard", Icon: LuLayoutDashboard },
+  { to: "/log-session", labelKey: "nav.logShort", Icon: MdOutlineAddToPhotos },
+  { to: "/progress", labelKey: "nav.progress", Icon: BsGraphUpArrow },
+  { to: "/ai-coach", labelKey: "nav.coachShort", Icon: LuBotMessageSquare },
+  { to: "/injuries", labelKey: "nav.injuries", Icon: LuBandage },
 ] as const;
 
 export default function BottomNavigation({
   className = "",
   ...props
 }: ComponentPropsWithoutRef<"nav">) {
+  const { t } = useTranslation();
+
   return (
     <nav
-      aria-label="Main"
+      aria-label={t("nav.mainLabel")}
       className={`flex flex-row justify-around fixed bottom-0 left-0 h-16 w-full px-1 py-2 bg-surface-container-low border-t border-outline-variant ${className}`}
       {...props}
     >
-      {LINKS.map(({ to, label, Icon, ...rest }) => (
+      {LINKS.map(({ to, labelKey, Icon, ...rest }) => (
         <NavLink
           key={to}
           to={to}
@@ -43,7 +46,7 @@ export default function BottomNavigation({
           }
         >
           <Icon size={22} aria-hidden="true" />
-          {label}
+          {t(labelKey)}
         </NavLink>
       ))}
     </nav>

@@ -1,4 +1,9 @@
 import { completeWithSchema } from "./openai.service";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_NAMES,
+  type Locale,
+} from "../config/locales";
 import type { ClimbingStats } from "../repositories/stats.repository";
 import type { GoalWithGrade } from "../repositories/goal.repository";
 
@@ -270,12 +275,29 @@ IMPORTANT — I currently have these unhealed injuries: ${list}.
 Do not program anything that loads them. Work around them and say so.`;
 }
 
+/**
+ * The line that decides what language a report comes back in.
+ *
+ * The interface is translated in the browser, but these words are written by
+ * the model — there is nothing to look up, so the language has to be part of
+ * the request. Appended to the system prompt rather than the user one so it
+ * governs every field of the structured output, including the short summary
+ * the card leads with.
+ *
+ * English is stated explicitly rather than left implicit: without it a report
+ * about a climber whose notes are in Japanese tends to come back in Japanese.
+ */
+function languageInstruction(locale: Locale): string {
+  return `\n\nWrite every field of your response in ${LOCALE_NAMES[locale]}, whatever language the climber's own notes are in. Grade names (V0-V17) stay as they are.`;
+}
+
 export const aiService = {
   /** Analyze one period (a day or a month) of logged climbing. */
   async generatePerformanceAnalysis(
     periodType: "daily" | "monthly",
     stats: ClimbingStats,
     goals: GoalSummary[],
+    locale: Locale = DEFAULT_LOCALE,
   ): Promise<PerformanceAnalysis> {
     const periodLabel =
       periodType === "daily"
@@ -283,7 +305,7 @@ export const aiService = {
         : `the month ${stats.period_start} to ${stats.period_end}`;
 
     return completeWithSchema<PerformanceAnalysis>({
-      system: COACH_SYSTEM_PROMPT,
+      system: COACH_SYSTEM_PROMPT + languageInstruction(locale),
       user: `Write a performance analysis of my climbing for ${periodLabel}.
 
 My aggregated data for the period (stats) and my grade goals (goals):
@@ -301,9 +323,10 @@ ${describeInput(stats, goals)}${describeInjuries(stats)}`,
   async generateTrainingPlan(
     stats: ClimbingStats,
     goals: GoalSummary[],
+    locale: Locale = DEFAULT_LOCALE,
   ): Promise<TrainingPlan> {
     return completeWithSchema<TrainingPlan>({
-      system: COACH_SYSTEM_PROMPT,
+      system: COACH_SYSTEM_PROMPT + languageInstruction(locale),
       user: `Design a training plan for the coming weeks based on my recent climbing (${stats.period_start} to ${stats.period_end}).
 Target the weaknesses visible in the data, and pick drills that move me toward my goals.
 

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { deleteMedia, signMediaUrls } from "../lib/storage";
 import type Media from "../types/MediaType";
 import Button from "./Button";
@@ -27,6 +28,7 @@ interface MediaGalleryProps {
  */
 export default function MediaGallery({ media, onChanged }: MediaGalleryProps) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [pendingDelete, setPendingDelete] = useState<Media | null>(null);
 
   // Keyed by the paths themselves: a signed URL is only valid for the object it
@@ -55,7 +57,7 @@ export default function MediaGallery({ media, onChanged }: MediaGalleryProps) {
       queryClient.invalidateQueries({ queryKey: ["media"] });
       setPendingDelete(null);
       onChanged();
-      toast.success("Attachment deleted");
+      toast.success(t("media.deleted"));
     },
     onError: (err) => toast.error(err.message),
   });
@@ -68,8 +70,8 @@ export default function MediaGallery({ media, onChanged }: MediaGalleryProps) {
         open={pendingDelete !== null}
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => pendingDelete && remove(pendingDelete.media_id)}
-        title="Delete this attachment?"
-        message="The file is removed from storage as well, and cannot be recovered."
+        title={t("media.confirmTitle")}
+        message={t("media.confirmBody")}
         isPending={isDeleting}
       />
 
@@ -106,7 +108,7 @@ export default function MediaGallery({ media, onChanged }: MediaGalleryProps) {
 
                 <Button
                   variant="error"
-                  aria-label="Delete attachment"
+                  aria-label={t("media.deleteLabel")}
                   onClick={() => setPendingDelete(item)}
                   className="absolute top-1 right-1 px-2 py-0.5 text-xs opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                 >

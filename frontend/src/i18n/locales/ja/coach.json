@@ -1,0 +1,110 @@
+{
+  "title": "AIコーチ",
+  "subtitle": "記録したセッションから、あなた専用のコーチングを作成します。",
+  "disclaimer": "AIコーチングは記録したデータをもとに生成したもので、医療的なアドバイスではありません。痛みがあるときは休養し、医師や理学療法士に相談してください。",
+  "toast": {
+    "saved": "保存しました",
+    "analysisReady": "パフォーマンス分析ができました",
+    "planReady": "トレーニングプランができました",
+    "reportDeleted": "レポートを削除しました",
+    "planDeleted": "トレーニングプランを削除しました"
+  },
+  "delete": {
+    "reportTitle": "このレポートを削除しますか？",
+    "planTitle": "このトレーニングプランを削除しますか？",
+    "message": "AIが書いた文章、その根拠になった統計、書き添えたメモをまとめて削除します。同じ内容で作り直すことはできません。"
+  },
+  "performance": {
+    "heading": "パフォーマンス分析",
+    "today": "今日",
+    "thisMonth": "今月",
+    "generate": "分析を作成",
+    "generating": "分析中...",
+    "loading": "レポートを読み込み中...",
+    "emptyTitle": "分析はまだありません",
+    "emptyBody": "期間を選んで「分析を作成」を押すと、記録したセッションをAIコーチが振り返り、強み・弱み・グレードの伸びをレポートします。",
+    "period": {
+      "daily": "デイリー",
+      "monthly": "マンスリー"
+    },
+    "label": "{{period}}レポート · {{date}}",
+    "periodLabel": "{{period}} · {{date}}",
+    "trending": "このままなら<grade>{{grade}}</grade>に届きそうです。",
+    "showDetail": "分析の全文を読む",
+    "hideDetail": "分析の全文を閉じる",
+    "titlePlaceholder": "レポートに名前を付ける — 例:「V5を落とした月」",
+    "notePlaceholder": "コーチの指摘は当たっていましたか？何を変えて、どうなりましたか？",
+    "browse": "過去のレポートを見る",
+    "browserTitle": "過去のパフォーマンスレポート"
+  },
+  "analysis": {
+    "strengths": "強み",
+    "weaknesses": "弱み",
+    "selfReported": "自分で挙げた敗因"
+  },
+  "chart": {
+    "gradeTitle": "グレード別のトライ数と完登数",
+    "tries": "トライ",
+    "sends": "完登",
+    "byWallAngle": "壁の傾斜別の成功率",
+    "byHoldType": "ホールド種類別の成功率",
+    "successRate": "成功率",
+    "pctOfTries_other": "{{count}}回のトライ中{{pct}}%"
+  },
+  "stats": {
+    "sessions": "セッション:",
+    "tries": "トライ:",
+    "sends": "完登:",
+    "successRate": "成功率:",
+    "flashes": "フラッシュ:",
+    "highestSend": "最高完登グレード:"
+  },
+  "trend": {
+    "heading": "月次レポートで見る成功率の推移"
+  },
+  "training": {
+    "heading": "トレーニングプラン",
+    "generate": "トレーニングプランを作成",
+    "generating": "プランを作成中...",
+    "loading": "トレーニングプランを読み込み中...",
+    "emptyTitle": "トレーニングプランはまだありません",
+    "emptyBody": "「トレーニングプランを作成」を押すと、直近30日のクライミングと目標をもとに、AIコーチがこれからの数週間のメニューを組み立てます。",
+    "label": "トレーニングプラン",
+    "showDetail": "プランの全文を読む",
+    "hideDetail": "プランの全文を閉じる",
+    "titlePlaceholder": "プランに名前を付ける — 例:「冬のパワー強化」",
+    "notePlaceholder": "実際にやったメニューは？効果があったのはどれですか？",
+    "browse": "過去のプランを見る",
+    "browserTitle": "過去のトレーニングプラン",
+    "adjustedTitle": "ケガに合わせて調整しました",
+    "adjustedBody": "除外したメニュー: {{drills}}。痛みが続く、または悪化する場合は医師や理学療法士に相談してください。",
+    "priority": {
+      "high": "優先度 高",
+      "medium": "優先度 中",
+      "low": "優先度 低"
+    }
+  },
+  "card": {
+    "modelGenerated": "{{model}} · {{date}}に生成",
+    "nameLabel": "レポート名",
+    "yourNotes": "自分のメモ",
+    "saveNotes": "メモを保存"
+  },
+  "pin": {
+    "pin": "上部に固定",
+    "unpin": "固定を解除"
+  },
+  "browser": {
+    "backToList": "← 一覧に戻る",
+    "openInPage": "ページで開く",
+    "shown": "{{total}}件中{{shown}}件を表示",
+    "all": "すべて",
+    "pinned": "★ ピン留め",
+    "pinnedAria": "ピン留め済み",
+    "loadError": "レポートを読み込めませんでした。",
+    "empty": "ここにはまだレポートがありません。",
+    "emptyPinned": "ピン留めしたレポートはまだありません。レポートの星を押すと、この一覧の上部に固定されます。",
+    "generated": "{{date}}に生成",
+    "periodGenerated": "{{period}} · {{date}}に生成"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "title": "ケガの記録",
+  "subtitle": "痛むところを記録して回復の流れを追いながら、トレーニングをその部位から遠ざけます。",
+  "record": "+ ケガを記録",
+  "disclaimer": {
+    "title": "ここは記録帳であって、医師ではありません",
+    "body": "ここにあるものは医療的なアドバイスではありません。このアプリは体の状態を記録し、該当する部位に負荷がかかるトレーニングの提案を外すだけで、原因や治し方を判断することはできません。痛みが続く、悪化する、または突然出た場合は、医師や理学療法士に相談してください。"
+  },
+  "empty": {
+    "title": "今は痛むところはありません",
+    "body": "何よりです。もし痛みが出たらここに記録してください。AIコーチがその部位を避けてトレーニングを組みます。"
+  },
+  "status": {
+    "active": "まだ痛む",
+    "recovering": "回復中",
+    "healed": "回復済み"
+  },
+  "markStatus": {
+    "active": "「まだ痛む」にする",
+    "recovering": "「回復中」にする",
+    "healed": "「回復済み」にする"
+  },
+  "side": {
+    "left": "左",
+    "right": "右",
+    "both": "両方"
+  },
+  "card": {
+    "partWithSide": "{{part}}（{{side}}）",
+    "since": "{{date}}から",
+    "days_other": "{{count}}日",
+    "severity": "重症度 {{level}}/5",
+    "lastPain": "直近: {{level}}/10",
+    "open": "開く"
+  },
+  "healed": {
+    "show_other": "回復済みのケガ{{count}}件を表示",
+    "hide_other": "回復済みのケガ{{count}}件を隠す"
+  },
+  "chart": {
+    "loading": "チェックインを読み込み中...",
+    "needMore": "数日チェックインすると、ここに推移が表示されます。",
+    "pain": "痛み"
+  },
+  "checkIn": {
+    "question": "今日の痛みはどうですか？ — {{level}}/10",
+    "min": "痛みなし",
+    "max": "今までで一番ひどい",
+    "notePlaceholder": "今日のことで残しておきたいことは？",
+    "submit": "今日のチェックイン"
+  },
+  "delete": {
+    "title": "このケガの記録を削除しますか？",
+    "message": "{{part}}の記録と、それに紐づく痛みのチェックインをすべて削除します。この履歴は元に戻せません。"
+  },
+  "form": {
+    "title": "ケガを記録",
+    "bodyPart": "どこが痛みますか？",
+    "side": "どちら側ですか？",
+    "date": "いつからですか？",
+    "severity": "どのくらいつらいですか？ — {{level}}/5",
+    "severityMin": "少し気になる",
+    "severityMax": "登れない",
+    "description": "何がありましたか？",
+    "descriptionPlaceholder": "かぶった壁の小さいカチで、指にピキッときた..."
+  },
+  "toast": {
+    "created": "ケガを記録しました。無理せずに。",
+    "createFailed": "保存できませんでした",
+    "updated": "更新しました",
+    "updateFailed": "更新できませんでした",
+    "deleted": "ケガの記録を削除しました",
+    "deleteFailed": "削除できませんでした",
+    "checkedIn": "今日のチェックインを記録しました",
+    "checkInFailed": "チェックインできませんでした",
+    "needBodyPart": "部位を選んでください"
+  }
+}

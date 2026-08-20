@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   currentMonthKey,
   daysUntil,
   formatDate,
-  pluralize,
   todayString,
 } from "../lib/date";
 import type Stats from "../types/StatsType";
@@ -44,17 +44,20 @@ const TOOLTIP_STYLE = {
   color: "var(--color-on-surface)",
 } as const;
 
-/** Sub-headline under the welcome, phrased to match the month-over-month delta. */
-const paceMessage = (sessionCount: number, delta: number): string => {
-  if (sessionCount === 0)
-    return "Log your first session to start tracking your progress.";
-  if (delta > 0) return "You're ahead of last month — keep it going!";
-  if (delta < 0)
-    return "You're behind last month's pace. Time to get back on the wall.";
-  return "You're matching last month's pace.";
+/**
+ * Sub-headline under the welcome, phrased to match the month-over-month delta.
+ * Returns the catalogue key rather than the sentence, so the choice of phrasing
+ * stays here and the wording stays in the locale files.
+ */
+const paceMessageKey = (sessionCount: number, delta: number): string => {
+  if (sessionCount === 0) return "welcome.paceFirstSession";
+  if (delta > 0) return "welcome.paceAhead";
+  if (delta < 0) return "welcome.paceBehind";
+  return "welcome.paceMatching";
 };
 
 const Dashboard = () => {
+  const { t } = useTranslation("dashboard");
   const { profile } = useAuth();
   const navigate = useNavigate();
   // Recent Activity opens the visit. Until this existed, a logged session could
@@ -114,17 +117,18 @@ const Dashboard = () => {
     latestPerformance?.analysis_data?.headline;
 
   if (isPending) {
-    return <p className="text-on-surface-variant animate-pulse">Loading stats...</p>;
+    return (
+      <p className="text-on-surface-variant animate-pulse">
+        {t("state.loading")}
+      </p>
+    );
   }
 
   if (isError || !stats) {
     return (
       <Card className="mt-3">
-        <p className="font-bold text-on-surface">Could not load your dashboard</p>
-        <p className="text-on-surface-variant mt-1">
-          The server did not answer. Your logged sessions are safe — try
-          reloading in a moment.
-        </p>
+        <p className="font-bold text-on-surface">{t("state.errorTitle")}</p>
+        <p className="text-on-surface-variant mt-1">{t("state.errorBody")}</p>
       </Card>
     );
   }
@@ -151,16 +155,20 @@ const Dashboard = () => {
   // "Failed" donut, so an empty ring stands in until there is data to split.
   const successRateData = hasAttempts
     ? [
-        { name: "Success", value: successRate, color: "var(--color-primary)" },
         {
-          name: "Failed",
+          name: t("charts.success"),
+          value: successRate,
+          color: "var(--color-primary)",
+        },
+        {
+          name: t("charts.failed"),
           value: 100 - successRate,
           color: "var(--color-secondary-container)",
         },
       ]
     : [
         {
-          name: "No data",
+          name: t("charts.noData"),
           value: 100,
           color: "var(--color-surface-container-highest)",
         },
@@ -178,12 +186,17 @@ const Dashboard = () => {
           <div>
             <p className="font-bold">
               {openInjuries.length === 1
-                ? `${openInjuries[0]!.body_part_label} is still healing`
-                : `${openInjuries.length} injuries still healing`}
+                ? t("injuries.oneHealing", {
+                    bodyPart: openInjuries[0]!.body_part_label,
+                  })
+                : t("injuries.manyHealing", { count: openInjuries.length })}
             </p>
             <p className="text-body-sm opacity-90">
-              Your training plans are being kept away from{" "}
-              {openInjuries.map((i) => i.body_part_label).join(", ")}.
+              {t("injuries.avoiding", {
+                bodyParts: openInjuries
+                  .map((i) => i.body_part_label)
+                  .join(", "),
+              })}
             </p>
           </div>
           <Button
@@ -191,20 +204,21 @@ const Dashboard = () => {
             className="shrink-0"
             onClick={() => navigate("/injuries")}
           >
-            Check in
+            {t("injuries.checkIn")}
           </Button>
         </div>
       )}
 
       <div className="mt-3">
         <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-          Welcome back
-          {profile?.first_name ? `, ${profile.first_name}` : ""}!
+          {profile?.first_name
+            ? t("welcome.titleNamed", { name: profile.first_name })
+            : t("welcome.title")}
         </h1>
-        <p>{paceMessage(stats.lifetime.sessions, monthDelta)}</p>
+        <p>{t(paceMessageKey(stats.lifetime.sessions, monthDelta))}</p>
         {stats.streak_weeks > 1 && (
           <p className="text-primary font-medium mt-1">
-            {stats.streak_weeks} weeks climbing in a row — don't break it now.
+            {t("welcome.streak", { count: stats.streak_weeks })}
           </p>
         )}
       </div>
@@ -212,7 +226,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 mb-4">
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            SESSIONS THIS MONTH
+            {t("stats.sessionsThisMonth")}
           </h3>
           <div className="gap-3 flex flex-row items-center">
             <p className="text-3xl font-bold mt-2 tabular-nums">
@@ -220,7 +234,9 @@ const Dashboard = () => {
             </p>
             {monthDelta !== 0 && (
               <p className={monthDelta > 0 ? "text-primary" : "text-error"}>
-                {monthDelta > 0 ? `+${monthDelta}` : monthDelta} vs last month
+                {t("stats.vsLastMonth", {
+                  delta: monthDelta > 0 ? `+${monthDelta}` : monthDelta,
+                })}
               </p>
             )}
           </div>
@@ -228,7 +244,7 @@ const Dashboard = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            HIGHEST GRADE
+            {t("stats.highestGrade")}
           </h3>
           <p className="text-3xl font-bold mt-2">
             {stats.lifetime.highest_sent_grade ?? "-"}
@@ -236,19 +252,22 @@ const Dashboard = () => {
           {nextGoal && daysToGoal !== null && (
             <p className="text-xs text-on-surface-variant mt-1">
               {daysToGoal >= 0
-                ? `Goal due in ${pluralize(daysToGoal, "day")}`
-                : `Goal was due ${pluralize(Math.abs(daysToGoal), "day")} ago`}
+                ? t("stats.goalDueIn", { count: daysToGoal })
+                : t("stats.goalOverdue", { count: Math.abs(daysToGoal) })}
             </p>
           )}
         </Card>
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            TOTAL TRIES
+            {t("stats.totalTries")}
           </h3>
           <p className="text-3xl font-bold mt-2 tabular-nums">{totalTries}</p>
           <p className="text-xs text-on-surface-variant mt-1">
-            {totalSends} sent across {pluralize(totalRoutes, "route")}
+            {t("stats.sentAcross", {
+              sends: totalSends,
+              routes: t("common:climb.routes", { count: totalRoutes }),
+            })}
           </p>
         </Card>
 
@@ -256,7 +275,7 @@ const Dashboard = () => {
         <div className="p-4 rounded-xl shadow-sm bg-primary-container flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-medium text-on-primary-container">
-              AI COACH
+              {t("coach.title")}
             </h3>
             {coachSummary ? (
               <p className="text-body-md mt-2 text-on-primary-container line-clamp-3">
@@ -265,10 +284,10 @@ const Dashboard = () => {
             ) : (
               <>
                 <p className="text-2xl font-bold mt-2 text-on-primary-container">
-                  No analysis yet
+                  {t("coach.noAnalysis")}
                 </p>
                 <p className="text-body-sm mt-1 text-on-primary-container/90">
-                  Generate one from your logged sessions.
+                  {t("coach.noAnalysisBody")}
                 </p>
               </>
             )}
@@ -278,7 +297,7 @@ const Dashboard = () => {
             className="mt-4 font-medium w-full"
             onClick={() => navigate("/ai-coach")}
           >
-            {coachSummary ? "Read the analysis" : "Open AI Coach"}
+            {coachSummary ? t("coach.readAnalysis") : t("coach.open")}
           </Button>
         </div>
       </div>
@@ -286,7 +305,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 mb-4">
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            MONTHLY VOLUME
+            {t("charts.monthlyVolume")}
           </h3>
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -310,7 +329,7 @@ const Dashboard = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            GRADE PROGRESS
+            {t("charts.gradeProgress")}
           </h3>
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -324,7 +343,10 @@ const Dashboard = () => {
                   tickFormatter={(value) => `V${value}`}
                 />
                 <Tooltip
-                  formatter={(value) => [`V${Number(value)}`, "Max Grade"]}
+                  formatter={(value) => [
+                    `V${Number(value)}`,
+                    t("charts.maxGrade"),
+                  ]}
                   contentStyle={TOOLTIP_STYLE}
                 />
                 <Line
@@ -341,7 +363,7 @@ const Dashboard = () => {
 
         <Card className="p-4 flex flex-col justify-center">
           <h3 className="text-sm font-medium text-on-surface-variant">
-            SUCCESS RATE
+            {t("charts.successRateTitle")}
           </h3>
           <div className="h-48 w-full relative flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
@@ -362,7 +384,10 @@ const Dashboard = () => {
                 </Pie>
                 {hasAttempts && (
                   <Tooltip
-                    formatter={(value) => [`${Number(value)}%`, "Rate"]}
+                    formatter={(value) => [
+                      `${Number(value)}%`,
+                      t("charts.rate"),
+                    ]}
                     contentStyle={TOOLTIP_STYLE}
                   />
                 )}
@@ -375,12 +400,12 @@ const Dashboard = () => {
                     {successRate}%
                   </span>
                   <span className="text-label-sm text-on-surface-variant">
-                    Success
+                    {t("charts.success")}
                   </span>
                 </>
               ) : (
                 <span className="text-label-sm text-on-surface-variant">
-                  No attempts yet
+                  {t("charts.noAttempts")}
                 </span>
               )}
             </div>
@@ -391,18 +416,20 @@ const Dashboard = () => {
       <div className="mt-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-on-surface text-headline-md font-bold tracking-tight">
-            Recent Activity
+            {t("recentSessions.title")}
           </h2>
           <Link
             to="/sessions"
             className="text-label-md font-medium text-primary hover:underline"
           >
-            View all sessions
+            {t("recentSessions.viewAll")}
           </Link>
         </div>
         <div className="flex flex-col gap-3 mt-3">
           {stats.recent_sessions.length === 0 && (
-            <p className="text-on-surface-variant">No sessions logged yet.</p>
+            <p className="text-on-surface-variant">
+              {t("recentSessions.empty")}
+            </p>
           )}
           {stats.recent_sessions.map((session) => (
             <Card key={session.session_id} className="p-0">
@@ -416,13 +443,15 @@ const Dashboard = () => {
                     {formatDate(session.visit_date)}
                   </span>
                   <span className="font-bold truncate">
-                    {session.gym_name ?? "Climbing session"}
+                    {session.gym_name ?? t("common:climb.climbingSession")}
                   </span>
                 </div>
                 <span className="text-on-surface-variant text-body-sm shrink-0">
                   {session.duration_minutes !== null &&
-                    `${session.duration_minutes} min · `}
-                  View
+                    `${t("recentSessions.durationMinutes", {
+                      count: session.duration_minutes,
+                    })} · `}
+                  {t("recentSessions.view")}
                 </span>
               </button>
             </Card>

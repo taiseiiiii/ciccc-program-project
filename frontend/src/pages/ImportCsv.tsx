@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { Trans, useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import {
@@ -37,6 +38,7 @@ interface ImportOutcome {
 }
 
 export default function ImportCsv() {
+  const { t } = useTranslation("sessions");
   const queryClient = useQueryClient();
   const { grades, gradeIdByName, isGradesLoading } = useClimbTaxonomies();
   const fileInput = useRef<HTMLInputElement>(null);

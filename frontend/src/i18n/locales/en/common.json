@@ -1,0 +1,113 @@
+{
+  "app": {
+    "name": "ClimbLog AI"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "logSession": "Log session",
+    "sessions": "Sessions",
+    "progress": "Progress",
+    "aiCoach": "AI coach",
+    "injuries": "Injuries",
+    "profile": "Profile",
+    "mainLabel": "Main navigation",
+    "logShort": "Log",
+    "coachShort": "Coach"
+  },
+  "action": {
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "remove": "Remove",
+    "edit": "Edit",
+    "close": "Close",
+    "retry": "Try again",
+    "loadMore": "Load more",
+    "back": "Back",
+    "signOut": "Sign out"
+  },
+  "state": {
+    "loading": "Loading...",
+    "empty": "Nothing here yet",
+    "error": "Something went wrong"
+  },
+  "climb": {
+    "flash": "Flash",
+    "sentOf": "Sent {{sends}}/{{tries}}",
+    "tries_one": "{{count}} try",
+    "tries_other": "{{count}} tries",
+    "routes_one": "{{count}} route",
+    "routes_other": "{{count}} routes",
+    "unnamedRoute": "Unnamed route",
+    "climbingSession": "Climbing session"
+  },
+  "notFound": {
+    "title": "That page does not exist",
+    "body": "The link may be out of date, or there may be a typo in the address.",
+    "back": "Back to the dashboard"
+  },
+  "errorBoundary": {
+    "staleTitle": "A new version is available",
+    "staleBody": "This tab is running an older copy of the app. Reloading picks up the new one — nothing you logged is affected.",
+    "title": "Something broke on this screen",
+    "body": "Nothing you logged has been lost — this is a display problem, not a saving one. Reloading usually clears it.",
+    "reload": "Reload",
+    "backToDashboard": "Back to dashboard"
+  },
+  "shell": {
+    "tagline": "Elite Climbing Progression",
+    "pages": {
+      "dashboard": {
+        "title": "Dashboard",
+        "subtitle": "Overview of your recent climbing activities"
+      },
+      "logSession": {
+        "title": "Log Session",
+        "subtitle": "Record today's attempts, routes, and notes"
+      },
+      "sessions": {
+        "title": "Your Sessions",
+        "subtitle": "Search, read back, and correct any visit you have logged"
+      },
+      "import": {
+        "title": "Import History",
+        "subtitle": "Bring in what you have logged elsewhere from a CSV"
+      },
+      "progress": {
+        "title": "Performance Analytics",
+        "subtitle": "Track your send rates, consistency, and active goals"
+      },
+      "aiCoach": {
+        "title": "AI Coaching Intelligence",
+        "subtitle": "Personalized insights and drill recommendations"
+      },
+      "injuries": {
+        "title": "Injuries",
+        "subtitle": "Track what hurts and keep training away from it"
+      },
+      "profile": {
+        "title": "Profile & Settings",
+        "subtitle": "Manage your climbing grades and account preferences"
+      }
+    },
+    "theme": {
+      "toDark": "Switch to dark mode",
+      "toLight": "Switch to light mode"
+    }
+  },
+  "language": {
+    "label": "Language",
+    "help": "Changes the app straight away. Your AI reports are written in this language too."
+  },
+  "pwa": {
+    "offlineReady": "Ready to work offline.",
+    "updateAvailable": "A new version is available."
+  },
+  "media": {
+    "deleted": "Attachment deleted",
+    "confirmTitle": "Delete this attachment?",
+    "confirmBody": "The file is removed from storage as well, and cannot be recovered.",
+    "deleteLabel": "Delete attachment"
+  }
+}
