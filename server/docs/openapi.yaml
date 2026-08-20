@@ -248,21 +248,81 @@ paths:
     get:
       tags: [Sessions]
       summary: List sessions
-      description: The authenticated user's sessions, ordered by `visit_date` descending, then `session_id` descending.
+      description: |
+        One page of the authenticated user's visits, newest first by
+        `visit_date` then `session_id`, each carrying a count of the climbs
+        logged on it.
+
+        `meta.total` is how many matched the filters in total, not how many
+        were returned — enough to say "20 of 143" and to know whether another
+        page exists.
+
+        `q` matches the gym name or any route name logged on the visit,
+        case-insensitively, as a substring.
       operationId: listSessions
+      parameters:
+        - name: limit
+          in: query
+          description: Page size. Default 20, maximum 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: q
+          in: query
+          description: Substring of a gym name or a route name.
+          schema:
+            type: string
+            maxLength: 150
+        - name: from
+          in: query
+          description: Earliest `visit_date` to include (inclusive).
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Latest `visit_date` to include (inclusive).
+          schema:
+            type: string
+            format: date
+        - name: grade_id
+          in: query
+          description: Only visits including at least one climb at this grade.
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
-          description: The user's sessions.
+          description: One page of the user's sessions.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Session'
+                      $ref: '#/components/schemas/SessionSummary'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                        description: Rows matching the filters, before paging.
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -369,11 +429,54 @@ paths:
     delete:
       tags: [Sessions]
       summary: Delete a session
-      description: Also deletes its attempts (`ON DELETE CASCADE`).
+      description: >-
+        Also deletes its attempts (`ON DELETE CASCADE`), any route those climbs
+        were the last reference to, and the stored photos and videos attached
+        to any of them.
       operationId: deleteSession
       responses:
         '204':
           description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sessions/{id}/attempts:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Sessions]
+      summary: Add a climb to a saved session
+      description: |
+        The body is one climb — the same shape as one entry of the `attempts`
+        array on `POST /sessions` — and is validated identically, so a route
+        remembered afterwards is stored exactly as it would have been at the
+        time.
+
+        Route, attempt and every tag are written in one transaction. Ownership
+        is checked against the session in the path inside that transaction;
+        there is no id a caller could supply to reach someone else's visit.
+      operationId: addSessionAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionAttemptCreate'
+      responses:
+        '201':
+          description: The created climb.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1963,6 +2066,26 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    SessionSummary:
+      allOf:
+        - $ref: '#/components/schemas/Session'
+        - type: object
+          description: >-
+            A visit as the list screen shows it. The counts come from the same
+            query as the row, so a page of twenty does not cost twenty
+            follow-up requests to render "8 climbs · 5 sent".
+          required: [climb_count, total_attempts, total_sends]
+          properties:
+            climb_count:
+              type: integer
+              description: Routes logged on this visit.
+            total_attempts:
+              type: integer
+              description: Times pulled on, summed across those routes.
+            total_sends:
+              type: integer
+              description: Of those, the ones that topped out.
 
     SessionCreate:
       type: object

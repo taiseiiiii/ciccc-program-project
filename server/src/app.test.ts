@@ -273,6 +273,60 @@ describe("request validation", () => {
   });
 });
 
+describe("session list paging", () => {
+  it.each([
+    ["limit", "1e3"],
+    ["limit", "-5"],
+    ["limit", "101"],
+    ["offset", "-1"],
+    ["offset", "1e9"],
+    ["grade_id", "abc"],
+    ["from", "07-07-2026"],
+  ])("rejects %s=%s", async (param, value) => {
+    const res = await request(app)
+      .get(`/api/v1/sessions?${param}=${encodeURIComponent(value)}`)
+      .set("Authorization", TOKEN);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts offset=0, which the id pattern would otherwise reject", async () => {
+    const res = await request(app)
+      .get("/api/v1/sessions?offset=0&limit=20")
+      .set("Authorization", TOKEN);
+
+    expect(res.status).toBe(200);
+    expect(res.body.meta).toMatchObject({ limit: 20, offset: 0 });
+  });
+});
+
+describe("POST /sessions/:id/attempts", () => {
+  it("validates the climb the same way a nested one is validated", async () => {
+    const res = await request(app)
+      .post("/api/v1/sessions/1/attempts")
+      .set("Authorization", TOKEN)
+      .send({ grade_id: 3, attempt_count: 2, send_count: 5 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/cannot exceed tries/);
+  });
+
+  it("requires a grade", async () => {
+    const res = await request(app)
+      .post("/api/v1/sessions/1/attempts")
+      .set("Authorization", TOKEN)
+      .send({ route_name: "Yellow slab" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain("grade_id");
+  });
+
+  it("needs a token", async () => {
+    const res = await request(app).post("/api/v1/sessions/1/attempts").send({});
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("frozen AI snapshots", () => {
   it.each([
     ["performances", "performance_report"],
