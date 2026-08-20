@@ -1,5 +1,9 @@
 import { supabase } from "./supabase";
 
+// The fallback is a development convenience only. A production build cannot
+// reach it: vite.config.ts fails the build when VITE_API_URL is unset, which is
+// the difference between a deploy that stops and a shipped client quietly
+// asking the user's own machine for data.
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000/api/v1";
 
 /**

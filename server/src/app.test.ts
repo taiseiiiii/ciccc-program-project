@@ -199,6 +199,47 @@ describe("rate limiting", () => {
   });
 });
 
+describe("AI generation quota", () => {
+  // The limit on paid model calls counts rows already generated rather than
+  // keeping a tally in memory, so that it survives a restart and holds across
+  // every instance. These assert the two branches of that count.
+  const quotaUsed = async (used: number) => {
+    const { query } = await import("./db/pool");
+    vi.mocked(query).mockResolvedValueOnce({
+      rows: [{ used: String(used) }],
+      rowCount: 1,
+    } as never);
+  };
+
+  it.each(["performances", "trainings"])(
+    "refuses POST /%s once the hourly allowance is spent",
+    async (resource) => {
+      await quotaUsed(10);
+
+      const res = await request(app)
+        .post(`/api/v1/${resource}`)
+        .set("Authorization", TOKEN)
+        .send({ period_type: "monthly" });
+
+      expect(res.status).toBe(429);
+      expect(res.body.error.message).toMatch(/last hour/);
+    },
+  );
+
+  it("lets a request through while the allowance remains", async () => {
+    await quotaUsed(9);
+
+    const res = await request(app)
+      .post("/api/v1/performances")
+      .set("Authorization", TOKEN)
+      .send({ period_type: "monthly" });
+
+    // Past the quota gate, into the controller — which fails for its own
+    // reasons against a mocked database. Anything but 429 proves the point.
+    expect(res.status).not.toBe(429);
+  });
+});
+
 describe("request validation", () => {
   it("reports malformed JSON as a 400, not a 500", async () => {
     const res = await request(app)

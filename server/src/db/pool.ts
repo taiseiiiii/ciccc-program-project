@@ -16,6 +16,31 @@ export const pool = new Pool({
   connectionString: env.databaseUrl,
   // Off for localhost, verified TLS for hosted databases. See ./ssl.ts.
   ssl: resolveSsl(env.databaseUrl),
+
+  // Sized for a serverless runtime, where many short-lived instances share one
+  // database rather than one long-lived process owning it.
+  //
+  // `max` is per instance, not per app: node-postgres defaults to 10, and with
+  // a handful of warm instances that multiplies straight into the database's
+  // connection cap. The app runs through Supabase's transaction pooler, which
+  // hands out a pooled connection per statement, so a small ceiling costs
+  // nothing — GET /stats fires 11 queries at once and simply takes its turn.
+  max: 5,
+
+  // The default is 0, meaning "queue forever". A request that cannot get a
+  // connection should fail while the client is still listening, not hang until
+  // the platform's own timeout kills it with no error anyone can read.
+  connectionTimeoutMillis: 10_000,
+
+  // An instance can sit idle between invocations; holding a connection open
+  // through that is what exhausts the pooler.
+  idleTimeoutMillis: 30_000,
+  allowExitOnIdle: true,
+
+  // A backstop against one pathological query pinning a connection for the
+  // life of the instance. Every statement here is indexed and sub-second; the
+  // AI endpoints are slow in the model call, not in SQL.
+  statement_timeout: 20_000,
 });
 
 pool.on("error", (err) => {
