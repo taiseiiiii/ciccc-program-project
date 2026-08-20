@@ -1,5 +1,8 @@
 # Manual setup
 
+日本語版: [`MANUAL_SETUP.ja.md`](MANUAL_SETUP.ja.md) — same content; keep both in
+step when this changes.
+
 Everything else is in the repo. These things cannot be done from code — they
 need someone with access to the dashboards.
 

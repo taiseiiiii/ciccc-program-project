@@ -139,6 +139,7 @@ bucket, Postmark, Supabase settings — is in [`MANUAL_SETUP.md`](MANUAL_SETUP.m
 | [`server/README.md`](server/README.md)                 | API layout, migration rules, auth, local setup           |
 | [`server/docs/openapi.yaml`](server/docs/openapi.yaml) | Every endpoint, request and response shape               |
 | [`MANUAL_SETUP.md`](MANUAL_SETUP.md)                   | Everything that is clicked, not committed — DNS, R2, Postmark, Vercel, Supabase |
+| [`MANUAL_SETUP.ja.md`](MANUAL_SETUP.ja.md)             | 同上（日本語版）                                          |
 | [`frontend/SUPABASE_SETUP.md`](frontend/SUPABASE_SETUP.md) | Creating the Supabase project and finding the keys  |
 | [`frontend/API_INTEGRATION.md`](frontend/API_INTEGRATION.md) | How the client talks to the API                   |
 | [`required/climb-app-erd.md`](required/climb-app-erd.md) | The entity-relationship diagram                        |
