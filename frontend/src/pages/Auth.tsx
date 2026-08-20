@@ -1,5 +1,6 @@
 import Card from "../components/Card";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth, type AuthResult } from "../hooks/useAuth";
 import Input from "../components/Input";
@@ -13,6 +14,7 @@ import {
 import RockWall from "../assets/rock-wall.jpg";
 
 const Auth = () => {
+  const { t } = useTranslation("profile");
   const navigate = useNavigate();
   const { signUp, signIn } = useAuth();
 
@@ -45,9 +47,7 @@ const Auth = () => {
     } catch (err) {
       if (!isUserCancellation(err)) {
         setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : "That passkey did not work — try your password",
+          err instanceof Error ? err.message : t("auth.passkeyFailed"),
         );
       }
     } finally {
@@ -104,12 +104,12 @@ const Auth = () => {
           <div className="absolute inset-0 bg-surface-container-lowest/60" />
           <div className="relative z-10 flex flex-col items-center justify-center text-center p-8">
             <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-              Elevate your performance with data-driven insights.
+              {t("auth.heroTitle")}
             </h1>
             <p className="text-on-surface-variant text-body-md mt-2 tracking-tight">
-              Turn every attempt into valuable progress. <br />
-              Visualize your strengths and focus areas. <br />
-              Start sending your dream grades today.
+              {t("auth.heroLine1")} <br />
+              {t("auth.heroLine2")} <br />
+              {t("auth.heroLine3")}
             </p>
           </div>
         </div>
@@ -125,12 +125,12 @@ const Auth = () => {
               className="w-full max-w-sm flex flex-col gap-4 p-8"
             >
               <h1 className="text-headline-md">
-                {isSignUp ? "Sign up" : "Welcome back"}
+                {isSignUp ? t("auth.signUpTitle") : t("auth.signInTitle")}
               </h1>
               <p>
                 {isSignUp
-                  ? "Create your account!"
-                  : "Log in to continue your training session."}
+                  ? t("auth.signUpSubtitle")
+                  : t("auth.signInSubtitle")}
               </p>
               {errorMessage && (
                 <div
@@ -144,8 +144,8 @@ const Auth = () => {
                 <div className="flex gap-4">
                   <Input
                     type="text"
-                    label="Firstname"
-                    placeholder="John"
+                    label={t("auth.firstName")}
+                    placeholder={t("auth.firstNamePlaceholder")}
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     autoCapitalize="words"
@@ -154,8 +154,8 @@ const Auth = () => {
                   />
                   <Input
                     type="text"
-                    label="Lastname"
-                    placeholder="Smith"
+                    label={t("auth.lastName")}
+                    placeholder={t("auth.lastNamePlaceholder")}
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     autoCapitalize="words"
@@ -166,7 +166,7 @@ const Auth = () => {
               )}
               <Input
                 type="email"
-                label="Email address"
+                label={t("auth.email")}
                 placeholder="climbLogAI@email.com"
                 value={email}
                 required
@@ -175,7 +175,7 @@ const Auth = () => {
               />
               <Input
                 type="password"
-                label="Password"
+                label={t("auth.password")}
                 placeholder="••••••••"
                 value={password}
                 required
@@ -188,10 +188,10 @@ const Auth = () => {
               />
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
-                  ? "Loading..."
+                  ? t("common:state.loading")
                   : isSignUp
-                    ? "Sign up →"
-                    : "Log in →"}
+                    ? t("auth.signUpAction")
+                    : t("auth.signInAction")}
               </Button>
 
               {/*
@@ -204,7 +204,7 @@ const Auth = () => {
                   <div className="flex items-center gap-3">
                     <span className="h-px flex-1 bg-outline-variant" />
                     <span className="text-label-sm text-on-surface-variant">
-                      or
+                      {t("auth.or")}
                     </span>
                     <span className="h-px flex-1 bg-outline-variant" />
                   </div>
@@ -215,24 +215,24 @@ const Auth = () => {
                     onClick={handlePasskeySignIn}
                   >
                     {isPasskeyPending
-                      ? "Waiting for your device..."
-                      : "Sign in with Face ID or a passkey"}
+                      ? t("auth.waitingForDevice")
+                      : t("auth.passkeyCta")}
                   </Button>
                 </>
               )}
 
               <div className="flex flex-row gap-3">
                 <p className="text-label-sm md:text-label-md tracking-tight">
-                  {isSignUp
-                    ? "Already have an account?"
-                    : "Don't have an account?"}
+                  {isSignUp ? t("auth.haveAccount") : t("auth.noAccount")}
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsSignUp(!isSignUp)}
                   className="text-label-sm md:text-label-md text-on-surface-variant font-bold hover:text-primary"
                 >
-                  {isSignUp ? "Log in" : "Create account"}
+                  {isSignUp
+                    ? t("auth.switchToSignIn")
+                    : t("auth.switchToSignUp")}
                 </button>
               </div>
             </form>

@@ -166,6 +166,17 @@
     "error": {
       "unknownGrade": "不明なグレードです: {{grade}}",
       "requestFailed": "リクエストに失敗しました"
+    },
+    "problem": {
+      "dateMissing": "visit_date は必須です",
+      "dateInvalid": "「{{value}}」は日付として読めません。YYYY-MM-DD 形式で入力してください（例：2026-08-19）",
+      "gradeMissing": "grade は必須です",
+      "gradeUnknown": "「{{value}}」は登録されていないグレードです。V0〜V17 を使ってください",
+      "countsNotWhole": "attempt_count と send_count は整数で入力してください",
+      "triesOutOfRange": "attempt_count は 1〜{{max}} の範囲で入力してください",
+      "sendsOverTries": "完登数（{{sends}}）がトライ数（{{tries}}）を超えています",
+      "durationInvalid": "duration_minutes は {{max}} 以下の整数（分）で入力してください",
+      "sessionFull": "{{date}} のセッションはすでに {{max}} 課題あります。1セッションの上限です"
     }
   }
 }

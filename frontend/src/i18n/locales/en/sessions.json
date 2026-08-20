@@ -173,6 +173,17 @@
     "error": {
       "unknownGrade": "Unknown grade {{grade}}",
       "requestFailed": "Request failed"
+    },
+    "problem": {
+      "dateMissing": "visit_date is required",
+      "dateInvalid": "\"{{value}}\" is not a date — use YYYY-MM-DD, e.g. 2026-08-19",
+      "gradeMissing": "grade is required",
+      "gradeUnknown": "\"{{value}}\" is not a grade this app knows — use V0 to V17",
+      "countsNotWhole": "attempt_count and send_count must be whole numbers",
+      "triesOutOfRange": "attempt_count must be between 1 and {{max}}",
+      "sendsOverTries": "sends ({{sends}}) cannot be more than tries ({{tries}})",
+      "durationInvalid": "duration_minutes must be a whole number of minutes, up to {{max}}",
+      "sessionFull": "{{date}} already has {{max}} climbs — the most one session can hold"
     }
   }
 }

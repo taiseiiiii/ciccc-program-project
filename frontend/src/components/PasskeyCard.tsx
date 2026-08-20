@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import {
   deletePasskey,
@@ -23,6 +24,7 @@ import Card from "./Card";
  * keeps working either way.
  */
 export default function PasskeyCard() {
+  const { t } = useTranslation("profile");
   const queryClient = useQueryClient();
   const supported = isPasskeySupported();
 
@@ -37,12 +39,14 @@ export default function PasskeyCard() {
     mutationFn: registerPasskey,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["passkeys"] });
-      toast.success("Passkey added — you can sign in with it next time");
+      toast.success(t("passkeys.toastAdded"));
     },
     onError: (err) => {
       // Dismissing the system prompt is a decision, not a failure.
       if (isUserCancellation(err)) return;
-      toast.error(err instanceof Error ? err.message : "Could not add a passkey");
+      toast.error(
+        err instanceof Error ? err.message : t("passkeys.toastAddFailed"),
+      );
     },
   });
 
@@ -50,10 +54,12 @@ export default function PasskeyCard() {
     mutationFn: deletePasskey,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["passkeys"] });
-      toast.success("Passkey removed");
+      toast.success(t("passkeys.toastRemoved"));
     },
     onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Could not remove it"),
+      toast.error(
+        err instanceof Error ? err.message : t("passkeys.toastRemoveFailed"),
+      ),
   });
 
   if (!supported) return null;
@@ -62,27 +68,24 @@ export default function PasskeyCard() {
     <Card>
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide">
-          Face ID &amp; passkeys
+          {t("passkeys.title")}
         </h2>
         <span className="text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full text-xs uppercase tracking-wide">
-          Beta
+          {t("passkeys.beta")}
         </span>
       </div>
 
       <p className="text-on-surface-variant text-body-sm">
-        Sign in with your face, fingerprint, or device PIN instead of typing a
-        password. Your device keeps the key and never shares it — add one per
-        device you climb with.
+        {t("passkeys.body")}
       </p>
 
       {isError ? (
         <p className="text-on-surface-variant text-body-sm mt-3">
-          Passkeys are not available on this account yet. Your password still
-          works as usual.
+          {t("passkeys.unavailable")}
         </p>
       ) : isPending ? (
         <p className="text-on-surface-variant text-body-sm mt-3 animate-pulse">
-          Loading...
+          {t("common:state.loading")}
         </p>
       ) : (
         <>
@@ -95,12 +98,16 @@ export default function PasskeyCard() {
                 >
                   <span className="min-w-0">
                     <span className="font-medium truncate">
-                      {passkey.friendly_name ?? "Passkey"}
+                      {passkey.friendly_name ?? t("passkeys.defaultName")}
                     </span>
                     <span className="block text-label-sm text-on-surface-variant">
-                      Added {formatDate(passkey.created_at)}
+                      {t("passkeys.added", {
+                        date: formatDate(passkey.created_at),
+                      })}
                       {passkey.last_used_at &&
-                        ` · last used ${formatDate(passkey.last_used_at)}`}
+                        ` · ${t("passkeys.lastUsed", {
+                          date: formatDate(passkey.last_used_at),
+                        })}`}
                     </span>
                   </span>
                   <Button
@@ -108,7 +115,7 @@ export default function PasskeyCard() {
                     disabled={isRemoving}
                     onClick={() => remove(passkey.id)}
                   >
-                    Remove
+                    {t("common:action.remove")}
                   </Button>
                 </li>
               ))}
@@ -117,7 +124,7 @@ export default function PasskeyCard() {
 
           <div className="mt-4">
             <Button onClick={() => add()} disabled={isAdding}>
-              {isAdding ? "Waiting for your device..." : "Add Face ID / passkey"}
+              {isAdding ? t("passkeys.waiting") : t("passkeys.add")}
             </Button>
           </div>
         </>

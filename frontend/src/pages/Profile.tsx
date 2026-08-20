@@ -225,7 +225,7 @@ const Profile = () => {
                 )}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="Storage used"
+                aria-label={t("profile.storageUsedAria")}
               >
                 <div
                   className="h-full bg-primary transition-all"
@@ -235,9 +235,10 @@ const Profile = () => {
                 />
               </div>
               <p className="text-on-surface-variant text-body-sm mt-2">
-                {formatBytes(usage.used_bytes)} of {formatBytes(usage.limit_bytes)}{" "}
-                used. Open a session from the dashboard to review or delete
-                individual files.
+                {t("profile.storageUsage", {
+                  used: formatBytes(usage.used_bytes),
+                  limit: formatBytes(usage.limit_bytes),
+                })}
               </p>
             </Card>
           )}
@@ -246,18 +247,17 @@ const Profile = () => {
 
           <Card>
             <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-              Import your history
+              {t("profile.importTitle")}
             </h2>
             <p className="text-on-surface-variant text-body-sm">
-              Climbed elsewhere before this? Bring those sessions in from a CSV
-              so your trends and your coach start from the whole picture.
+              {t("profile.importBody")}
             </p>
             <div className="mt-4">
               <Link
                 to="/import"
                 className="inline-block px-4 py-2 rounded-lg font-sans text-label-md bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
               >
-                Import from a CSV
+                {t("profile.importCta")}
               </Link>
             </div>
           </Card>
@@ -266,17 +266,17 @@ const Profile = () => {
 
           <Card className="border-error/40">
             <h2 className="text-label-md font-bold text-error uppercase tracking-wide mb-2">
-              Account
+              {t("profile.accountTitle")}
             </h2>
             <p className="text-on-surface-variant text-body-sm">
-              Closing your account signs you out and blocks further access. Your
-              climbing log is kept rather than erased — get in touch if you want
-              it deleted outright.
+              {t("profile.accountBody")}
             </p>
             <div className="flex flex-wrap gap-3 mt-4">
-              <SignoutButton variant="secondary">Sign out</SignoutButton>
+              <SignoutButton variant="secondary">
+                {t("common:action.signOut")}
+              </SignoutButton>
               <Button variant="error" onClick={() => setIsClosingAccount(true)}>
-                Close account
+                {t("profile.closeAccount")}
               </Button>
             </div>
           </Card>
@@ -287,13 +287,13 @@ const Profile = () => {
         open={isClosingAccount}
         onCancel={() => setIsClosingAccount(false)}
         onConfirm={() => closeAccount()}
-        title="Close your account?"
+        title={t("profile.closeTitle")}
         message={
           lifetime
-            ? `You will be signed out and cannot sign back in. Your ${pluralize(lifetime.sessions, "logged session")} stay on file rather than being deleted.`
-            : "You will be signed out and cannot sign back in."
+            ? t("profile.closeMessage", { count: lifetime.sessions })
+            : t("profile.closeMessagePlain")
         }
-        confirmLabel="Close account"
+        confirmLabel={t("profile.closeAccount")}
         isPending={isClosing}
       />
     </div>

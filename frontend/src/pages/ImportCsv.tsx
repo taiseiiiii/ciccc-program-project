@@ -240,13 +240,13 @@ export default function ImportCsv() {
               <ul className="flex flex-col gap-1.5 list-none p-0 max-h-64 overflow-y-auto">
                 {result.problems.map((problem) => (
                   <li
-                    key={`${problem.line}-${problem.message}`}
+                    key={`${problem.line}-${problem.code}`}
                     className="text-body-sm"
                   >
                     <span className="text-on-surface-variant tabular-nums">
                       {t("import.preview.problemRow", { line: problem.line })}
                     </span>{" "}
-                    {problem.message}
+                    {t(`import.problem.${problem.code}`, problem.values)}
                   </li>
                 ))}
               </ul>
