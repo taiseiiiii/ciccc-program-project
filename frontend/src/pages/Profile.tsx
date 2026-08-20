@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import Card from "../components/Card";
+import PasskeyCard from "../components/PasskeyCard";
 import Button from "../components/Button";
 import Input from "../components/Input";
 import SignoutButton from "../components/SignoutButton";
@@ -224,6 +226,26 @@ const Profile = () => {
               </p>
             </Card>
           )}
+
+          <Card>
+            <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
+              Import your history
+            </h2>
+            <p className="text-on-surface-variant text-body-sm">
+              Climbed elsewhere before this? Bring those sessions in from a CSV
+              so your trends and your coach start from the whole picture.
+            </p>
+            <div className="mt-4">
+              <Link
+                to="/import"
+                className="inline-block px-4 py-2 rounded-lg font-sans text-label-md bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all"
+              >
+                Import from a CSV
+              </Link>
+            </div>
+          </Card>
+
+          <PasskeyCard />
 
           <Card className="border-error/40">
             <h2 className="text-label-md font-bold text-error uppercase tracking-wide mb-2">

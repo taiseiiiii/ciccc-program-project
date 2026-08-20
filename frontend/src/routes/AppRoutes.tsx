@@ -20,6 +20,7 @@ const AICoach = lazy(() => import("../pages/AICoach"));
 const Injuries = lazy(() => import("../pages/Injuries"));
 const LogSession = lazy(() => import("../pages/LogSession"));
 const Sessions = lazy(() => import("../pages/Sessions"));
+const ImportCsv = lazy(() => import("../pages/ImportCsv"));
 const Profile = lazy(() => import("../pages/Profile"));
 
 /** Shown while a screen's chunk arrives. */
@@ -80,6 +81,8 @@ const AppRoutes = () => {
             <Route index element={<Dashboard />} />
             <Route path="log-session" element={<LogSession />} />
             <Route path="sessions" element={<Sessions />} />
+            {/* Reached from Profile — a one-off, not somewhere to navigate to. */}
+            <Route path="import" element={<ImportCsv />} />
             <Route path="progress" element={<Progress />} />
             <Route path="ai-coach" element={<AICoach />} />
             <Route path="injuries" element={<Injuries />} />

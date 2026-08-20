@@ -5,6 +5,11 @@ import { useAuth, type AuthResult } from "../hooks/useAuth";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import ConfirmEmailNotice from "../components/ConfirmEmailNotice";
+import {
+  isPasskeySupported,
+  isUserCancellation,
+  signInWithPasskey,
+} from "../lib/passkeys";
 import RockWall from "../assets/rock-wall.jpg";
 
 const Auth = () => {
@@ -21,6 +26,34 @@ const Auth = () => {
   // Set once we know the account exists but its email is unconfirmed; swaps the
   // form out for the "check your inbox" notice.
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [isPasskeyPending, setIsPasskeyPending] = useState(false);
+
+  /**
+   * Sign in with a device credential.
+   *
+   * No email is typed first: the browser's own prompt lists the passkeys it
+   * holds for this site and the climber picks one, which is the whole appeal on
+   * a phone. Cancelling that prompt clears the pending state and says nothing —
+   * it is a decision, not a failure.
+   */
+  const handlePasskeySignIn = async () => {
+    setIsPasskeyPending(true);
+    setErrorMessage(null);
+    try {
+      await signInWithPasskey();
+      navigate("/");
+    } catch (err) {
+      if (!isUserCancellation(err)) {
+        setErrorMessage(
+          err instanceof Error
+            ? err.message
+            : "That passkey did not work — try your password",
+        );
+      }
+    } finally {
+      setIsPasskeyPending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -160,6 +193,34 @@ const Auth = () => {
                     ? "Sign up →"
                     : "Log in →"}
               </Button>
+
+              {/*
+                Only offered for signing in, and only where the browser can do
+                it. A passkey has to be added from Profile first, so on the
+                sign-up form it would be an option nobody could take.
+              */}
+              {!isSignUp && isPasskeySupported() && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="h-px flex-1 bg-outline-variant" />
+                    <span className="text-label-sm text-on-surface-variant">
+                      or
+                    </span>
+                    <span className="h-px flex-1 bg-outline-variant" />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isPasskeyPending}
+                    onClick={handlePasskeySignIn}
+                  >
+                    {isPasskeyPending
+                      ? "Waiting for your device..."
+                      : "Sign in with Face ID or a passkey"}
+                  </Button>
+                </>
+              )}
+
               <div className="flex flex-row gap-3">
                 <p className="text-label-sm md:text-label-md tracking-tight">
                   {isSignUp

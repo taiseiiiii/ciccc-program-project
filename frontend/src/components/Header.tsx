@@ -18,6 +18,10 @@ const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
     title: "Your Sessions",
     subtitle: "Search, read back, and correct any visit you have logged",
   },
+  "/import": {
+    title: "Import History",
+    subtitle: "Bring in what you have logged elsewhere from a CSV",
+  },
   "/progress": {
     title: "Performance Analytics",
     subtitle: "Track your send rates, consistency, and active goals",
