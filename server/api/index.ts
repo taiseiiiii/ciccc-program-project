@@ -10,6 +10,10 @@
  * app runs as a long-lived process; it binds a port and handles shutdown
  * signals, neither of which apply here.
  */
+import { initSentry } from "../src/observability/sentry";
 import { createApp } from "../src/app";
+
+// Before the app is built, so anything that fails during setup is reported too.
+initSentry();
 
 export default createApp();

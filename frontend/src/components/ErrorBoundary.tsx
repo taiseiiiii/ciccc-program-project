@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import Button from "./Button";
 import Card from "./Card";
+import { captureError } from "../lib/sentry";
 
 interface Props {
   children: ReactNode;
@@ -58,9 +59,11 @@ export default class ErrorBoundary extends Component<Props, State> {
       window.location.reload();
       return;
     }
-    // Nothing ships these anywhere yet, but the console is where a teammate
-    // will look first, and the component stack is the useful half.
+    // The console is where a teammate will look first, and the component stack
+    // is the useful half. Sentry gets both — the console alone is on a device
+    // nobody here can read.
     console.error("[ui] render error", error, info.componentStack);
+    captureError(error, info.componentStack);
   }
 
   render() {
