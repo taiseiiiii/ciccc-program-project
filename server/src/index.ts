@@ -9,9 +9,9 @@ const server = app.listen(env.port, () => {
 });
 
 // How long a shutdown waits for in-flight requests before giving up. An AI
-// report takes up to 60s, so this is long enough not to cut one off, and short
-// enough to land inside the platform's own SIGKILL grace period.
-const SHUTDOWN_TIMEOUT_MS = 15_000;
+// report takes up to 60s (the OpenAI client's own timeout), so anything shorter
+// cuts off a generation the climber has already been billed for.
+const SHUTDOWN_TIMEOUT_MS = 65_000;
 
 let shuttingDown = false;
 

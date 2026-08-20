@@ -10,6 +10,32 @@ interface State {
   error: Error | null;
 }
 
+const RELOAD_KEY = "climblog:chunk-reload-at";
+
+// A tab left open across a deploy still holds the old bundle's chunk hashes.
+// Every page here is lazy-loaded, so the first navigation after a deploy asks
+// for a chunk that no longer exists and the dynamic import rejects. The wording
+// differs per browser, hence the union.
+const CHUNK_ERROR =
+  /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError/i;
+
+/**
+ * Guards against reloading in a loop. A stale chunk is fixed by exactly one
+ * reload; if the same error survives it, the deploy itself is broken and the
+ * climber is better off seeing the message than watching the tab thrash.
+ */
+function shouldAutoReload(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOAD_KEY));
+    if (last && Date.now() - last < 10_000) return false;
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    return true;
+  } catch {
+    // Private mode with storage disabled: skip the reload rather than risk it.
+    return false;
+  }
+}
+
 /**
  * Catches a render error and shows something, rather than a white page.
  *
@@ -28,6 +54,10 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (CHUNK_ERROR.test(error.message) && shouldAutoReload()) {
+      window.location.reload();
+      return;
+    }
     // Nothing ships these anywhere yet, but the console is where a teammate
     // will look first, and the component stack is the useful half.
     console.error("[ui] render error", error, info.componentStack);
@@ -36,15 +66,20 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
 
+    const isStaleBundle = CHUNK_ERROR.test(this.state.error.message);
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Card className="max-w-md flex flex-col gap-3">
           <h1 className="text-headline-sm font-bold text-on-surface">
-            Something broke on this screen
+            {isStaleBundle
+              ? "A new version is available"
+              : "Something broke on this screen"}
           </h1>
           <p className="text-on-surface-variant">
-            Nothing you logged has been lost — this is a display problem, not a
-            saving one. Reloading usually clears it.
+            {isStaleBundle
+              ? "This tab is running an older copy of the app. Reloading picks up the new one — nothing you logged is affected."
+              : "Nothing you logged has been lost — this is a display problem, not a saving one. Reloading usually clears it."}
           </p>
           <p className="text-label-sm text-on-surface-variant font-mono break-words">
             {this.state.error.message}

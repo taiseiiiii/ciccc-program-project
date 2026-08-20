@@ -22,6 +22,10 @@ const MAX_SESSION_MINUTES = 1440;
 // One route, one session. Beyond this the climber is not logging, they are
 // stress-testing the form.
 const MAX_TRIES_PER_ROUTE = 200;
+// Each climb costs several statements inside the create transaction, so an
+// unbounded array is a way to hold a connection open for as long as the body
+// size limit allows. A very long session is 30-odd routes; 60 is generous.
+const MAX_CLIMBS_PER_SESSION = 60;
 
 /**
  * Validate the tag ids on every nested climb in one round-trip per vocabulary.
@@ -113,6 +117,12 @@ export const sessionController = {
 
     if (attempts !== undefined && !Array.isArray(attempts)) {
       throw HttpError.badRequest("attempts must be an array");
+    }
+
+    if (Array.isArray(attempts) && attempts.length > MAX_CLIMBS_PER_SESSION) {
+      throw HttpError.badRequest(
+        `a session cannot hold more than ${MAX_CLIMBS_PER_SESSION} climbs`,
+      );
     }
 
     const attemptInputs: CreateSessionAttemptInput[] = [];

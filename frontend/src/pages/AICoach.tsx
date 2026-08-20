@@ -596,10 +596,11 @@ const AICoach = () => {
       <ReportSwitcher
         items={performances}
         getKey={(p) => p.performance_id}
-        getLabel={(p) =>
-          p.title ??
-          `${p.period_type === "daily" ? "Daily" : "Monthly"} · ${formatPeriod(p)}`
-        }
+        // Same shape as the training list: a full date, so the two rows read
+        // alike. A monthly report used to label itself "Monthly · August 2026",
+        // which gave no way to tell two reports for the same month apart. The
+        // period it covers is still on the card's own header pill.
+        getLabel={(p) => p.title ?? formatDate(p.created_at)}
         isPinned={(p) => p.is_pinned}
         isSelected={(p) => p.performance_id === performance?.performance_id}
         onSelect={(p) => setSelectedPerformanceId(p.performance_id)}

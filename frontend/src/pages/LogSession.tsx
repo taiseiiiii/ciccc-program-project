@@ -292,8 +292,10 @@ const LogSession = () => {
       return { failedUploads };
     },
     onSuccess: ({ failedUploads }) => {
-      // Dashboard and Progress both derive their figures from these lists, so
-      // a saved session has to refresh the climbs it created as well.
+      // Dashboard and Progress read every figure they show from /stats, keyed
+      // by month — the prefix match covers all of them. Without this the totals
+      // sit a whole session behind for up to the 60s staleTime.
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["attempts"] });
       queryClient.invalidateQueries({ queryKey: ["media"] });
@@ -607,7 +609,13 @@ const LogSession = () => {
         analytics.
       </p>
 
-      <Card className="flex flex-col md:flex-row gap-3 mt-6">
+      {/*
+        Grid, not flex-row: a date input's native spinner fields give it a
+        min-content width it refuses to shrink below, so as a flex item it
+        pushed the row past the card's edge on narrow screens. Grid tracks
+        divide the width up front and the control fits whatever it is given.
+      */}
+      <Card className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6">
         <Input
           ref={gymNameRef}
           type="text"
