@@ -27,12 +27,15 @@ info:
       `error.request_id`, which is what to quote in a bug report.
 
     ## Rate limits
-    Two buckets, both answering `429` with the usual error envelope and
-    `RateLimit-*` headers:
+    Two limits, both answering `429` with the usual error envelope:
 
-    - the whole API, 300 requests per minute per IP (`/health` exempt);
-    - `POST /performances` and `POST /trainings`, 10 per hour per **user** —
-      each is one paid model call.
+    - the whole API, 300 requests per minute per IP (`/health` exempt), with
+      `RateLimit-*` headers. In-memory, so it is best-effort across instances;
+      the cost of letting a few extra requests through is a little CPU.
+    - `POST /performances` and `POST /trainings` share an allowance of 10 per
+      hour per **user** — each is one paid model call. Counted from the rows
+      already generated rather than in memory, so it survives a restart and
+      holds across every instance. This is the spending limit.
 
     ## AI reports
     `POST /performances` and `POST /trainings` generate coaching reports with

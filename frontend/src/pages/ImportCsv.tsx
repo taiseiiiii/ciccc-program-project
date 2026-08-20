@@ -310,7 +310,7 @@ export default function ImportCsv() {
       {phase === "importing" && result && (
         <Card className="mt-6">
           <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-            Importing
+            {t("import.importing.heading")}
           </h2>
           <div
             className="h-2 w-full rounded-full bg-surface-container-high overflow-hidden"
@@ -327,8 +327,10 @@ export default function ImportCsv() {
             />
           </div>
           <p className="text-on-surface-variant text-body-sm mt-2 tabular-nums">
-            {progress} of {result.sessions.length} sessions saved. Leave this tab
-            open until it finishes.
+            {t("import.importing.progress", {
+              done: progress,
+              total: result.sessions.length,
+            })}
           </p>
         </Card>
       )}
@@ -336,23 +338,27 @@ export default function ImportCsv() {
       {phase === "done" && outcome && (
         <Card className={`mt-6 ${outcome.failedAt ? "border-error/40" : ""}`}>
           <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-            {outcome.failedAt ? "Stopped partway" : "Done"}
+            {outcome.failedAt
+              ? t("import.done.headingFailed")
+              : t("import.done.heading")}
           </h2>
           <p className="text-on-surface">
-            <span className="font-bold tabular-nums">{outcome.imported}</span>{" "}
-            session{outcome.imported === 1 ? "" : "s"} imported.
+            <span className="font-bold tabular-nums">
+              {t("import.sessionCount", { count: outcome.imported })}
+            </span>
+            {t("import.done.importedSuffix")}
           </p>
           {outcome.failedAt && (
             <p className="text-on-surface-variant text-body-sm mt-2">
-              The session dated {formatDate(outcome.failedAt.session.visit_date)}{" "}
-              was rejected: {outcome.failedAt.message}. Sessions are imported
-              oldest first, so everything before that date is saved — remove
-              those rows from your file and import the rest.
+              {t("import.done.failure", {
+                date: formatDate(outcome.failedAt.session.visit_date),
+                message: outcome.failedAt.message,
+              })}
             </p>
           )}
           <div className="mt-4">
             <Button variant="secondary" onClick={reset}>
-              Import another file
+              {t("import.done.again")}
             </Button>
           </div>
         </Card>

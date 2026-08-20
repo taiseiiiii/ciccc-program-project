@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -11,7 +12,7 @@ import SignoutButton from "../components/SignoutButton";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../lib/api";
-import { formatDate, formatMinutes, pluralize } from "../lib/date";
+import { formatDate, formatMinutes } from "../lib/date";
 import type User from "../types/UserType";
 import type { MediaUsage } from "../types/MediaType";
 import type Stats from "../types/StatsType";
@@ -24,6 +25,7 @@ function formatBytes(bytes: number): string {
 }
 
 const Profile = () => {
+  const { t } = useTranslation("profile");
   const { profile, profileError, signOut } = useAuth();
   const queryClient = useQueryClient();
 
@@ -57,7 +59,7 @@ const Profile = () => {
       // a full reload is the honest way to show the new name everywhere.
       queryClient.invalidateQueries();
       setIsEditing(false);
-      toast.success("Profile updated");
+      toast.success(t("profile.toastUpdated"));
       window.location.reload();
     },
     onError: (err) => toast.error(err.message),
@@ -66,7 +68,7 @@ const Profile = () => {
   const { mutate: closeAccount, isPending: isClosing } = useMutation({
     mutationFn: () => api("/users/me", { method: "DELETE" }),
     onSuccess: async () => {
-      toast.success("Your account has been closed.");
+      toast.success(t("profile.toastClosed"));
       await signOut();
     },
     onError: (err) => toast.error(err.message),
@@ -81,16 +83,16 @@ const Profile = () => {
   return (
     <div className="flex flex-col gap-stack-md max-w-2xl">
       <h1 className="text-headline-md font-bold text-on-surface tracking-tight">
-        Profile
+        {t("profile.title")}
       </h1>
 
       {profileError && (
         <Card className="bg-error-container text-on-error-container">
-          Could not load your profile: {profileError}
+          {t("profile.loadError", { error: profileError })}
         </Card>
       )}
 
-      {!profile && !profileError && <Card>Loading…</Card>}
+      {!profile && !profileError && <Card>{t("common:state.loading")}</Card>}
 
       {profile && (
         <>
@@ -99,14 +101,14 @@ const Profile = () => {
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col md:flex-row gap-3">
                   <Input
-                    label="First name"
+                    label={t("profile.firstName")}
                     value={firstName}
                     autoComplete="given-name"
                     maxLength={100}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
                   <Input
-                    label="Last name"
+                    label={t("profile.lastName")}
                     value={lastName}
                     autoComplete="family-name"
                     maxLength={100}
@@ -122,7 +124,7 @@ const Profile = () => {
                       setIsEditing(false);
                     }}
                   >
-                    Cancel
+                    {t("common:action.cancel")}
                   </Button>
                   <Button
                     disabled={isSaving}
@@ -133,7 +135,9 @@ const Profile = () => {
                       })
                     }
                   >
-                    {isSaving ? "Saving..." : "Save"}
+                    {isSaving
+                      ? t("common:action.saving")
+                      : t("common:action.save")}
                   </Button>
                 </div>
               </div>
@@ -141,20 +145,24 @@ const Profile = () => {
               <dl className="flex flex-col gap-stack-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <dt className="text-on-surface-variant text-body-sm">Name</dt>
+                    <dt className="text-on-surface-variant text-body-sm">
+                      {t("profile.name")}
+                    </dt>
                     <dd>{fullName || "—"}</dd>
                   </div>
                   <Button variant="secondary" onClick={() => setIsEditing(true)}>
-                    Edit
+                    {t("common:action.edit")}
                   </Button>
                 </div>
                 <div>
-                  <dt className="text-on-surface-variant text-body-sm">Email</dt>
+                  <dt className="text-on-surface-variant text-body-sm">
+                    {t("profile.email")}
+                  </dt>
                   <dd>{profile.email}</dd>
                 </div>
                 <div>
                   <dt className="text-on-surface-variant text-body-sm">
-                    Member since
+                    {t("profile.memberSince")}
                   </dt>
                   <dd>{formatDate(profile.created_at.slice(0, 10))}</dd>
                 </div>
@@ -165,30 +173,36 @@ const Profile = () => {
           {lifetime && (
             <Card>
               <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-3">
-                All time
+                {t("profile.allTime")}
               </h2>
               <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
-                  <dt className="text-on-surface-variant text-body-sm">Sessions</dt>
+                  <dt className="text-on-surface-variant text-body-sm">
+                    {t("profile.sessions")}
+                  </dt>
                   <dd className="text-headline-sm font-bold tabular-nums">
                     {lifetime.sessions}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-on-surface-variant text-body-sm">Routes</dt>
+                  <dt className="text-on-surface-variant text-body-sm">
+                    {t("profile.routes")}
+                  </dt>
                   <dd className="text-headline-sm font-bold tabular-nums">
                     {lifetime.routes}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-on-surface-variant text-body-sm">Sends</dt>
+                  <dt className="text-on-surface-variant text-body-sm">
+                    {t("profile.sends")}
+                  </dt>
                   <dd className="text-headline-sm font-bold tabular-nums">
                     {lifetime.sends}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-on-surface-variant text-body-sm">
-                    On the wall
+                    {t("profile.onTheWall")}
                   </dt>
                   <dd className="text-headline-sm font-bold tabular-nums">
                     {formatMinutes(lifetime.minutes)}
@@ -201,7 +215,7 @@ const Profile = () => {
           {usage && (
             <Card>
               <h2 className="text-label-md font-bold text-on-surface-variant uppercase tracking-wide mb-2">
-                Photo &amp; video storage
+                {t("profile.storageTitle")}
               </h2>
               <div
                 className="h-2 w-full rounded-full bg-surface-container-high overflow-hidden"

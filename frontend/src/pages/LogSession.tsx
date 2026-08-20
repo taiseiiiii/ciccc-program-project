@@ -660,8 +660,8 @@ const LogSession = () => {
 
             <div className="mt-3">
               <Textarea
-                label="Climber's Note"
-                placeholder="Describe the feeling, the beta you used, or why it didn't go..."
+                label={t("note.label")}
+                placeholder={t("note.placeholder")}
                 className="min-h-30"
                 value={editing.note}
                 onChange={(e) => updateEditing("note", e.target.value)}
