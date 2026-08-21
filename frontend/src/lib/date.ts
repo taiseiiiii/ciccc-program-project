@@ -12,6 +12,13 @@
  *      before. Anything here that turns a date string into a Date does that
  *      pinning.
  *
+ * Which leaves one distinction worth keeping straight. DATE columns —
+ * `visit_date`, `period_start` — arrive as bare `YYYY-MM-DD` strings and want
+ * `formatDate`. TIMESTAMPTZ columns — every `created_at` — arrive as a UTC
+ * instant and want `formatTimestamp`. They are not interchangeable: a report
+ * generated at 9pm in Vancouver is stamped 04:00 the next day in UTC, and
+ * reading a calendar date off the front of that string renders tomorrow.
+ *
  * `sv-SE` is used for formatting because it happens to produce ISO
  * `YYYY-MM-DD`, which is what the API takes.
  */
@@ -48,6 +55,22 @@ export function parseLocalDate(date: string): Date {
 /** "2026-08-19" -> "Aug 19, 2026", or "2026年8月19日" in Japanese. */
 export function formatDate(date: string): string {
   return parseLocalDate(date).toLocaleDateString(dateLocale(), {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
+ * An ISO instant -> "Aug 19, 2026", in whatever timezone the reader is in.
+ *
+ * For TIMESTAMPTZ values, where the point in time is the thing and the
+ * calendar day is derived from it. `formatDate` would take the UTC day off the
+ * front of the string instead, which is a different day for most of the
+ * evening anywhere west of Greenwich.
+ */
+export function formatTimestamp(instant: string): string {
+  return new Date(instant).toLocaleDateString(dateLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",

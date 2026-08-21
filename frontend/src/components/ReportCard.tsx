@@ -4,7 +4,8 @@ import Button from "./Button";
 import Card from "./Card";
 import Input from "./Input";
 import Textarea from "./Textarea";
-import { formatDate } from "../lib/date";
+import ReportLanguageNotice from "./ReportLanguageNotice";
+import { formatTimestamp } from "../lib/date";
 
 interface ReportCardProps {
   /** The pill in the top-left — "monthly report · August 2026", "Training plan". */
@@ -119,7 +120,7 @@ export default function ReportCard({
           <span className="text-on-surface-variant text-xs">
             {t("card.modelGenerated", {
               model: aiModel ?? "",
-              date: formatDate(createdAt),
+              date: formatTimestamp(createdAt),
             })}
           </span>
         </div>
@@ -150,6 +151,13 @@ export default function ReportCard({
         </p>
       )}
       {subtitle && <p className="text-on-surface-variant mt-2">{subtitle}</p>}
+
+      {/*
+        Above the charts rather than inside the disclosure: by the time someone
+        has opened the essay and found it in the wrong language, the notice is
+        an explanation for something that already went wrong.
+      */}
+      <ReportLanguageNotice text={[summary, detail].filter(Boolean).join("\n")} />
 
       {children}
 

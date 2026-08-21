@@ -12,7 +12,7 @@ import SignoutButton from "../components/SignoutButton";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../lib/api";
-import { formatDate, formatMinutes } from "../lib/date";
+import { formatMinutes, formatTimestamp } from "../lib/date";
 import type User from "../types/UserType";
 import type { MediaUsage } from "../types/MediaType";
 import type Stats from "../types/StatsType";
@@ -164,7 +164,7 @@ const Profile = () => {
                   <dt className="text-on-surface-variant text-body-sm">
                     {t("profile.memberSince")}
                   </dt>
-                  <dd>{formatDate(profile.created_at.slice(0, 10))}</dd>
+                  <dd>{formatTimestamp(profile.created_at)}</dd>
                 </div>
               </dl>
             )}

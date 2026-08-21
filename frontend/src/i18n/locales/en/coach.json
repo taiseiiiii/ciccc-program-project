@@ -87,6 +87,7 @@
   },
   "card": {
     "modelGenerated": "{{model}} · generated {{date}}",
+    "otherLanguage": "This report was written in {{language}}. A report is kept exactly as the coach wrote it, so it is never translated afterwards — generate a new one to read it in English.",
     "nameLabel": "Name this report",
     "yourNotes": "Your notes",
     "saveNotes": "Save notes"

@@ -51,6 +51,22 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
   const [editingClimb, setEditingClimb] = useState<AttemptRecord | null>(null);
   const [climbModalOpen, setClimbModalOpen] = useState(false);
 
+  // This component stays mounted between visits — the pages render it with a
+  // `session` of null rather than unmounting it — so none of the state above
+  // resets on its own. Left alone, an editor opened on one visit reappears over
+  // the next one, still pointing at the climb it was opened for.
+  //
+  // Adjusted during render rather than in an effect, which is what React asks
+  // for when state has to follow a prop: the reset lands in the same pass as
+  // the change, so nothing renders the old visit's editor even for a frame.
+  const [shownSessionId, setShownSessionId] = useState(sessionId);
+  if (sessionId !== shownSessionId) {
+    setShownSessionId(sessionId);
+    setClimbModalOpen(false);
+    setEditingClimb(null);
+    setEditingHeader(false);
+  }
+
   const { data: attemptsData, isPending: isAttemptsLoading } = useQuery({
     queryKey: ["attempts", { session_id: sessionId }],
     queryFn: () =>
@@ -139,8 +155,15 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
 
   return (
     <>
+      {/*
+        Left open behind the climb editor rather than hidden while it is up.
+        `showModal()` puts each dialog in the top layer and makes everything
+        under it inert, so they stack correctly and Escape only ever closes the
+        top one — the same way the delete confirmation below already sits over
+        this. Hiding it instead read as the whole modal vanishing on Edit.
+      */}
       <Modal
-        open={session !== null && !climbModalOpen}
+        open={session !== null}
         onClose={onClose}
         size="lg"
         title={
