@@ -60,10 +60,13 @@ beforeAll(async () => {
 });
 
 describe("public surface", () => {
-  it("serves the service descriptor at the root", async () => {
+  // The root used to answer with a service descriptor. It was removed after it
+  // turned out to be the one path Vercel could not invoke — every other path,
+  // matched or not, was served correctly. Asserted rather than deleted so that
+  // re-adding a "/" route is a decision someone makes on purpose.
+  it("has nothing at the root", async () => {
     const res = await request(app).get("/");
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ name: "climb-app-server", api: "/api/v1" });
+    expect(res.status).toBe(404);
   });
 
   it("answers the health check without a token", async () => {

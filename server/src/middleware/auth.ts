@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { env } from '../config/env';
+import { toLocale } from '../config/locales';
 import { HttpError } from '../utils/HttpError';
 import { userRepository, type User } from '../repositories/user.repository';
 
@@ -57,12 +58,19 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
     if (!user) {
       // First authenticated request: create the profile from the JWT claims.
       // first/last name arrive via user_metadata, set by the frontend at sign-up.
+      //
+      // So does the language. It is the only moment the account's language can
+      // be known before the account exists, and it decides what the AI coach
+      // writes in — the interface picks its own language from the browser, but
+      // the reports are generated here. toLocale falls back to the default for
+      // anything unexpected, including accounts made before this was sent.
       const meta = (payload['user_metadata'] ?? {}) as Record<string, unknown>;
       user = await userRepository.provision({
         auth_user_id: payload.sub,
         email: typeof payload['email'] === 'string' ? payload['email'] : '',
         first_name: typeof meta['first_name'] === 'string' ? meta['first_name'] : null,
         last_name: typeof meta['last_name'] === 'string' ? meta['last_name'] : null,
+        locale: toLocale(meta['locale']),
       });
     }
     if (user.status !== 'active') {

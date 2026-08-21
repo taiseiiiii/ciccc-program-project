@@ -47,14 +47,13 @@ export function createApp(): Application {
   app.use(requestLog);
   app.use(apiLimiter);
 
-  app.get("/", (_req, res) => {
-    res.json({
-      name: "climb-app-server",
-      version: "0.1.0",
-      api: "/api/v1",
-      docs: "/api/v1/docs",
-    });
-  });
+  // There is deliberately no route at "/". It used to answer with a banner
+  // naming the API and its docs, which was a convenience for a human who had
+  // pasted the API's own URL into a browser — and on Vercel it was the one path
+  // that reliably returned FUNCTION_INVOCATION_FAILED while every other path,
+  // including unmatched ones, was served correctly. Nothing calls it: the app
+  // talks to /api/v1 and the platform health check to /api/v1/health. An
+  // unexplained 500 on the origin was worth more than the banner.
 
   // API docs: interactive Swagger UI + the raw spec (for codegen / import).
   //

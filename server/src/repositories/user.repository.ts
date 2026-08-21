@@ -1,4 +1,4 @@
-import type { Locale } from '../config/locales';
+import { DEFAULT_LOCALE, type Locale } from '../config/locales';
 import { query } from '../db/pool';
 import { buildUpdate } from '../utils/buildUpdate';
 
@@ -25,6 +25,9 @@ export interface ProvisionUserInput {
   email: string;
   first_name?: string | null;
   last_name?: string | null;
+  /** The language the climber signed up in. Omitted for accounts created
+   *  before the frontend started sending it; those fall back to the default. */
+  locale?: Locale;
 }
 
 /**
@@ -60,11 +63,17 @@ export const userRepository = {
    */
   async provision(input: ProvisionUserInput): Promise<User> {
     const { rows } = await query<User>(
-      `INSERT INTO users (auth_user_id, email, first_name, last_name)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (auth_user_id, email, first_name, last_name, locale)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (auth_user_id) DO UPDATE SET email = EXCLUDED.email
        RETURNING *`,
-      [input.auth_user_id, input.email, input.first_name ?? null, input.last_name ?? null],
+      [
+        input.auth_user_id,
+        input.email,
+        input.first_name ?? null,
+        input.last_name ?? null,
+        input.locale ?? DEFAULT_LOCALE,
+      ],
     );
     return rows[0]!;
   },
