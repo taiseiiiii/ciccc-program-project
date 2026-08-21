@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { api } from "../lib/api";
 import { clearAllSessionDrafts } from "../lib/sessionDraft";
+import { currentLocale } from "../i18n";
 import { AuthContext, type AuthContextValue } from "../hooks/useAuth";
 import type User from "../types/UserType";
 
@@ -58,7 +59,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     api<{ data: User }>("/users/me")
       .then(({ data }) => {
-        if (!cancelled) setLoaded({ userId, profile: data, error: null });
+        if (cancelled) return;
+        setLoaded({ userId, profile: data, error: null });
+
+        // Keep the account's language matching the one on screen.
+        //
+        // The interface picks its language from the browser, but AI reports are
+        // written on the server from users.locale — so a climber whose phone is
+        // in Japanese used to read a Japanese app and get English coaching, and
+        // the only way to reconcile them was to visit Profile and press a
+        // button. Whatever they are actually looking at wins.
+        //
+        // Best effort, and deliberately not awaited: a language that failed to
+        // save is worth far less than a profile load that failed because of it.
+        const shown = currentLocale();
+        if (data.locale !== shown) {
+          void api("/users/me", {
+            method: "PATCH",
+            body: JSON.stringify({ locale: shown }),
+          }).catch(() => undefined);
+        }
       })
       .catch((err: unknown) => {
         // Deliberately non-fatal: the user stays signed in and the route guards
@@ -89,7 +109,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password, // first/last name ride along in user_metadata; the backend reads them
         // from the JWT to create the profile row. No extra API call needed.
         options: {
-          data: { first_name: firstName, last_name: lastName },
+          // The language rides along too. This is the only point where it can
+          // reach the account before the account exists, and it is what the AI
+          // coach writes its reports in — the interface reads the browser, but
+          // the reports are generated on the server.
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            locale: currentLocale(),
+          },
           emailRedirectTo: emailRedirectTo(),
         },
       });
