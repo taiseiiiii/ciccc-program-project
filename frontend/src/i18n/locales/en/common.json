@@ -98,7 +98,11 @@
   },
   "language": {
     "label": "Language",
-    "help": "Changes the app straight away. Your AI reports are written in this language too."
+    "help": "Changes the app straight away. Your AI reports are written in this language too.",
+    "name": {
+      "en": "English",
+      "ja": "Japanese"
+    }
   },
   "pwa": {
     "offlineReady": "Ready to work offline.",

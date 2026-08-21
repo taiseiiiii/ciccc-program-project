@@ -74,7 +74,20 @@ export default function Modal({
         event.preventDefault();
         onClose();
       }}
-      onClose={onClose}
+      // `close` fires for `dialog.close()` as well as for the user, so a parent
+      // that hides a modal by flipping `open` used to hear its own state change
+      // back as a dismissal. That is what closed a session out from under its
+      // climb editor: the editor renders only while the session is open, so the
+      // detail modal closing itself took the editor down with it and left the
+      // "which climb" state pointing at the previous one.
+      //
+      // The guard reads the prop straight from this render's closure. The event
+      // is queued rather than dispatched inline, so by the time it arrives the
+      // effect above has committed and `open` is already false — which is
+      // precisely the case where nobody needs telling.
+      onClose={() => {
+        if (open) onClose();
+      }}
       // A click that lands on the dialog element itself — rather than on the
       // panel inside it — is a click on the backdrop.
       onClick={(event) => {

@@ -8,7 +8,7 @@ import {
   listPasskeys,
   registerPasskey,
 } from "../lib/passkeys";
-import { formatDate } from "../lib/date";
+import { formatTimestamp } from "../lib/date";
 import Button from "./Button";
 import Card from "./Card";
 
@@ -102,11 +102,11 @@ export default function PasskeyCard() {
                     </span>
                     <span className="block text-label-sm text-on-surface-variant">
                       {t("passkeys.added", {
-                        date: formatDate(passkey.created_at),
+                        date: formatTimestamp(passkey.created_at),
                       })}
                       {passkey.last_used_at &&
                         ` · ${t("passkeys.lastUsed", {
-                          date: formatDate(passkey.last_used_at),
+                          date: formatTimestamp(passkey.last_used_at),
                         })}`}
                     </span>
                   </span>

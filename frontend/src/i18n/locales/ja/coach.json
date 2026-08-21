@@ -86,6 +86,7 @@
   },
   "card": {
     "modelGenerated": "{{model}} · {{date}}に生成",
+    "otherLanguage": "このレポートは{{language}}で書かれています。レポートは生成された時の文章のまま保存されるため、あとから翻訳されることはありません。日本語で読むには、新しくレポートを作成してください。",
     "nameLabel": "レポート名",
     "yourNotes": "自分のメモ",
     "saveNotes": "メモを保存"

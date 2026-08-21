@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { formatDate } from "../lib/date";
+import { formatTimestamp } from "../lib/date";
 import Button from "./Button";
 import Modal from "./Modal";
+import ReportLanguageNotice from "./ReportLanguageNotice";
 
 /**
  * Look back through past reports without losing the one on screen.
@@ -118,7 +119,7 @@ export default function ReportBrowserModal<T>({
       open={open}
       onClose={close}
       size="2xl"
-      title={reading ? (reading.title ?? formatDate(reading.createdAt)) : title}
+      title={reading ? (reading.title ?? formatTimestamp(reading.createdAt)) : title}
       footer={
         reading ? (
           <>
@@ -209,7 +210,7 @@ export default function ReportBrowserModal<T>({
                         </span>
                       )}
                       <span className="font-bold truncate">
-                        {report.title ?? formatDate(report.createdAt)}
+                        {report.title ?? formatTimestamp(report.createdAt)}
                       </span>
                       {report.periodLabel && (
                         <span className="text-primary bg-primary/10 px-2 py-0.5 rounded-full text-xs uppercase tracking-wide">
@@ -217,7 +218,7 @@ export default function ReportBrowserModal<T>({
                         </span>
                       )}
                       <span className="ml-auto text-label-sm text-on-surface-variant shrink-0">
-                        {formatDate(report.createdAt)}
+                        {formatTimestamp(report.createdAt)}
                       </span>
                     </span>
                     {report.summary && (
@@ -295,10 +296,10 @@ function ReadView({
           {report.periodLabel
             ? t("browser.periodGenerated", {
                 period: report.periodLabel,
-                date: formatDate(report.createdAt),
+                date: formatTimestamp(report.createdAt),
               })
             : t("browser.generated", {
-                date: formatDate(report.createdAt),
+                date: formatTimestamp(report.createdAt),
               })}
         </span>
         <button
@@ -321,6 +322,10 @@ function ReadView({
           {report.summary}
         </p>
       )}
+
+      <ReportLanguageNotice
+        text={[report.summary, report.detail].filter(Boolean).join("\n")}
+      />
 
       {body.map((text, i) => (
         <p key={i} className="text-on-surface-variant">
