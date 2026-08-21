@@ -23,6 +23,7 @@ const LogSession = lazy(() => import("../pages/LogSession"));
 const Sessions = lazy(() => import("../pages/Sessions"));
 const ImportCsv = lazy(() => import("../pages/ImportCsv"));
 const Profile = lazy(() => import("../pages/Profile"));
+const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 
 /** Shown while a screen's chunk arrives. */
 const ScreenFallback = () => {
@@ -85,6 +86,14 @@ const AppRoutes = () => {
         <Route element={<RedirectIfAuthed />}>
           <Route path="/auth" element={<Auth />} />
         </Route>
+
+        {/*
+          Outside both guards on purpose. The recovery link arrives with a token
+          that supabase-js turns into a session, so RequireAuth would bounce the
+          user away before it was read and RedirectIfAuthed would bounce them
+          into the app the moment it was — with the old password still set.
+        */}
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route element={<RequireAuth />}>
           <Route element={<AppLayout />}>

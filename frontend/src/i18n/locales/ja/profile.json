@@ -51,7 +51,8 @@
     "haveAccount": "すでにアカウントをお持ちですか？",
     "noAccount": "アカウントをお持ちでないですか？",
     "switchToSignIn": "ログイン",
-    "switchToSignUp": "アカウント作成"
+    "switchToSignUp": "アカウント作成",
+    "forgotPassword": "パスワードをお忘れですか？"
   },
   "passkeys": {
     "title": "Face ID・パスキー",
@@ -75,6 +76,28 @@
     "sent": "送信しました。届くまで1分ほどかかることがあります。",
     "sending": "送信中...",
     "resend": "確認メールを再送する",
+    "backToLogin": "ログイン画面に戻る"
+  },
+  "forgotPassword": {
+    "title": "パスワードの再設定",
+    "body": "登録したメールアドレスを入力してください。新しいパスワードを設定するリンクをお送りします。",
+    "send": "再設定リンクを送る",
+    "sending": "送信中...",
+    "sentTitle": "メールを確認してください",
+    "sentBody": "<email>{{email}}</email> のアカウントが存在する場合、新しいパスワードを設定するリンクを送信しました。",
+    "noEmail": "届かない場合は迷惑メールフォルダをご確認ください。リンクの有効期限は1時間です。",
+    "backToLogin": "ログイン画面に戻る"
+  },
+  "resetPassword": {
+    "title": "新しいパスワードを設定",
+    "body": "メールのリンクからログインしています。新しいパスワードを設定してください。",
+    "newPassword": "新しいパスワード",
+    "confirmPassword": "新しいパスワード（確認）",
+    "mismatch": "パスワードが一致しません。",
+    "save": "パスワードを保存",
+    "saving": "保存中...",
+    "invalidTitle": "このリンクは使用できません",
+    "invalidBody": "再設定リンクの有効期限は1時間で、一度しか使用できません。ログイン画面から再度お試しください。",
     "backToLogin": "ログイン画面に戻る"
   }
 }

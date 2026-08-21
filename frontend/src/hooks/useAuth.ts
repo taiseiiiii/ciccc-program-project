@@ -32,6 +32,16 @@ export interface AuthContextValue {
   signIn: (args: { email: string; password: string }) => Promise<AuthResult>;
   /** Re-send the sign-up confirmation link, for when the first one is lost. */
   resendConfirmation: (email: string) => Promise<{ error: string | null }>;
+  /**
+   * Email a link that lets someone set a new password.
+   *
+   * Deliberately reports success even for an address with no account: telling a
+   * caller which emails are registered turns this form into a way to enumerate
+   * the user base.
+   */
+  requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  /** Set a new password for the session the recovery link established. */
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
