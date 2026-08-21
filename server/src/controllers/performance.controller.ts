@@ -4,6 +4,7 @@ import { statsRepository } from "../repositories/stats.repository";
 import { goalRepository } from "../repositories/goal.repository";
 import { aiService, toGoalSummaries } from "../services/ai.service";
 import { env } from "../config/env";
+import { toLocale } from "../config/locales";
 import { HttpError } from "../utils/HttpError";
 import { isDateString, monthBounds, todayString } from "../utils/period";
 import {
@@ -11,6 +12,8 @@ import {
   optionalString,
   parseId,
   parseLimit,
+  parseOffset,
+  parseQueryBoolean,
 } from "../utils/validate";
 
 /**
@@ -22,9 +25,9 @@ import {
  * indistinguishable from a missing one (404).
  */
 export const performanceController = {
-  // GET /api/v1/performances?period_type=daily|monthly&limit=n
+  // GET /api/v1/performances?period_type=daily|monthly&is_pinned=&limit=&offset=
   async list(req: Request, res: Response): Promise<void> {
-    const { period_type, limit } = req.query;
+    const { period_type, limit, offset, is_pinned } = req.query;
 
     if (
       period_type !== undefined &&
@@ -34,12 +37,19 @@ export const performanceController = {
       throw HttpError.badRequest("period_type must be 'daily' or 'monthly'");
     }
     const parsedLimit = parseLimit(limit);
+    const parsedOffset = parseOffset(offset);
 
-    const performances = await performanceRepository.findAll(
-      req.user!.user_id,
-      { periodType: period_type as "daily" | "monthly" | undefined, limit: parsedLimit },
-    );
-    res.json({ data: performances });
+    const page = await performanceRepository.findPage(req.user!.user_id, {
+      periodType: period_type as "daily" | "monthly" | undefined,
+      isPinned: parseQueryBoolean(is_pinned, "is_pinned"),
+      limit: parsedLimit,
+      offset: parsedOffset,
+    });
+
+    res.json({
+      data: page.rows,
+      meta: { total: page.total, limit: parsedLimit, offset: parsedOffset },
+    });
   },
 
   // GET /api/v1/performances/:id
@@ -89,10 +99,14 @@ export const performanceController = {
     // `detail` is the long-form text and lands in the TEXT column; everything
     // else — including the two-line `summary` the screen leads with — is
     // structured and lands in analysis_data.
+    // The climber's saved language, not a request parameter: a report generated
+    // in one language and read in another is the kind of thing that would go
+    // unnoticed until someone opened an old one.
     const { detail, ...analysis } = await aiService.generatePerformanceAnalysis(
       period_type,
       stats,
       goals,
+      toLocale(req.user!.locale),
     );
 
     const performance = await performanceRepository.create({

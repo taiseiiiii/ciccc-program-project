@@ -1,0 +1,56 @@
+{
+  "state": {
+    "loading": "統計を読み込み中...",
+    "errorTitle": "ダッシュボードを読み込めませんでした",
+    "errorBody": "サーバーから応答がありませんでした。記録したセッションは無事です。少し時間をおいて再読み込みしてください。"
+  },
+  "injuries": {
+    "oneHealing": "{{bodyPart}}はまだ回復中です",
+    "manyHealing": "{{count}}件のケガがまだ回復中です",
+    "avoiding": "トレーニングプランは{{bodyParts}}に負担がかからないように調整しています。",
+    "checkIn": "状態を更新"
+  },
+  "welcome": {
+    "title": "おかえりなさい！",
+    "titleNamed": "{{name}}さん、おかえりなさい！",
+    "paceFirstSession": "最初のセッションを記録して、成長を追いかけましょう。",
+    "paceAhead": "先月を上回るペースです。この調子で！",
+    "paceBehind": "先月よりペースが落ちています。そろそろ壁に戻りましょう。",
+    "paceMatching": "先月と同じペースで登れています。",
+    "streak_other": "{{count}}週連続で登っています。この記録を途切れさせないで！"
+  },
+  "stats": {
+    "sessionsThisMonth": "今月のセッション",
+    "vsLastMonth": "先月比 {{delta}}",
+    "highestGrade": "自己最高グレード",
+    "goalDueIn_other": "目標まであと{{count}}日",
+    "goalOverdue_other": "目標日を{{count}}日過ぎています",
+    "totalTries": "総トライ数",
+    "sentAcross": "{{routes}}で{{sends}}本完登"
+  },
+  "coach": {
+    "title": "AIコーチ",
+    "noAnalysis": "分析はまだありません",
+    "noAnalysisBody": "記録したセッションから分析を作成できます。",
+    "readAnalysis": "分析を読む",
+    "open": "AIコーチを開く"
+  },
+  "charts": {
+    "monthlyVolume": "月別セッション数",
+    "gradeProgress": "グレードの推移",
+    "maxGrade": "最高グレード",
+    "successRateTitle": "完登率",
+    "rate": "完登率",
+    "success": "完登",
+    "failed": "未完登",
+    "noData": "データなし",
+    "noAttempts": "トライの記録がありません"
+  },
+  "recentSessions": {
+    "title": "最近の記録",
+    "viewAll": "すべてのセッションを見る",
+    "empty": "まだセッションの記録がありません。",
+    "durationMinutes": "{{count}}分",
+    "view": "詳細"
+  }
+}

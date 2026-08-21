@@ -27,12 +27,15 @@ info:
       `error.request_id`, which is what to quote in a bug report.
 
     ## Rate limits
-    Two buckets, both answering `429` with the usual error envelope and
-    `RateLimit-*` headers:
+    Two limits, both answering `429` with the usual error envelope:
 
-    - the whole API, 300 requests per minute per IP (`/health` exempt);
-    - `POST /performances` and `POST /trainings`, 10 per hour per **user** —
-      each is one paid model call.
+    - the whole API, 300 requests per minute per IP (`/health` exempt), with
+      `RateLimit-*` headers. In-memory, so it is best-effort across instances;
+      the cost of letting a few extra requests through is a little CPU.
+    - `POST /performances` and `POST /trainings` share an allowance of 10 per
+      hour per **user** — each is one paid model call. Counted from the rows
+      already generated rather than in memory, so it survives a restart and
+      holds across every instance. This is the spending limit.
 
     ## AI reports
     `POST /performances` and `POST /trainings` generate coaching reports with
@@ -248,21 +251,81 @@ paths:
     get:
       tags: [Sessions]
       summary: List sessions
-      description: The authenticated user's sessions, ordered by `visit_date` descending, then `session_id` descending.
+      description: |
+        One page of the authenticated user's visits, newest first by
+        `visit_date` then `session_id`, each carrying a count of the climbs
+        logged on it.
+
+        `meta.total` is how many matched the filters in total, not how many
+        were returned — enough to say "20 of 143" and to know whether another
+        page exists.
+
+        `q` matches the gym name or any route name logged on the visit,
+        case-insensitively, as a substring.
       operationId: listSessions
+      parameters:
+        - name: limit
+          in: query
+          description: Page size. Default 20, maximum 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: q
+          in: query
+          description: Substring of a gym name or a route name.
+          schema:
+            type: string
+            maxLength: 150
+        - name: from
+          in: query
+          description: Earliest `visit_date` to include (inclusive).
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Latest `visit_date` to include (inclusive).
+          schema:
+            type: string
+            format: date
+        - name: grade_id
+          in: query
+          description: Only visits including at least one climb at this grade.
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
-          description: The user's sessions.
+          description: One page of the user's sessions.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Session'
+                      $ref: '#/components/schemas/SessionSummary'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                        description: Rows matching the filters, before paging.
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -369,11 +432,54 @@ paths:
     delete:
       tags: [Sessions]
       summary: Delete a session
-      description: Also deletes its attempts (`ON DELETE CASCADE`).
+      description: >-
+        Also deletes its attempts (`ON DELETE CASCADE`), any route those climbs
+        were the last reference to, and the stored photos and videos attached
+        to any of them.
       operationId: deleteSession
       responses:
         '204':
           description: Deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sessions/{id}/attempts:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Sessions]
+      summary: Add a climb to a saved session
+      description: |
+        The body is one climb — the same shape as one entry of the `attempts`
+        array on `POST /sessions` — and is validated identically, so a route
+        remembered afterwards is stored exactly as it would have been at the
+        time.
+
+        Route, attempt and every tag are written in one transaction. Ownership
+        is checked against the session in the path inside that transaction;
+        there is no id a caller could supply to reach someone else's visit.
+      operationId: addSessionAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionAttemptCreate'
+      responses:
+        '201':
+          description: The created climb.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Attempt'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -711,7 +817,13 @@ paths:
     get:
       tags: [Performances]
       summary: List performance reports
-      description: The authenticated user's AI performance reports, newest first.
+      description: |
+        One page of the authenticated user's AI performance reports, pinned
+        ones first and then newest first — a climber keeps a handful to check
+        back against, and those should not sink below a month of newer ones.
+
+        `meta.total` is how many matched the filters, so the caller can page
+        and say how many exist.
       operationId: listPerformances
       parameters:
         - name: period_type
@@ -721,6 +833,14 @@ paths:
           schema:
             type: string
             enum: [daily, monthly]
+        - name: is_pinned
+          in: query
+          required: false
+          description: >-
+            `true` returns only pinned reports, `false` only unpinned. Omit for
+            both.
+          schema:
+            type: boolean
         - name: limit
           in: query
           required: false
@@ -729,19 +849,36 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
-          description: The user's performance reports.
+          description: One page of the user's performance reports.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Performance'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                        description: Rows matching the filters, before paging.
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -868,9 +1005,20 @@ paths:
     get:
       tags: [Trainings]
       summary: List training plans
-      description: The authenticated user's AI training plans, newest first.
+      description: >-
+        One page of the authenticated user's AI training plans, pinned first
+        and then newest first. Same shape and reasoning as
+        `GET /performances`.
       operationId: listTrainings
       parameters:
+        - name: is_pinned
+          in: query
+          required: false
+          description: >-
+            `true` returns only pinned plans, `false` only unpinned. Omit for
+            both.
+          schema:
+            type: boolean
         - name: limit
           in: query
           required: false
@@ -879,19 +1027,36 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
-          description: The user's training plans.
+          description: One page of the user's training plans.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, meta]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Training'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                        description: Rows matching the filters, before paging.
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1193,12 +1358,16 @@ paths:
       tags: [Media]
       summary: Record an uploaded file
       description: |
-        Called **after** the browser has uploaded the file straight to Supabase
-        Storage with its own access token. This API never receives a file body.
+        Called **after** the browser has PUT the file to the `upload_url` from
+        `POST /media/presign`. This API never receives a file body.
 
-        `storage_path` must begin with the caller's `auth_user_id`, matching
-        the bucket's RLS policy — a key outside that prefix could not have been
-        written by this caller.
+        The server asks storage for the object before writing the row, and
+        rejects the request if it is not there or is a different size than
+        `byte_size` claims — the quota is computed from these rows, so a row
+        that describes a file which was never uploaded would corrupt it.
+
+        `storage_path` must be one this server issued, under the caller's own
+        `auth_user_id` prefix.
 
         The path is UNIQUE, so a retried POST after a dropped response returns
         the existing row instead of attaching the same file twice.
@@ -1236,6 +1405,119 @@ paths:
                 error:
                   message: 'Videos must be 50 MB or smaller'
 
+  /media/presign:
+    post:
+      tags: [Media]
+      summary: Get a URL to upload one file to
+      description: |
+        The first half of an upload. Describe the file you are about to send
+        and, if the caller owns the parent and has room in their quota, the
+        response carries the key it will live under and a URL to PUT it to.
+
+        The declared `mime_type` and `byte_size` are signed into that URL, so
+        an upload that does not match is refused by storage itself. The key is
+        chosen here rather than by the client.
+
+        No row is written. An upload that never happens leaves nothing behind;
+        post to `/media` once the bytes are there.
+      operationId: presignMediaUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaPresignRequest'
+      responses:
+        '200':
+          description: Upload URL issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [storage_path, upload_url]
+                    properties:
+                      storage_path:
+                        type: string
+                        description: The key to send back to `POST /media`.
+                        example: 8f1c.../2026/08/9b2e....jpg
+                      upload_url:
+                        type: string
+                        format: uri
+                        description: PUT the file here. Valid for 10 minutes.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: File too large, or the account's storage limit is reached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: File storage is not configured on this server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /media/urls:
+    post:
+      tags: [Media]
+      summary: Signed display URLs for a batch of attachments
+      description: |
+        Stored files are private, so showing one means asking for a signed URL.
+        Signed in a batch because a session with a dozen photos would otherwise
+        cost a dozen round trips to render one strip of thumbnails.
+
+        A POST rather than a GET because a session's worth of keys does not
+        belong in a query string; nothing is created.
+
+        Only keys the caller has a row for are signed. Anything else is simply
+        absent from the response, so a guessed key reads like a deleted one.
+      operationId: signMediaUrls
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storage_paths]
+              properties:
+                storage_paths:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: A URL per key that resolved. Valid for one hour.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [urls]
+                    properties:
+                      urls:
+                        type: object
+                        additionalProperties:
+                          type: string
+                          format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /media/usage:
     get:
       tags: [Media]
@@ -1263,13 +1545,13 @@ paths:
       tags: [Media]
       summary: Delete an attachment
       description: >-
-        Answers 200 with the object key rather than 204: the server holds no
-        service-role key by design and cannot reach into the bucket, so the
-        client removes the stored file itself.
+        Deletes the row and the stored file. Answers 200 with the object key
+        rather than 204 — kept from when the client had to delete the file
+        itself, and still useful for dropping a cached thumbnail.
       operationId: deleteMedia
       responses:
         '200':
-          description: Row deleted. Remove the object at `storage_path` next.
+          description: Row and stored file deleted.
           content:
             application/json:
               schema:
@@ -1592,8 +1874,8 @@ components:
     UserUpdate:
       type: object
       description: >-
-        The climber's own display name. `email`, `status`, `auth_user_id` and
-        `user_id` are rejected with `400`.
+        The climber's own display name and language. `email`, `status`,
+        `auth_user_id` and `user_id` are rejected with `400`.
       properties:
         first_name:
           type: string
@@ -1603,6 +1885,13 @@ components:
           type: string
           nullable: true
           maxLength: 100
+        locale:
+          type: string
+          enum: [en, ja]
+          description: >-
+            Cannot be cleared. The interface remembers its own language
+            locally; this is what a new device inherits and what the AI coach
+            writes in.
 
     PeriodTotals:
       type: object
@@ -1778,7 +2067,9 @@ components:
     User:
       type: object
       description: The app-side profile of a Supabase Auth user.
-      required: [user_id, auth_user_id, email, first_name, last_name, status, created_at, updated_at]
+      required:
+        [user_id, auth_user_id, email, first_name, last_name, status, locale,
+         created_at, updated_at]
       properties:
         user_id:
           type: integer
@@ -1804,6 +2095,13 @@ components:
           type: string
           enum: [active, withdrawn, suspended]
           example: active
+        locale:
+          type: string
+          enum: [en, ja]
+          description: >-
+            Language for the interface on a new device, and the language AI
+            reports are written in.
+          example: en
         created_at:
           type: string
           format: date-time
@@ -1846,6 +2144,26 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    SessionSummary:
+      allOf:
+        - $ref: '#/components/schemas/Session'
+        - type: object
+          description: >-
+            A visit as the list screen shows it. The counts come from the same
+            query as the row, so a page of twenty does not cost twenty
+            follow-up requests to render "8 climbs · 5 sent".
+          required: [climb_count, total_attempts, total_sends]
+          properties:
+            climb_count:
+              type: integer
+              description: Routes logged on this visit.
+            total_attempts:
+              type: integer
+              description: Times pulled on, summed across those routes.
+            total_sends:
+              type: integer
+              description: Of those, the ones that topped out.
 
     SessionCreate:
       type: object
@@ -2614,12 +2932,44 @@ components:
           type: string
           format: date-time
 
+    MediaPresignRequest:
+      type: object
+      description: >-
+        Describes a file before it is uploaded. At least one of `session_id` /
+        `attempt_id` is required, and it must belong to the caller. `mime_type`
+        and `byte_size` are signed into the returned URL, so the upload has to
+        match them.
+      required: [kind, mime_type, byte_size]
+      properties:
+        kind:
+          type: string
+          enum: [photo, video]
+        mime_type:
+          type: string
+          description: >-
+            Photos: image/jpeg, image/png, image/webp, image/heic.
+            Videos: video/mp4, video/quicktime, video/webm.
+        byte_size:
+          type: integer
+          format: int64
+          description: 'Max 8 MB for photos, 50 MB for videos.'
+        duration_seconds:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: Required for videos.
+        session_id:
+          type: integer
+        attempt_id:
+          type: integer
+
     MediaCreate:
       type: object
       description: >-
-        Posted after the browser has uploaded the file to Storage. At least one
-        of `session_id` / `attempt_id` is required, and it must belong to the
-        caller.
+        Posted after the file has been PUT to the presigned URL. Carries the
+        same fields as the presign request plus the `storage_path` it returned.
+        At least one of `session_id` / `attempt_id` is required, and it must
+        belong to the caller.
       required: [storage_path, kind, mime_type, byte_size]
       properties:
         storage_path:
@@ -2658,7 +3008,7 @@ components:
         limit_bytes:
           type: integer
           format: int64
-          description: Per-account ceiling. The bucket is one shared free-tier gigabyte.
+          description: Per-account ceiling, so one climber cannot fill the bucket.
         max_photo_bytes:
           type: integer
         max_video_bytes:

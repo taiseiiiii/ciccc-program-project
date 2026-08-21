@@ -1,0 +1,111 @@
+{
+  "app": {
+    "name": "ClimbLog AI"
+  },
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "logSession": "セッション記録",
+    "sessions": "セッション一覧",
+    "progress": "分析",
+    "aiCoach": "AIコーチ",
+    "injuries": "ケガの記録",
+    "profile": "プロフィール",
+    "mainLabel": "メインナビゲーション",
+    "logShort": "記録",
+    "coachShort": "コーチ"
+  },
+  "action": {
+    "save": "保存",
+    "saving": "保存中...",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "remove": "削除",
+    "edit": "編集",
+    "close": "閉じる",
+    "retry": "再試行",
+    "loadMore": "もっと見る",
+    "back": "戻る",
+    "signOut": "ログアウト"
+  },
+  "state": {
+    "loading": "読み込み中...",
+    "empty": "まだ何もありません",
+    "error": "問題が発生しました"
+  },
+  "climb": {
+    "flash": "フラッシュ",
+    "sentOf": "{{tries}}回中{{sends}}回完登",
+    "tries_other": "{{count}}回トライ",
+    "routes_other": "{{count}}課題",
+    "unnamedRoute": "名前なしの課題",
+    "climbingSession": "クライミング"
+  },
+  "notFound": {
+    "title": "ページが見つかりません",
+    "body": "リンクが古いか、アドレスに誤りがあるようです。",
+    "back": "ダッシュボードに戻る"
+  },
+  "errorBoundary": {
+    "staleTitle": "新しいバージョンがあります",
+    "staleBody": "このタブは古いバージョンで動いています。再読み込みすると最新版になります。記録したデータには影響ありません。",
+    "title": "画面の表示でエラーが発生しました",
+    "body": "記録したデータは失われていません。表示上の問題なので、再読み込みで直ることがほとんどです。",
+    "reload": "再読み込み",
+    "backToDashboard": "ダッシュボードに戻る"
+  },
+  "shell": {
+    "tagline": "クライミングを、数字で伸ばす",
+    "pages": {
+      "dashboard": {
+        "title": "ダッシュボード",
+        "subtitle": "最近のクライミングの概要"
+      },
+      "logSession": {
+        "title": "セッション記録",
+        "subtitle": "今日のトライ・課題・メモを記録"
+      },
+      "sessions": {
+        "title": "セッション一覧",
+        "subtitle": "過去のセッションを検索・確認・修正"
+      },
+      "import": {
+        "title": "履歴のインポート",
+        "subtitle": "他のアプリで記録した内容をCSVから取り込み"
+      },
+      "progress": {
+        "title": "パフォーマンス分析",
+        "subtitle": "完登率・継続日数・目標の進捗"
+      },
+      "aiCoach": {
+        "title": "AIコーチング",
+        "subtitle": "あなた専用の分析とトレーニング提案"
+      },
+      "injuries": {
+        "title": "ケガの記録",
+        "subtitle": "痛む部位を記録し、それを避けたトレーニングに"
+      },
+      "profile": {
+        "title": "プロフィールと設定",
+        "subtitle": "アカウント情報と各種設定"
+      }
+    },
+    "theme": {
+      "toDark": "ダークモードに切り替え",
+      "toLight": "ライトモードに切り替え"
+    }
+  },
+  "language": {
+    "label": "表示言語",
+    "help": "すぐに切り替わります。AIレポートもこの言語で生成されます。"
+  },
+  "pwa": {
+    "offlineReady": "オフラインでも使えるようになりました。",
+    "updateAvailable": "新しいバージョンがあります。"
+  },
+  "media": {
+    "deleted": "ファイルを削除しました",
+    "confirmTitle": "このファイルを削除しますか？",
+    "confirmBody": "ストレージからも削除され、元に戻せません。",
+    "deleteLabel": "ファイルを削除"
+  }
+}

@@ -5,6 +5,8 @@ import {
 } from "../repositories/session.repository";
 import { taxonomyRepository } from "../repositories/taxonomy.repository";
 import { weaknessRepository } from "../repositories/weakness.repository";
+import { mediaRepository } from "../repositories/media.repository";
+import { deleteObjects } from "../services/r2.service";
 import { HttpError } from "../utils/HttpError";
 import {
   optionalDate,
@@ -13,6 +15,8 @@ import {
   optionalLabelArray,
   optionalString,
   parseId,
+  parseLimit,
+  parseOffset,
   requireDate,
   requireInt,
 } from "../utils/validate";
@@ -22,6 +26,10 @@ const MAX_SESSION_MINUTES = 1440;
 // One route, one session. Beyond this the climber is not logging, they are
 // stress-testing the form.
 const MAX_TRIES_PER_ROUTE = 200;
+// Each climb costs several statements inside the create transaction, so an
+// unbounded array is a way to hold a connection open for as long as the body
+// size limit allows. A very long session is 30-odd routes; 60 is generous.
+const MAX_CLIMBS_PER_SESSION = 60;
 
 /**
  * Validate the tag ids on every nested climb in one round-trip per vocabulary.
@@ -69,6 +77,62 @@ async function assertWeaknessIdsExist(
 }
 
 /**
+ * Validate one climb from a request body.
+ *
+ * `label` names it in any error — "attempts[2].grade_id" when it arrived inside
+ * a bulk create, plain "grade_id" when it is the whole body of an add. Shared
+ * so that adding a climb to a saved session enforces exactly what logging it
+ * with the session would have; anything else and the same input would be
+ * accepted or rejected depending on when the climber remembered it.
+ */
+function parseClimbInput(
+  raw: unknown,
+  label: (field: string) => string,
+): CreateSessionAttemptInput {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const gradeId = requireInt(a.grade_id, label("grade_id"));
+
+  // Default to the shape the old one-row-per-try model produced, so a client
+  // that has not been updated still saves something coherent.
+  const attemptCount =
+    optionalInt(a.attempt_count, label("attempt_count"), {
+      min: 1,
+      max: MAX_TRIES_PER_ROUTE,
+    }) ?? 1;
+  const sendCount =
+    optionalInt(a.send_count, label("send_count"), {
+      min: 0,
+      max: MAX_TRIES_PER_ROUTE,
+    }) ?? 0;
+
+  // The database enforces this too, but a CHECK violation reaches the climber
+  // as an opaque 500 — name the offending route instead.
+  if (sendCount > attemptCount) {
+    throw HttpError.badRequest(
+      `${label("send_count")}: sends (${sendCount}) cannot exceed tries (${attemptCount})`,
+    );
+  }
+
+  return {
+    grade_id: gradeId,
+    route_name: optionalString(a.route_name, label("route_name"), 150),
+    attempt_count: attemptCount,
+    send_count: sendCount,
+    note: optionalString(a.note, label("note"), 2000),
+    wall_type_ids: optionalIdArray(a.wall_type_ids, label("wall_type_ids")),
+    hold_type_ids: optionalIdArray(a.hold_type_ids, label("hold_type_ids")),
+    weakness_type_ids: optionalIdArray(
+      a.weakness_type_ids,
+      label("weakness_type_ids"),
+    ),
+    weakness_labels: optionalLabelArray(
+      a.weakness_labels,
+      label("weakness_labels"),
+    ),
+  };
+}
+
+/**
  * HTTP layer for sessions. Keeps validation + status codes here and delegates
  * all persistence to the repository. All routes sit behind requireAuth, so
  * req.user is always set; the owner is taken from the token, never the body.
@@ -76,9 +140,32 @@ async function assertWeaknessIdsExist(
  */
 export const sessionController = {
   // GET /api/v1/sessions
+  //   ?limit= &offset= &q= &from= &to= &grade_id=
+  //
+  // Returns a page plus the total that matched, so the screen can say how much
+  // history is behind it. This used to hand back every visit a climber had ever
+  // logged; that was survivable while the only caller wanted the latest five.
   async list(req: Request, res: Response): Promise<void> {
-    const sessions = await sessionRepository.findAll(req.user!.user_id);
-    res.json({ data: sessions });
+    const limit = parseLimit(req.query.limit);
+    const offset = parseOffset(req.query.offset);
+    const q = optionalString(req.query.q, "q", 150);
+    const from = optionalDate(req.query.from, "from");
+    const to = optionalDate(req.query.to, "to");
+    const gradeId = optionalInt(req.query.grade_id, "grade_id", { min: 1 });
+
+    const page = await sessionRepository.findPage(req.user!.user_id, {
+      limit,
+      offset,
+      q: q ?? undefined,
+      from: from ?? undefined,
+      to: to ?? undefined,
+      gradeId: gradeId ?? undefined,
+    });
+
+    res.json({
+      data: page.rows,
+      meta: { total: page.total, limit, offset },
+    });
   },
 
   // GET /api/v1/sessions/:id
@@ -115,50 +202,16 @@ export const sessionController = {
       throw HttpError.badRequest("attempts must be an array");
     }
 
-    const attemptInputs: CreateSessionAttemptInput[] = [];
-    for (const [i, raw] of (attempts ?? []).entries()) {
-      const a = (raw ?? {}) as Record<string, unknown>;
-      const gradeId = requireInt(a.grade_id, `attempts[${i}].grade_id`);
-
-      // Default to the shape the old one-row-per-try model produced, so a
-      // client that has not been updated still saves something coherent.
-      const attemptCount =
-        optionalInt(a.attempt_count, `attempts[${i}].attempt_count`, {
-          min: 1,
-          max: MAX_TRIES_PER_ROUTE,
-        }) ?? 1;
-      const sendCount =
-        optionalInt(a.send_count, `attempts[${i}].send_count`, {
-          min: 0,
-          max: MAX_TRIES_PER_ROUTE,
-        }) ?? 0;
-
-      // The database enforces this too, but a CHECK violation reaches the
-      // climber as an opaque 500 — name the offending route instead.
-      if (sendCount > attemptCount) {
-        throw HttpError.badRequest(
-          `attempts[${i}]: sends (${sendCount}) cannot exceed tries (${attemptCount})`,
-        );
-      }
-
-      attemptInputs.push({
-        grade_id: gradeId,
-        route_name: optionalString(a.route_name, `attempts[${i}].route_name`, 150),
-        attempt_count: attemptCount,
-        send_count: sendCount,
-        note: optionalString(a.note, `attempts[${i}].note`, 2000),
-        wall_type_ids: optionalIdArray(a.wall_type_ids, `attempts[${i}].wall_type_ids`),
-        hold_type_ids: optionalIdArray(a.hold_type_ids, `attempts[${i}].hold_type_ids`),
-        weakness_type_ids: optionalIdArray(
-          a.weakness_type_ids,
-          `attempts[${i}].weakness_type_ids`,
-        ),
-        weakness_labels: optionalLabelArray(
-          a.weakness_labels,
-          `attempts[${i}].weakness_labels`,
-        ),
-      });
+    if (Array.isArray(attempts) && attempts.length > MAX_CLIMBS_PER_SESSION) {
+      throw HttpError.badRequest(
+        `a session cannot hold more than ${MAX_CLIMBS_PER_SESSION} climbs`,
+      );
     }
+
+    const attemptInputs: CreateSessionAttemptInput[] = (attempts ?? []).map(
+      (raw: unknown, i: number) =>
+        parseClimbInput(raw, (field) => `attempts[${i}].${field}`),
+    );
 
     await assertTagIdsExist(attemptInputs);
     await assertWeaknessIdsExist(attemptInputs, req.user!.user_id);
@@ -173,6 +226,33 @@ export const sessionController = {
       attemptInputs,
     );
     res.status(201).json({ data: session });
+  },
+
+  // POST /api/v1/sessions/:id/attempts
+  //
+  // Add one climb to a session that is already saved. Body is a single climb,
+  // the same shape as one entry of the `attempts` array on create.
+  //
+  // A session used to be fixed at the moment it was written — POST /sessions
+  // was the only thing that could create a climb, so a route remembered on the
+  // drive home had nowhere to go and the whole visit had to be deleted and
+  // logged again.
+  async addAttempt(req: Request, res: Response): Promise<void> {
+    const sessionId = parseId(req.params.id!);
+    const climb = parseClimbInput(req.body, (field) => field);
+
+    await assertTagIdsExist([climb]);
+    await assertWeaknessIdsExist([climb], req.user!.user_id);
+
+    const attempt = await sessionRepository.addAttempt(
+      sessionId,
+      req.user!.user_id,
+      climb,
+    );
+    if (!attempt) {
+      throw HttpError.notFound(`Session ${sessionId} not found`);
+    }
+    res.status(201).json({ data: attempt });
   },
 
   // PATCH /api/v1/sessions/:id
@@ -202,10 +282,24 @@ export const sessionController = {
   // DELETE /api/v1/sessions/:id
   async remove(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
+
+    // Read the object keys first: deleting the session cascades the media rows
+    // away, and after that nothing remembers which files belonged to it. They
+    // used to be stranded in the bucket for exactly this reason — the server
+    // had no way to reach storage at all.
+    const paths = await mediaRepository.findPathsBySession(
+      id,
+      req.user!.user_id,
+    );
+
     const deleted = await sessionRepository.remove(id, req.user!.user_id);
     if (!deleted) {
       throw HttpError.notFound(`Session ${id} not found`);
     }
+
+    // After the rows are gone, and best effort: the delete the climber asked
+    // for has happened, and a file that outlives it costs quota, not data.
+    await deleteObjects(paths);
     res.status(204).send();
   },
 };

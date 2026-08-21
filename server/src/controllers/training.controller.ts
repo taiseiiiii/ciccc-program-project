@@ -9,6 +9,7 @@ import {
   toGoalSummaries,
 } from "../services/ai.service";
 import { env } from "../config/env";
+import { toLocale } from "../config/locales";
 import { HttpError } from "../utils/HttpError";
 import { daysBefore, isDateString, todayString } from "../utils/period";
 import {
@@ -16,6 +17,8 @@ import {
   optionalString,
   parseId,
   parseLimit,
+  parseOffset,
+  parseQueryBoolean,
 } from "../utils/validate";
 
 // A training plan looks at a rolling window of recent climbing rather than a
@@ -31,16 +34,22 @@ const TRAINING_WINDOW_DAYS = 30;
  * indistinguishable from a missing one (404).
  */
 export const trainingController = {
-  // GET /api/v1/trainings?limit=n
+  // GET /api/v1/trainings?is_pinned=&limit=&offset=
   async list(req: Request, res: Response): Promise<void> {
-    const { limit } = req.query;
+    const { limit, offset, is_pinned } = req.query;
     const parsedLimit = parseLimit(limit);
+    const parsedOffset = parseOffset(offset);
 
-    const trainings = await trainingRepository.findAll(
-      req.user!.user_id,
-      parsedLimit,
-    );
-    res.json({ data: trainings });
+    const page = await trainingRepository.findPage(req.user!.user_id, {
+      isPinned: parseQueryBoolean(is_pinned, "is_pinned"),
+      limit: parsedLimit,
+      offset: parsedOffset,
+    });
+
+    res.json({
+      data: page.rows,
+      meta: { total: page.total, limit: parsedLimit, offset: parsedOffset },
+    });
   },
 
   // GET /api/v1/trainings/:id
@@ -74,7 +83,11 @@ export const trainingController = {
     }
 
     const goals = toGoalSummaries(await goalRepository.findAllWithGrade(userId));
-    const { detail, ...plan } = await aiService.generateTrainingPlan(stats, goals);
+    const { detail, ...plan } = await aiService.generateTrainingPlan(
+      stats,
+      goals,
+      toLocale(req.user!.locale),
+    );
 
     // Second line of defence on the injury guardrail. The prompt already tells
     // the model not to load an injured body part; this checks that it did not,

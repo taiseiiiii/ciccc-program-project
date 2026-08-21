@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { uploadMedia } from "../lib/storage";
 import {
@@ -11,19 +12,15 @@ import {
 } from "../lib/sessionDraft";
 
 import { useAuth } from "../hooks/useAuth";
+import { useClimbTaxonomies } from "../hooks/useClimbTaxonomies";
 import { todayString } from "../lib/date";
 import Modal from "../components/Modal";
 import type AttemptType from "../types/AttemptType";
-import type Grade from "../types/GradeType";
-import type TaxonomyTerm from "../types/TaxonomyType";
-import type WeaknessType from "../types/WeaknessType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import Textarea from "../components/Textarea";
-import TagSelector from "../components/TagSelector";
-import Counter from "../components/Counter";
-import WeaknessPicker from "../components/WeaknessPicker";
+import ClimbFields, { type ClimbFieldsProps } from "../components/ClimbFields";
 
 /**
  * A climb being drafted, plus the files staged against it.
@@ -91,16 +88,8 @@ const isClimbDirty = (climb: DraftClimb): boolean =>
   climb.weakness_labels.length > 0 ||
   climb.files.length > 0;
 
-/** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
-const describeResult = (climb: AttemptType): string => {
-  if (climb.send_count === 0) {
-    return `${climb.attempt_count} ${climb.attempt_count === 1 ? "try" : "tries"}`;
-  }
-  if (climb.attempt_count === 1 && climb.send_count === 1) return "Flash";
-  return `Sent ${climb.send_count}/${climb.attempt_count}`;
-};
-
 const LogSession = () => {
+  const { t } = useTranslation("sessions");
   const today = todayString();
   const { session } = useAuth();
   // Drafts are stored per account, so the id is part of every call below.
@@ -146,15 +135,17 @@ const LogSession = () => {
 
     toast.success(
       restored.climbs.length > 0
-        ? `Unsaved session restored — ${restored.climbs.length} route${
-            restored.climbs.length === 1 ? "" : "s"
-          } still waiting to be saved`
-        : "Unsaved session restored",
+        ? t("log.restore.withRoutes", {
+            routes: t("common:climb.routes", {
+              count: restored.climbs.length,
+            }),
+          })
+        : t("log.restore.plain"),
     );
     if (restored.had_files) {
-      toast.error("Photos and videos could not be restored — pick them again");
+      toast.error(t("log.restore.filesLost"));
     }
-  }, [restored]);
+  }, [restored, t]);
 
   // Mirror the form after every change. Nothing here reaches the server until
   // Save Session, so without this a reload, a tab close or a tap on the nav bar
@@ -193,42 +184,11 @@ const LogSession = () => {
   const queryClient = useQueryClient();
 
   // Master data. None of it changes while the app is open, so it is fetched
-  // once and never refetched — same treatment the grade list already had.
-  const masterQuery = { staleTime: Infinity } as const;
-
-  const {
-    data: gradesData,
-    isPending: isGradesLoading,
-    isError: isGradesError,
-    refetch: refetchGrades,
-  } = useQuery({
-    queryKey: ["grades"],
-    queryFn: () => api<{ data: Grade[] }>("/grades"),
-    ...masterQuery,
-  });
-
-  const { data: wallTypesData, isPending: isWallTypesLoading } = useQuery({
-    queryKey: ["wall-types"],
-    queryFn: () => api<{ data: TaxonomyTerm[] }>("/wall-types"),
-    ...masterQuery,
-  });
-
-  const { data: holdTypesData, isPending: isHoldTypesLoading } = useQuery({
-    queryKey: ["hold-types"],
-    queryFn: () => api<{ data: TaxonomyTerm[] }>("/hold-types"),
-    ...masterQuery,
-  });
-
-  // Not master data: this list grows every time the climber types a new label.
-  const { data: weaknessesData, isPending: isWeaknessesLoading } = useQuery({
-    queryKey: ["weaknesses"],
-    queryFn: () => api<{ data: WeaknessType[] }>("/weaknesses"),
-  });
-
-  const grades = gradesData?.data ?? [];
-  const wallTypes = wallTypesData?.data ?? [];
-  const holdTypes = holdTypesData?.data ?? [];
-  const weaknesses = weaknessesData?.data ?? [];
+  // The vocabularies the route form offers. ClimbFields fetches them itself, so
+  // this page reads from the same cache: the grade lookup to translate a
+  // draft's grade names on save, and the tag lists to label the saved-climb
+  // summary rows.
+  const { gradeIdByName, wallTypes, holdTypes } = useClimbTaxonomies();
 
   /**
    * One request saves the whole visit: POST /sessions accepts the climbs
@@ -248,10 +208,14 @@ const LogSession = () => {
       climbs: DraftClimb[];
     }) => {
       const attempts = input.climbs.map((climb) => {
-        const grade = grades.find((g) => g.grade_name === climb.grade_name);
-        if (!grade) throw new Error(`Unknown grade ${climb.grade_name}`);
+        const gradeId = gradeIdByName(climb.grade_name);
+        if (gradeId === undefined) {
+          throw new Error(
+            t("log.error.unknownGrade", { grade: climb.grade_name }),
+          );
+        }
         return {
-          grade_id: grade.grade_id,
+          grade_id: gradeId,
           route_name: climb.route_name,
           attempt_count: climb.attempt_count,
           send_count: climb.send_count,
@@ -292,8 +256,10 @@ const LogSession = () => {
       return { failedUploads };
     },
     onSuccess: ({ failedUploads }) => {
-      // Dashboard and Progress both derive their figures from these lists, so
-      // a saved session has to refresh the climbs it created as well.
+      // Dashboard and Progress read every figure they show from /stats, keyed
+      // by month — the prefix match covers all of them. Without this the totals
+      // sit a whole session behind for up to the 60s staleTime.
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["attempts"] });
       queryClient.invalidateQueries({ queryKey: ["media"] });
@@ -311,20 +277,32 @@ const LogSession = () => {
       clearSessionDraft(userId);
 
       if (failedUploads > 0) {
-        toast.success("Session saved");
-        toast.error(
-          `${failedUploads} file${failedUploads === 1 ? "" : "s"} could not be uploaded`,
-        );
+        toast.success(t("log.toast.savedWithFailedUploads"));
+        toast.error(t("log.toast.uploadFailed", { count: failedUploads }));
       } else {
-        toast.success("Session successfully saved");
+        toast.success(t("log.toast.saved"));
       }
     },
     onError: (err) => {
       toast.error(
-        err instanceof Error ? err.message : "Failed to save session",
+        err instanceof Error ? err.message : t("log.toast.saveFailed"),
       );
     },
   });
+
+  /** How a logged climb reads back: "Flash", "Sent 1/4", "4 tries". */
+  const describeResult = (climb: AttemptType): string => {
+    if (climb.send_count === 0) {
+      return t("common:climb.tries", { count: climb.attempt_count });
+    }
+    if (climb.attempt_count === 1 && climb.send_count === 1) {
+      return t("common:climb.flash");
+    }
+    return t("common:climb.sentOf", {
+      sends: climb.send_count,
+      tries: climb.attempt_count,
+    });
+  };
 
   const updateDraft = <K extends keyof DraftClimb>(
     field: K,
@@ -338,34 +316,34 @@ const LogSession = () => {
 
   const handleAddClimb = () => {
     if (!draft.route_name.trim()) {
-      toast.error("Give the route a name so you can recognise it later");
+      toast.error(t("log.error.nameRoute"));
       return;
     }
     if (draft.send_count > draft.attempt_count) {
-      toast.error("You cannot send a route more times than you tried it");
+      toast.error(t("log.error.sendsOverTries"));
       return;
     }
 
     setClimbs([{ ...draft, id: newClimbId() }, ...climbs]);
     setDraft(emptyClimb());
-    toast.success("Route added — press Save Session when the visit is done");
+    toast.success(t("log.toast.routeAdded"));
   };
 
   const handleUpdateClimb = () => {
     if (!editing) return;
     if (editing.send_count > editing.attempt_count) {
-      toast.error("You cannot send a route more times than you tried it");
+      toast.error(t("log.error.sendsOverTries"));
       return;
     }
     setClimbs(climbs.map((c) => (c.id === editing.id ? editing : c)));
     setEditing(null);
-    toast.success("Route updated");
+    toast.success(t("log.toast.routeUpdated"));
   };
 
   const handleDeleteClimb = () => {
     setClimbs(climbs.filter((c) => c.id !== editing?.id));
     setEditing(null);
-    toast.success("Route removed");
+    toast.success(t("log.toast.routeRemoved"));
   };
 
   /** Refuse the save and take the climber to the field that refused it. */
@@ -386,7 +364,7 @@ const LogSession = () => {
     // climber never knew was required. It reads as "Save did nothing", and the
     // neighbouring blank duration field takes the blame.
     if (!gymName.trim()) {
-      rejectSave("Where did you climb? Add the gym to save", gymNameRef.current);
+      rejectSave(t("log.error.missingGym"), gymNameRef.current);
       return;
     }
 
@@ -402,9 +380,7 @@ const LogSession = () => {
         duration < 1 ||
         duration > MAX_SESSION_MINUTES)
     ) {
-      rejectSave(
-        `Time on the wall must be a whole number of minutes, 1–${MAX_SESSION_MINUTES}`,
-      );
+      rejectSave(t("log.error.duration", { max: MAX_SESSION_MINUTES }));
       return;
     }
 
@@ -415,11 +391,11 @@ const LogSession = () => {
     const pending = isClimbDirty(draft) ? draft : null;
     if (pending) {
       if (!pending.route_name.trim()) {
-        rejectSave("Name the route still in the form, or clear it, before saving");
+        rejectSave(t("log.error.namePendingRoute"));
         return;
       }
       if (pending.send_count > pending.attempt_count) {
-        rejectSave("You cannot send a route more times than you tried it");
+        rejectSave(t("log.error.sendsOverTries"));
         return;
       }
     }
@@ -427,13 +403,13 @@ const LogSession = () => {
     const toSave = pending ? [pending, ...climbs] : climbs;
 
     if (toSave.length === 0) {
-      rejectSave("Add at least one route before saving");
+      rejectSave(t("log.error.noRoutes"));
       return;
     }
-    if (grades.length === 0) {
+    if (toSave.some((climb) => gradeIdByName(climb.grade_name) === undefined)) {
       // Fetched once with staleTime: Infinity, so a failed load stays failed —
       // say what unsticks it instead of stating the problem.
-      rejectSave("Grades have not loaded — tap Retry above, then save again");
+      rejectSave(t("log.error.gradesNotLoaded"));
       return;
     }
 
@@ -445,104 +421,22 @@ const LogSession = () => {
     });
   };
 
-  /** The route form, shared by the new-climb card and the edit modal. */
+  /**
+   * The route form, shared by the new-climb card and the edit modal.
+   *
+   * The cast narrows AttemptType's updater to DraftClimb's. ClimbFields only
+   * ever writes the fields it renders, none of which is `files` — the extra
+   * property a draft carries and a saved climb does not — so widening the
+   * updater to accept it is the safe direction.
+   */
   const renderClimbFields = (
     climb: DraftClimb,
     update: <K extends keyof DraftClimb>(field: K, value: DraftClimb[K]) => void,
   ) => (
-    <>
-      <Input
-        type="text"
-        label="Route Name"
-        required
-        placeholder="e.g. yellow overhang by the door"
-        value={climb.route_name}
-        onChange={(e) => update("route_name", e.target.value)}
-      />
-
-      <div className="mt-3">
-        <p className="text-label-md text-on-surface-variant mb-2">
-          Grade (V-scale)
-        </p>
-        <div className="flex flex-row gap-2 overflow-x-auto py-2">
-          {isGradesLoading && (
-            <p className="text-on-surface-variant py-2">Loading grades...</p>
-          )}
-          {isGradesError && (
-            <>
-              <p className="text-error self-center">Failed to load grades</p>
-              <Button variant="secondary" onClick={() => refetchGrades()}>
-                Retry
-              </Button>
-            </>
-          )}
-          {grades.map((grade) => (
-            <Button
-              key={grade.grade_id}
-              onClick={() => update("grade_name", grade.grade_name)}
-              className={
-                climb.grade_name === grade.grade_name
-                  ? ""
-                  : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-              }
-            >
-              {grade.grade_name}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/*
-        The counts replace the old Sent/Attempted toggle. One row per route
-        instead of one row per try: working a project eight times is an 8 here,
-        not eight trips through this form.
-      */}
-      <div className="flex gap-3 mt-3">
-        <Counter
-          label="Tries"
-          value={climb.attempt_count}
-          min={1}
-          onChange={(next) => update("attempt_count", next)}
-        />
-        <Counter
-          label="Sends"
-          value={climb.send_count}
-          max={climb.attempt_count}
-          emphasis
-          onChange={(next) => update("send_count", next)}
-          hint={
-            climb.attempt_count === 1 && climb.send_count === 1
-              ? "Flash!"
-              : undefined
-          }
-        />
-      </div>
-
-      <TagSelector
-        label="Wall type"
-        options={wallTypes.map((w) => ({ id: w.id, label: w.label }))}
-        value={climb.wall_type_ids}
-        onChange={(next) => update("wall_type_ids", next)}
-        isLoading={isWallTypesLoading}
-      />
-
-      <TagSelector
-        label="Hold types"
-        options={holdTypes.map((h) => ({ id: h.id, label: h.label }))}
-        value={climb.hold_type_ids}
-        onChange={(next) => update("hold_type_ids", next)}
-        isLoading={isHoldTypesLoading}
-      />
-
-      <WeaknessPicker
-        options={weaknesses}
-        selectedIds={climb.weakness_type_ids}
-        customLabels={climb.weakness_labels}
-        onChangeIds={(next) => update("weakness_type_ids", next)}
-        onChangeLabels={(next) => update("weakness_labels", next)}
-        isLoading={isWeaknessesLoading}
-      />
-    </>
+    <ClimbFields
+      climb={climb}
+      update={update as ClimbFieldsProps["update"]}
+    />
   );
 
   /** Staged files for one climb. Uploaded only once the session is saved. */
@@ -552,7 +446,7 @@ const LogSession = () => {
   ) => (
     <div className="mt-3">
       <p className="text-label-md text-on-surface-variant mb-2">
-        Photos & video
+        {t("log.media.label")}
       </p>
       <input
         type="file"
@@ -576,7 +470,7 @@ const LogSession = () => {
               <span className="truncate">{file.name}</span>
               <button
                 type="button"
-                aria-label={`Remove ${file.name}`}
+                aria-label={t("log.media.remove", { name: file.name })}
                 onClick={() =>
                   update(
                     "files",
@@ -592,7 +486,7 @@ const LogSession = () => {
         </ul>
       )}
       <p className="text-label-sm text-on-surface-variant mt-1.5">
-        Photos are shrunk before upload. Videos: 60s or so, 50 MB max.
+        {t("log.media.hint")}
       </p>
     </div>
   );
@@ -600,20 +494,23 @@ const LogSession = () => {
   return (
     <div className="max-w-5xl mx-auto">
       <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-        New Performance Entry
+        {t("log.title")}
       </h1>
-      <p>
-        Log your latest sends and track your progress through technical
-        analytics.
-      </p>
+      <p>{t("log.subtitle")}</p>
 
-      <Card className="flex flex-col md:flex-row gap-3 mt-6">
+      {/*
+        Grid, not flex-row: a date input's native spinner fields give it a
+        min-content width it refuses to shrink below, so as a flex item it
+        pushed the row past the card's edge on narrow screens. Grid tracks
+        divide the width up front and the control fits whatever it is given.
+      */}
+      <Card className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6">
         <Input
           ref={gymNameRef}
           type="text"
-          label="Location"
+          label={t("field.gym")}
           required
-          placeholder="The Hive"
+          placeholder={t("field.gymPlaceholder")}
           value={gymName}
           autoCapitalize="words"
           className="capitalize"
@@ -621,14 +518,14 @@ const LogSession = () => {
         />
         <Input
           type="date"
-          label="Session Date"
+          label={t("field.date")}
           value={visitDate}
           onChange={(e) => setVisitDate(e.target.value)}
         />
         <Input
           type="number"
           inputMode="numeric"
-          label="Time on the wall (min)"
+          label={t("field.duration")}
           placeholder="90"
           min={1}
           max={1440}
@@ -642,8 +539,8 @@ const LogSession = () => {
 
         <div className="mt-3">
           <Textarea
-            label="Climber's Note"
-            placeholder="Describe the feeling, the beta you used, or why it didn't go..."
+            label={t("note.label")}
+            placeholder={t("note.placeholder")}
             className="min-h-30"
             value={draft.note}
             onChange={(e) => updateDraft("note", e.target.value)}
@@ -654,10 +551,10 @@ const LogSession = () => {
 
         <div className="flex flex-col items-end">
           <Button className="mt-3" onClick={handleAddClimb}>
-            Add Route
+            {t("log.addRoute")}
           </Button>
           <p className="text-label-sm text-on-surface-variant mt-1.5 text-right">
-            Adds it to the list below. The visit itself is saved at the bottom.
+            {t("log.addRouteHint")}
           </p>
         </div>
       </Card>
@@ -665,7 +562,9 @@ const LogSession = () => {
       {climbs.length > 0 && (
         <div className="mt-6">
           <h2 className="text-on-surface text-headline-sm font-bold tracking-tight">
-            This session — {climbs.length} route{climbs.length === 1 ? "" : "s"}
+            {t("log.sessionHeading", {
+              routes: t("common:climb.routes", { count: climbs.length }),
+            })}
           </h2>
           <div className="flex flex-col gap-3 mt-3">
             {climbs.map((climb) => (
@@ -702,12 +601,12 @@ const LogSession = () => {
                         .filter(Boolean)
                         .join(" · ")}
                       {climb.files.length > 0 &&
-                        ` · ${climb.files.length} file${climb.files.length === 1 ? "" : "s"}`}
+                        ` · ${t("log.fileCount", { count: climb.files.length })}`}
                     </p>
                   )}
                 </div>
                 <Button variant="secondary" onClick={() => setEditing(climb)}>
-                  Edit
+                  {t("common:action.edit")}
                 </Button>
               </Card>
             ))}
@@ -723,30 +622,34 @@ const LogSession = () => {
       */}
       <div className="flex flex-col items-end gap-1.5 mt-6">
         <Button onClick={handleSaveSession} disabled={isSavingSession}>
-          {isSavingSession ? "Saving..." : "Save Session"}
+          {isSavingSession ? t("common:action.saving") : t("log.saveSession")}
         </Button>
         <p className="text-label-sm text-on-surface-variant text-right">
           {climbs.length === 0
-            ? "Nothing is saved to your account until you press this."
-            : `${climbs.length} route${climbs.length === 1 ? "" : "s"} waiting to be saved.`}
+            ? t("log.saveHintEmpty")
+            : t("log.saveHintWaiting", {
+                routes: t("common:climb.routes", { count: climbs.length }),
+              })}
         </p>
       </div>
 
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title="Edit route"
+        title={t("log.editTitle")}
         size="lg"
         footer={
           <>
             <Button variant="error" onClick={handleDeleteClimb}>
-              Remove route
+              {t("log.removeRoute")}
             </Button>
             <div className="flex gap-3">
               <Button variant="secondary" onClick={() => setEditing(null)}>
-                Cancel
+                {t("common:action.cancel")}
               </Button>
-              <Button onClick={handleUpdateClimb}>Save</Button>
+              <Button onClick={handleUpdateClimb}>
+                {t("common:action.save")}
+              </Button>
             </div>
           </>
         }
@@ -757,8 +660,8 @@ const LogSession = () => {
 
             <div className="mt-3">
               <Textarea
-                label="Climber's Note"
-                placeholder="Describe the feeling, the beta you used, or why it didn't go..."
+                label={t("note.label")}
+                placeholder={t("note.placeholder")}
                 className="min-h-30"
                 value={editing.note}
                 onChange={(e) => updateEditing("note", e.target.value)}

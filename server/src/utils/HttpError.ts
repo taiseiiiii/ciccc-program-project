@@ -33,6 +33,10 @@ export class HttpError extends Error {
     return new HttpError(422, message, details);
   }
 
+  static tooManyRequests(message = "Too Many Requests"): HttpError {
+    return new HttpError(429, message);
+  }
+
   static badGateway(message = "Bad Gateway"): HttpError {
     return new HttpError(502, message);
   }

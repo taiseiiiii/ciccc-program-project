@@ -199,6 +199,47 @@ describe("rate limiting", () => {
   });
 });
 
+describe("AI generation quota", () => {
+  // The limit on paid model calls counts rows already generated rather than
+  // keeping a tally in memory, so that it survives a restart and holds across
+  // every instance. These assert the two branches of that count.
+  const quotaUsed = async (used: number) => {
+    const { query } = await import("./db/pool");
+    vi.mocked(query).mockResolvedValueOnce({
+      rows: [{ used: String(used) }],
+      rowCount: 1,
+    } as never);
+  };
+
+  it.each(["performances", "trainings"])(
+    "refuses POST /%s once the hourly allowance is spent",
+    async (resource) => {
+      await quotaUsed(10);
+
+      const res = await request(app)
+        .post(`/api/v1/${resource}`)
+        .set("Authorization", TOKEN)
+        .send({ period_type: "monthly" });
+
+      expect(res.status).toBe(429);
+      expect(res.body.error.message).toMatch(/last hour/);
+    },
+  );
+
+  it("lets a request through while the allowance remains", async () => {
+    await quotaUsed(9);
+
+    const res = await request(app)
+      .post("/api/v1/performances")
+      .set("Authorization", TOKEN)
+      .send({ period_type: "monthly" });
+
+    // Past the quota gate, into the controller — which fails for its own
+    // reasons against a mocked database. Anything but 429 proves the point.
+    expect(res.status).not.toBe(429);
+  });
+});
+
 describe("request validation", () => {
   it("reports malformed JSON as a 400, not a 500", async () => {
     const res = await request(app)
@@ -229,6 +270,87 @@ describe("request validation", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain("YYYY-MM");
+  });
+});
+
+describe("session list paging", () => {
+  it.each([
+    ["limit", "1e3"],
+    ["limit", "-5"],
+    ["limit", "101"],
+    ["offset", "-1"],
+    ["offset", "1e9"],
+    ["grade_id", "abc"],
+    ["from", "07-07-2026"],
+  ])("rejects %s=%s", async (param, value) => {
+    const res = await request(app)
+      .get(`/api/v1/sessions?${param}=${encodeURIComponent(value)}`)
+      .set("Authorization", TOKEN);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts offset=0, which the id pattern would otherwise reject", async () => {
+    const res = await request(app)
+      .get("/api/v1/sessions?offset=0&limit=20")
+      .set("Authorization", TOKEN);
+
+    expect(res.status).toBe(200);
+    expect(res.body.meta).toMatchObject({ limit: 20, offset: 0 });
+  });
+});
+
+describe("report browsing filters", () => {
+  it.each(["performances", "trainings"])(
+    "GET /%s rejects a non-boolean is_pinned",
+    async (resource) => {
+      const res = await request(app)
+        .get(`/api/v1/${resource}?is_pinned=yes`)
+        .set("Authorization", TOKEN);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain("is_pinned");
+    },
+  );
+
+  it.each(["performances", "trainings"])(
+    "GET /%s reports how many matched",
+    async (resource) => {
+      const res = await request(app)
+        .get(`/api/v1/${resource}?is_pinned=true&limit=5&offset=0`)
+        .set("Authorization", TOKEN);
+
+      expect(res.status).toBe(200);
+      expect(res.body.meta).toMatchObject({ limit: 5, offset: 0 });
+      expect(res.body.meta.total).toBeDefined();
+    },
+  );
+});
+
+describe("POST /sessions/:id/attempts", () => {
+  it("validates the climb the same way a nested one is validated", async () => {
+    const res = await request(app)
+      .post("/api/v1/sessions/1/attempts")
+      .set("Authorization", TOKEN)
+      .send({ grade_id: 3, attempt_count: 2, send_count: 5 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/cannot exceed tries/);
+  });
+
+  it("requires a grade", async () => {
+    const res = await request(app)
+      .post("/api/v1/sessions/1/attempts")
+      .set("Authorization", TOKEN)
+      .send({ route_name: "Yellow slab" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain("grade_id");
+  });
+
+  it("needs a token", async () => {
+    const res = await request(app).post("/api/v1/sessions/1/attempts").send({});
+    expect(res.status).toBe(401);
   });
 });
 

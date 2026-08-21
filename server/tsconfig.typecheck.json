@@ -1,0 +1,16 @@
+{
+  // Typecheck config. The base config sets rootDir to src/ so that `pnpm build`
+  // emits dist/index.js rather than dist/src/index.js — which also puts api/,
+  // the Vercel entry point, outside what tsc will look at. Vercel compiles that
+  // file itself at deploy time, so without this a broken import there would
+  // reach production having never been checked.
+  //
+  // Emits nothing; the build still runs from tsconfig.build.json.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "api/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,182 @@
+{
+  "field": {
+    "gym": "ジム名",
+    "gymPlaceholder": "例）The Hive",
+    "date": "セッション日",
+    "duration": "セッション時間（分）"
+  },
+  "note": {
+    "label": "メモ",
+    "placeholder": "登った感触、使ったムーブ、できなかった原因など"
+  },
+  "log": {
+    "title": "セッションを記録",
+    "subtitle": "今日の完登を記録して、データで成長を追いかけましょう。",
+    "addRoute": "課題を追加",
+    "addRouteHint": "下のリストに追加されます。セッション自体はページ下部で保存します。",
+    "sessionHeading": "今回のセッション — {{routes}}",
+    "fileCount_other": "{{count}}件のファイル",
+    "saveSession": "セッションを保存",
+    "saveHintEmpty": "このボタンを押すまで、アカウントには何も保存されません。",
+    "saveHintWaiting": "{{routes}}が未保存です。",
+    "editTitle": "課題を編集",
+    "removeRoute": "課題を削除",
+    "media": {
+      "label": "写真・動画",
+      "remove": "{{name}}を削除",
+      "hint": "写真はアップロード前に圧縮されます。動画は60秒程度・50MBまで。"
+    },
+    "restore": {
+      "plain": "未保存のセッションを復元しました",
+      "withRoutes": "未保存のセッションを復元しました — {{routes}}が未保存のままです",
+      "filesLost": "写真と動画は復元できませんでした。もう一度選び直してください"
+    },
+    "toast": {
+      "saved": "セッションを保存しました",
+      "savedWithFailedUploads": "セッションを保存しました",
+      "uploadFailed_other": "{{count}}件のファイルをアップロードできませんでした",
+      "saveFailed": "セッションを保存できませんでした",
+      "routeAdded": "課題を追加しました。セッションが終わったら「セッションを保存」を押してください",
+      "routeUpdated": "課題を更新しました",
+      "routeRemoved": "課題を削除しました"
+    },
+    "error": {
+      "nameRoute": "あとで見返せるように課題名を付けてください",
+      "sendsOverTries": "完登数はトライ数を超えられません",
+      "missingGym": "どこで登りましたか？ ジム名を入力すると保存できます",
+      "duration": "セッション時間は1〜{{max}}分の整数で入力してください",
+      "namePendingRoute": "入力中の課題に名前を付けるか、入力を消してから保存してください",
+      "noRoutes": "課題を1つ以上追加してから保存してください",
+      "gradesNotLoaded": "グレードを読み込めていません。上の「再試行」を押してから、もう一度保存してください",
+      "unknownGrade": "不明なグレードです: {{grade}}"
+    }
+  },
+  "list": {
+    "title": "セッション一覧",
+    "subtitle": "これまでに記録したセッションです。開いて内容を確認したり、修正したりできます。",
+    "searchLabel": "検索",
+    "searchPlaceholder": "ジム名や課題名",
+    "from": "開始日",
+    "to": "終了日",
+    "grade": "グレード",
+    "anyGrade": "すべてのグレード",
+    "noMatches": "該当するセッションはありません",
+    "matchCount_other": "{{count}}件のセッションが該当",
+    "clearFilters": "条件をクリア",
+    "loading": "セッションを読み込み中...",
+    "loadError": "セッションを読み込めませんでした。",
+    "emptyFiltered": "条件に合うセッションがありません。期間を広げるか、検索条件をクリアしてみてください。",
+    "empty": "まだセッションがありません。最初の記録がここに表示されます。",
+    "noClimbs": "課題の記録なし",
+    "loadMore": "もっと見る（{{total}}件中{{loaded}}件）"
+  },
+  "detail": {
+    "fallbackTitle": "セッション",
+    "onTheWall": "{{duration}}のセッション",
+    "editDetails": "詳細を編集",
+    "saveDetails": "詳細を保存",
+    "loadingClimbs": "課題を読み込み中...",
+    "noClimbs": "このセッションには課題が記録されていません。",
+    "sentFromTries": "{{tries}}トライ中{{sends}}完登",
+    "addClimb": "＋ 課題を追加",
+    "deleteSession": "このセッションを削除",
+    "confirmDelete": {
+      "title": "このセッションを削除しますか？",
+      "message": "このセッションに記録したすべての課題と、それに紐づく写真・動画が完全に削除されます。元に戻せません。"
+    },
+    "toast": {
+      "updated": "セッションを更新しました",
+      "deleted": "セッションを削除しました",
+      "saveFailed": "保存できませんでした",
+      "deleteFailed": "削除できませんでした"
+    }
+  },
+  "climbForm": {
+    "routeName": "課題名",
+    "routeNamePlaceholder": "例）入口横の黄色い課題",
+    "grade": "グレード（Vスケール）",
+    "gradesLoading": "グレードを読み込み中...",
+    "gradesError": "グレードを読み込めませんでした",
+    "tries": "トライ数",
+    "sends": "完登数",
+    "flashHint": "フラッシュ！",
+    "wallType": "壁の角度",
+    "holdTypes": "ホールドの種類"
+  },
+  "climbEdit": {
+    "editTitle": "課題を編集",
+    "addTitle": "課題を追加",
+    "removeClimb": "課題を削除",
+    "confirmRemove": {
+      "title": "この課題を削除しますか？",
+      "message": "この課題と、紐づく写真・動画が完全に削除されます。元に戻せません。セッションの他の記録はそのまま残ります。"
+    },
+    "toast": {
+      "updated": "課題を更新しました",
+      "added": "課題を追加しました",
+      "removed": "課題を削除しました",
+      "saveFailed": "保存できませんでした",
+      "removeFailed": "削除できませんでした"
+    },
+    "error": {
+      "gradesNotLoaded": "グレードを読み込めていません。少し待ってからもう一度お試しください",
+      "sendsOverTries": "完登数はトライ数を超えられません"
+    }
+  },
+  "import": {
+    "title": "クライミング履歴をインポート",
+    "subtitle": "他のアプリやノートに記録してきた履歴を、1行1課題の形式で取り込めます。分析もAIコーチも、これまでの記録すべてを踏まえた内容になります。",
+    "sessionCount_other": "{{count}}件のセッション",
+    "rowCount_other": "{{count}}行",
+    "skippedSuffix": "をスキップ",
+    "sentCount": "{{sends}}完登",
+    "format": {
+      "heading": "ファイル形式",
+      "body": "次の列を持つCSVです。1行が1課題で、同じセッションの行には同じ日付とジム名を入れてください。自動的に1つのセッションにまとめられます。",
+      "required": "必須は <b>visit_date</b> と <b>grade</b> だけです。日付は YYYY-MM-DD 形式、グレードは V0〜V17 です。",
+      "download": "テンプレートをダウンロード"
+    },
+    "file": {
+      "heading": "ファイルを選択",
+      "hint": "内容を確認するまで、何も保存されません。"
+    },
+    "preview": {
+      "heading": "{{fileName}} の内容",
+      "problemsHeading": "スキップされる行",
+      "problemRow": "{{line}}行目:",
+      "problemsNote": "これ以外の行はそのまま取り込まれます。修正してから取り込み直すこともできます。同じ行が重複していない限り、二重に登録されることはありません。",
+      "sessionsHeading": "作成されるセッション",
+      "importButton_other": "{{count}}件のセッションを取り込む",
+      "chooseAnother": "別のファイルを選ぶ"
+    },
+    "importing": {
+      "heading": "取り込み中",
+      "progress": "{{total}}件中{{done}}件を保存しました。完了するまでこのタブを開いたままにしてください。"
+    },
+    "done": {
+      "heading": "完了",
+      "headingFailed": "途中で停止しました",
+      "importedSuffix": "を取り込みました。",
+      "failure": "{{date}} のセッションが登録できませんでした: {{message}}。セッションは古い順に取り込まれるため、この日付より前の分は保存済みです。該当する行をファイルから削除して、残りを取り込んでください。",
+      "again": "別のファイルを取り込む"
+    },
+    "toast": {
+      "imported_other": "{{count}}件のセッションを取り込みました"
+    },
+    "error": {
+      "unknownGrade": "不明なグレードです: {{grade}}",
+      "requestFailed": "リクエストに失敗しました"
+    },
+    "problem": {
+      "dateMissing": "visit_date は必須です",
+      "dateInvalid": "「{{value}}」は日付として読めません。YYYY-MM-DD 形式で入力してください（例：2026-08-19）",
+      "gradeMissing": "grade は必須です",
+      "gradeUnknown": "「{{value}}」は登録されていないグレードです。V0〜V17 を使ってください",
+      "countsNotWhole": "attempt_count と send_count は整数で入力してください",
+      "triesOutOfRange": "attempt_count は 1〜{{max}} の範囲で入力してください",
+      "sendsOverTries": "完登数（{{sends}}）がトライ数（{{tries}}）を超えています",
+      "durationInvalid": "duration_minutes は {{max}} 以下の整数（分）で入力してください",
+      "sessionFull": "{{date}} のセッションはすでに {{max}} 課題あります。1セッションの上限です"
+    }
+  }
+}

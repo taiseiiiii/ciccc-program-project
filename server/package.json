@@ -12,7 +12,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --project tsconfig.build.json",
     "start": "node dist/db/migrate.js && node dist/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --project tsconfig.typecheck.json",
+    "vercel-build": "bash scripts/vercel-build.sh",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:status": "tsx src/db/migrate.ts status",
     "db:seed": "tsx src/db/migrate.ts seed",
@@ -22,12 +23,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1114.0",
+    "@aws-sdk/s3-request-presigner": "^3.1114.0",
+    "@sentry/node": "^10.70.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "express-rate-limit": "^8.6.2",
     "helmet": "^8.0.0",
-    "jose": "^6.2.4",
+    "jose": "^5.10.0",
     "pg": "^8.13.1",
     "swagger-ui-express": "^5.0.1",
     "yaml": "^2.9.0"

@@ -503,9 +503,10 @@ There is one Supabase project, and it is production. Nothing you do through the
 app can hurt it, but two commands can:
 
 - **Only run `pnpm dev`.** Never `pnpm db:migrate` — schema changes are applied
-  by one person, and running it from a branch with new migrations would alter
-  the production schema. If `pnpm dev` fails because a table or column is
-  missing, say so rather than migrating.
+  by the production deploy's build step, and running it from a branch with new
+  migrations would alter the production schema ahead of the code that needs it.
+  If `pnpm dev` fails because a table or column is missing, say so rather than
+  migrating.
 - `pnpm db:seed` and `pnpm db:reset` already refuse to touch a non-local
   database, so you cannot wipe it by accident. Do not add `--force`.
 - Accounts and rows you create while testing are real production data. Prefer
@@ -517,7 +518,8 @@ Email confirmation is **on**, so signing up sends a link that must be clicked
 before the account works. The app shows a "Confirm your email" screen with a
 resend button when this is pending.
 
-Supabase's built-in email sending is rate limited, so a burst of test signups
-will silently stop arriving. Use Gmail aliases — `you+test1@gmail.com`,
-`you+test2@gmail.com` — so a handful of accounts all land in one inbox, and
-reuse them.
+Mail goes through Postmark, capped at 30 messages an hour by Supabase and 100
+a month by Postmark's free plan — the monthly one is the one to respect, since
+it is shared with every real climber's signups and password resets. Use Gmail
+aliases — `you+test1@gmail.com`, `you+test2@gmail.com` — so a handful of
+accounts all land in one inbox, and reuse them rather than making new ones.

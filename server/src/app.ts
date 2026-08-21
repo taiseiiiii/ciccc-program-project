@@ -19,7 +19,7 @@ const OPENAPI_PATH = path.join(__dirname, "..", "docs", "openapi.yaml");
 export function createApp(): Application {
   const app = express();
 
-  // Render terminates TLS and forwards through exactly one proxy, so the
+  // The platform terminates TLS and forwards through exactly one proxy, so the
   // client's real address is the first entry in X-Forwarded-For. Trusting that
   // header locally would let any caller claim any IP and walk straight through
   // the rate limiter, so it is only trusted where a proxy actually exists.
@@ -28,8 +28,22 @@ export function createApp(): Application {
   }
 
   app.use(helmet());
-  app.use(cors({ origin: env.corsOrigins }));
-  app.use(express.json());
+  // The API answers on its own subdomain, so every call from the app is a
+  // cross-origin one and each mutation costs a preflight first. `maxAge` lets
+  // the browser remember the answer for a day instead of asking again before
+  // every save — the difference is visible on a phone on gym wifi.
+  app.use(
+    cors({
+      origin: env.corsOrigins,
+      methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+      maxAge: 86_400,
+    }),
+  );
+  // Explicit rather than body-parser's implicit 100kb: a long session carries
+  // dozens of climbs with notes, and the ceiling should be a number someone
+  // chose. MAX_CLIMBS_PER_SESSION is the real bound; this is the backstop.
+  app.use(express.json({ limit: "1mb" }));
   app.use(requestLog);
   app.use(apiLimiter);
 
@@ -43,17 +57,45 @@ export function createApp(): Application {
   });
 
   // API docs: interactive Swagger UI + the raw spec (for codegen / import).
-  const openapiYaml = readFileSync(OPENAPI_PATH, "utf8");
-  app.get("/api/v1/openapi.yaml", (_req, res) => {
-    res.type("text/yaml").send(openapiYaml);
-  });
-  app.use(
-    "/api/v1/docs",
-    swaggerUi.serve,
-    swaggerUi.setup(parseYaml(openapiYaml), {
-      customSiteTitle: "Climb App API Docs",
-    }),
-  );
+  //
+  // Read defensively. On a serverless platform the spec is a file that has to
+  // be bundled alongside the compiled code, and a missing file here would take
+  // the whole API down over documentation. Losing the docs is survivable;
+  // failing to boot is not.
+  let openapiYaml: string | null = null;
+  try {
+    openapiYaml = readFileSync(OPENAPI_PATH, "utf8");
+  } catch (err) {
+    console.error(`[server] API docs unavailable: could not read ${OPENAPI_PATH}`, err);
+  }
+
+  if (openapiYaml !== null) {
+    const spec = openapiYaml;
+    app.get("/api/v1/openapi.yaml", (_req, res) => {
+      res.type("text/yaml").send(spec);
+    });
+    app.use(
+      "/api/v1/docs",
+      // Swagger UI injects its own inline script and styles, which the default
+      // helmet CSP blocks outright — the page renders blank in production
+      // without this. Relaxed for this one path only; the API itself keeps the
+      // strict policy set above.
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "script-src": ["'self'", "'unsafe-inline'"],
+            "style-src": ["'self'", "'unsafe-inline'"],
+            "img-src": ["'self'", "data:"],
+          },
+        },
+      }),
+      swaggerUi.serve,
+      swaggerUi.setup(parseYaml(spec), {
+        customSiteTitle: "Climb App API Docs",
+      }),
+    );
+  }
 
   app.use("/api/v1", apiRoutes);
 

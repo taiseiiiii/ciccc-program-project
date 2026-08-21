@@ -42,10 +42,23 @@ interface Migration {
   checksum: string;
 }
 
+/**
+ * MIGRATE_DATABASE_URL first, DATABASE_URL otherwise.
+ *
+ * These are the same database reached two different ways. The API runs through
+ * Supabase's transaction pooler, which assigns a connection per statement and
+ * therefore cannot hold the session-scoped advisory lock this runner takes, or
+ * keep a multi-statement transaction on one connection. Migrations need a
+ * direct session connection; everything else is better off pooled. Where both
+ * routes are the same — a local Postgres — setting only DATABASE_URL still
+ * works exactly as before.
+ */
 function requireDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.MIGRATE_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) {
-    throw new Error('Missing required environment variable: DATABASE_URL');
+    throw new Error(
+      'Missing required environment variable: MIGRATE_DATABASE_URL or DATABASE_URL',
+    );
   }
   return url;
 }

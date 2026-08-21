@@ -45,18 +45,65 @@ export interface CreateTrainingInput {
  * Plans are immutable snapshots — regenerating inserts a new row, so there is
  * no update method.
  */
+export interface TrainingFilters {
+  /** True returns only pinned plans; false only unpinned; omitted, both. */
+  isPinned?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface TrainingPage {
+  rows: Training[];
+  total: number;
+}
+
 export const trainingRepository = {
-  async findAll(userId: number, limit = 20): Promise<Training[]> {
-    // Pinned plans lead, same as performances — the review screen is for the
-    // handful a climber is actually working through.
-    const { rows } = await query<Training>(
-      `SELECT * FROM trainings
-       WHERE user_id = $1
-       ORDER BY is_pinned DESC, created_at DESC, training_id DESC
-       LIMIT $2`,
-      [userId, limit],
+  async findAll(
+    userId: number,
+    options: TrainingFilters = {},
+  ): Promise<Training[]> {
+    return (await this.findPage(userId, options)).rows;
+  },
+
+  /**
+   * One page of plans, with the count of everything that matched. Same shape
+   * and same reasoning as performances — see that repository.
+   */
+  async findPage(
+    userId: number,
+    options: TrainingFilters = {},
+  ): Promise<TrainingPage> {
+    const values: unknown[] = [userId];
+    let where = `WHERE user_id = $1`;
+    if (options.isPinned !== undefined) {
+      values.push(options.isPinned);
+      where += ` AND is_pinned = $${values.length}`;
+    }
+
+    const countPromise = query<{ total: string }>(
+      `SELECT count(*)::text AS total FROM trainings ${where}`,
+      values,
     );
-    return rows;
+
+    // Pinned plans lead — the review screen is for the handful a climber is
+    // actually working through.
+    const pageValues = [...values, options.limit ?? 20, options.offset ?? 0];
+    const rowsPromise = query<Training>(
+      `SELECT * FROM trainings
+       ${where}
+       ORDER BY is_pinned DESC, created_at DESC, training_id DESC
+       LIMIT $${pageValues.length - 1} OFFSET $${pageValues.length}`,
+      pageValues,
+    );
+
+    const [countResult, rowsResult] = await Promise.all([
+      countPromise,
+      rowsPromise,
+    ]);
+    return {
+      rows: rowsResult.rows,
+      total: Number(countResult.rows[0]?.total ?? 0),
+    };
   },
 
   async findById(id: number, userId: number): Promise<Training | null> {

@@ -2,6 +2,7 @@ import { pool, query } from "../db/pool";
 import type { PoolClient } from "pg";
 import { buildUpdate } from "../utils/buildUpdate";
 import { routeRepository } from "./route.repository";
+import { weaknessRepository } from "./weakness.repository";
 
 /**
  * Shape of a row in the `attempts` table.
@@ -52,20 +53,31 @@ export interface AttemptWithRoute extends Attempt {
   weaknesses: AttemptWeakness[];
 }
 
+/**
+ * Everything one PATCH of a logged climb can touch.
+ *
+ * It spans three tables — the attempt, the route behind it, and the two tag
+ * join tables — which is why it is one input rather than several: they are
+ * written together or not at all.
+ *
+ * `undefined` means "leave alone" throughout. An empty array is therefore how a
+ * climber clears their tags, and is not the same as omitting the field.
+ *
+ * Not here: `is_success`, generated from send_count, and `route_id`, because
+ * repointing an attempt at an arbitrary route was a way to read and rewrite
+ * another climber's route. Correcting the route is what grade_id/route_name
+ * are for, and they only ever reach this attempt's own.
+ */
 export interface UpdateAttemptInput {
   attempt_count?: number;
   send_count?: number;
   note?: string | null;
-}
-
-/**
- * The route fields a climber may correct on an already-logged climb.
- * Applied to the attempt's own route, which is why this is not reachable
- * without first loading the attempt as its owner.
- */
-export interface UpdateAttemptRouteInput {
   grade_id?: number;
   route_name?: string | null;
+  wall_type_ids?: number[];
+  hold_type_ids?: number[];
+  /** Already resolved to ids by the controller, free-text labels included. */
+  weakness_type_ids?: number[];
 }
 
 /**
@@ -148,65 +160,98 @@ export const attemptRepository = {
   },
 
   /**
-   * Partial update. Only the fields provided are written, so a missing field is
-   * left untouched rather than overwritten with NULL. See utils/buildUpdate.
+   * Partial update of one logged climb, in a single transaction.
    *
-   * `is_success` is not updatable: it is generated from send_count, so sending
-   * a send_count is how a climb is marked sent. `route_id` is not updatable
-   * either — repointing an attempt at an arbitrary route id was a way to read
-   * and rewrite another climber's route. Correct the route through
-   * `updateRoute` below instead, which can only reach the attempt's own.
+   * Editing a climb writes to four tables: the attempt's counts and note, the
+   * route's grade and name, and the two tag join tables. These used to be
+   * separate calls on separate pooled connections, so a failure partway through
+   * left the counts saved against the old tags — a V4 whose grade had been
+   * corrected to V5 but whose wall angle still said the previous one, with
+   * nothing to indicate the edit had half-failed. One client, one transaction,
+   * so the climb is either as the climber left it or exactly as they found it.
+   *
+   * Only the fields provided are written; see utils/buildUpdate. Returns null
+   * when the climb is not the caller's, which reads as missing.
    */
   async update(
     id: number,
     userId: number,
     input: UpdateAttemptInput,
   ): Promise<AttemptWithRoute | null> {
-    const statement = buildUpdate(
-      "attempts",
-      {
-        attempt_count: input.attempt_count,
-        send_count: input.send_count,
-        note: input.note,
-      },
-      { attempt_id: id },
-    );
-    if (!statement) return this.findById(id, userId);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-    // Ownership is a subquery rather than another equality, because attempts
-    // carry no user_id of their own — it lives on the parent session.
-    const { rowCount } = await query(
-      `${statement.text} AND session_id IN (
-         SELECT session_id FROM sessions WHERE user_id = $${statement.values.length + 1}
-       )`,
-      [...statement.values, userId],
-    );
-    if ((rowCount ?? 0) === 0) return null;
-    // Re-read rather than RETURNING *: the response carries joined route, grade
-    // and three tag lists, none of which RETURNING can produce.
+      // Ownership is a join rather than an equality, because attempts carry no
+      // user_id of their own — it lives on the parent session. The route id
+      // comes back with it, so nothing downstream has to look it up again.
+      const { rows: owned } = await client.query<{ route_id: number }>(
+        `SELECT a.route_id
+           FROM attempts a
+           JOIN sessions s USING (session_id)
+          WHERE a.attempt_id = $1 AND s.user_id = $2`,
+        [id, userId],
+      );
+      const routeId = owned[0]?.route_id;
+      if (routeId === undefined) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      const attemptUpdate = buildUpdate(
+        "attempts",
+        {
+          attempt_count: input.attempt_count,
+          send_count: input.send_count,
+          note: input.note,
+        },
+        { attempt_id: id },
+      );
+      if (attemptUpdate) {
+        await client.query(attemptUpdate.text, attemptUpdate.values);
+      }
+
+      const routeUpdate = buildUpdate(
+        "routes",
+        { grade_id: input.grade_id, route_name: input.route_name },
+        { route_id: routeId },
+      );
+      if (routeUpdate) {
+        await client.query(routeUpdate.text, routeUpdate.values);
+      }
+
+      // Tags hang off the route, weaknesses off the attempt. Both replace in
+      // full, so an empty array is how a climber clears them and `undefined`
+      // leaves them alone.
+      if (input.wall_type_ids !== undefined || input.hold_type_ids !== undefined) {
+        await this.setRouteTags(
+          routeId,
+          {
+            wallTypeIds: input.wall_type_ids,
+            holdTypeIds: input.hold_type_ids,
+          },
+          client,
+        );
+      }
+      if (input.weakness_type_ids !== undefined) {
+        await weaknessRepository.setForAttempt(
+          id,
+          input.weakness_type_ids,
+          client,
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // Re-read rather than RETURNING *: the response carries the joined route,
+    // grade and three tag lists, none of which RETURNING can produce.
     return this.findById(id, userId);
-  },
-
-  /**
-   * Correct the grade or name of the route behind one attempt.
-   *
-   * Takes the route id from an attempt the caller has already been shown to
-   * own, so there is no way to aim this at a stranger's row. Returns false when
-   * there was nothing to change.
-   */
-  async updateRoute(
-    routeId: number,
-    input: UpdateAttemptRouteInput,
-  ): Promise<boolean> {
-    const statement = buildUpdate(
-      "routes",
-      { grade_id: input.grade_id, route_name: input.route_name },
-      { route_id: routeId },
-    );
-    if (!statement) return false;
-
-    const { rowCount } = await query(statement.text, statement.values);
-    return (rowCount ?? 0) > 0;
   },
 
   /**

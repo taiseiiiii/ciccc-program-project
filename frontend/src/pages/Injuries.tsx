@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
@@ -12,7 +13,7 @@ import Input from "../components/Input";
 import Textarea from "../components/Textarea";
 import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { daysSince, formatDate, formatDayMonth, pluralize, todayString } from "../lib/date";
+import { daysSince, formatDate, formatDayMonth, todayString } from "../lib/date";
 import {
   LineChart,
   Line,
@@ -28,12 +29,6 @@ const STATUS_STYLES: Record<Injury["status"], string> = {
   healed: "text-primary bg-primary/10",
 };
 
-const STATUS_LABELS: Record<Injury["status"], string> = {
-  active: "Still hurts",
-  recovering: "Getting back on it",
-  healed: "Healed",
-};
-
 const SIDES = ["left", "right", "both"] as const;
 
 /**
@@ -45,6 +40,7 @@ const SIDES = ["left", "right", "both"] as const;
  * offer in place of advice it is not qualified to give.
  */
 const PainChart = ({ injuryId }: { injuryId: number }) => {
+  const { t } = useTranslation("injuries");
   const { data, isPending } = useQuery({
     queryKey: ["injury-logs", injuryId],
     queryFn: () => api<{ data: InjuryLog[] }>(`/injuries/${injuryId}/logs`),
@@ -54,14 +50,14 @@ const PainChart = ({ injuryId }: { injuryId: number }) => {
   if (isPending) {
     return (
       <p className="text-on-surface-variant text-body-sm mt-3">
-        Loading check-ins...
+        {t("chart.loading")}
       </p>
     );
   }
   if (logs.length < 2) {
     return (
       <p className="text-on-surface-variant text-body-sm mt-3">
-        Check in for a couple of days and the trend will show up here.
+        {t("chart.needMore")}
       </p>
     );
   }
@@ -83,7 +79,7 @@ const PainChart = ({ injuryId }: { injuryId: number }) => {
             allowDecimals={false}
           />
           <Tooltip
-            formatter={(value) => [`${value}/10`, "Pain"]}
+            formatter={(value) => [`${value}/10`, t("chart.pain")]}
             contentStyle={{
               backgroundColor: "var(--color-surface-container-highest)",
               borderColor: "var(--color-outline-variant)",
@@ -105,6 +101,7 @@ const PainChart = ({ injuryId }: { injuryId: number }) => {
 };
 
 const Injuries = () => {
+  const { t } = useTranslation("injuries");
   const today = todayString();
   const queryClient = useQueryClient();
 
@@ -171,10 +168,12 @@ const Injuries = () => {
         severity: 3,
         description: "",
       });
-      toast.success("Injury recorded. Take it easy.");
+      toast.success(t("toast.created"));
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(
+        err instanceof Error ? err.message : t("toast.createFailed"),
+      );
     },
   });
 
@@ -183,10 +182,12 @@ const Injuries = () => {
       api(`/injuries/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: () => {
       invalidate();
-      toast.success("Updated");
+      toast.success(t("toast.updated"));
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to update");
+      toast.error(
+        err instanceof Error ? err.message : t("toast.updateFailed"),
+      );
     },
   });
 
@@ -195,10 +196,12 @@ const Injuries = () => {
     onSuccess: () => {
       invalidate();
       setPendingDelete(null);
-      toast.success("Injury removed");
+      toast.success(t("toast.deleted"));
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
+      toast.error(
+        err instanceof Error ? err.message : t("toast.deleteFailed"),
+      );
     },
   });
 
@@ -232,16 +235,18 @@ const Injuries = () => {
         ...current,
         [variables.id]: { pain: variables.pain, note: "" },
       }));
-      toast.success("Checked in for today");
+      toast.success(t("toast.checkedIn"));
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to check in");
+      toast.error(
+        err instanceof Error ? err.message : t("toast.checkInFailed"),
+      );
     },
   });
 
   const handleCreate = () => {
     if (!form.bodyPartId) {
-      toast.error("Which body part?");
+      toast.error(t("toast.needBodyPart"));
       return;
     }
     createInjury({
@@ -267,27 +272,33 @@ const Injuries = () => {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-bold text-body-lg">
-                {injury.body_part_label}
-                {injury.side ? ` (${injury.side})` : ""}
+                {injury.side
+                  ? t("card.partWithSide", {
+                      part: injury.body_part_label,
+                      side: t(`side.${injury.side}`),
+                    })
+                  : injury.body_part_label}
               </p>
               <span
                 className={`${STATUS_STYLES[injury.status]} font-bold px-2.5 py-1 rounded-full text-xs`}
               >
-                {STATUS_LABELS[injury.status]}
+                {t(`status.${injury.status}`)}
               </span>
             </div>
             <p className="text-on-surface-variant text-body-sm mt-1">
-              Since {formatDate(injury.occurred_on)}
+              {t("card.since", { date: formatDate(injury.occurred_on) })}
               {injury.status !== "healed" &&
-                ` · ${pluralize(daysSince(injury.occurred_on), "day")}`}
-              {injury.severity ? ` · severity ${injury.severity}/5` : ""}
+                ` · ${t("card.days", { count: daysSince(injury.occurred_on) })}`}
+              {injury.severity
+                ? ` · ${t("card.severity", { level: injury.severity })}`
+                : ""}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {injury.latest_pain_level !== null && (
               <span className="text-on-surface-variant text-body-sm">
-                Last: {injury.latest_pain_level}/10
+                {t("card.lastPain", { level: injury.latest_pain_level })}
               </span>
             )}
             <Button
@@ -296,7 +307,7 @@ const Injuries = () => {
                 setExpandedId(isExpanded ? null : injury.injury_id)
               }
             >
-              {isExpanded ? "Close" : "Open"}
+              {isExpanded ? t("common:action.close") : t("card.open")}
             </Button>
           </div>
         </div>
@@ -315,7 +326,7 @@ const Injuries = () => {
                   htmlFor={`pain-${injury.injury_id}`}
                   className="text-label-md text-on-surface-variant"
                 >
-                  How does it feel today? — {checkIn.pain}/10
+                  {t("checkIn.question", { level: checkIn.pain })}
                 </label>
                 <input
                   id={`pain-${injury.injury_id}`}
@@ -336,13 +347,13 @@ const Injuries = () => {
                   className="w-full mt-2 accent-primary cursor-pointer"
                 />
                 <div className="flex justify-between text-label-sm text-on-surface-variant">
-                  <span>No pain</span>
-                  <span>Worst it has been</span>
+                  <span>{t("checkIn.min")}</span>
+                  <span>{t("checkIn.max")}</span>
                 </div>
 
                 <div className="mt-3">
                   <Textarea
-                    placeholder="Anything worth remembering about today?"
+                    placeholder={t("checkIn.notePlaceholder")}
                     className="min-h-16"
                     value={checkIn.note}
                     onChange={(e) =>
@@ -370,7 +381,9 @@ const Injuries = () => {
                       })
                     }
                   >
-                    {isSavingThis ? "Saving..." : "Check in for today"}
+                    {isSavingThis
+                      ? t("common:action.saving")
+                      : t("checkIn.submit")}
                   </Button>
                 </div>
               </div>
@@ -391,12 +404,12 @@ const Injuries = () => {
                         })
                       }
                     >
-                      Mark {STATUS_LABELS[status].toLowerCase()}
+                      {t(`markStatus.${status}`)}
                     </Button>
                   ))}
               </div>
               <Button variant="error" onClick={() => setPendingDelete(injury)}>
-                Delete
+                {t("common:action.delete")}
               </Button>
             </div>
           </div>
@@ -410,14 +423,11 @@ const Injuries = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
-            Injuries
+            {t("title")}
           </h1>
-          <p>
-            Track what hurts, watch it improve, and keep your training plans
-            away from it.
-          </p>
+          <p>{t("subtitle")}</p>
         </div>
-        <Button onClick={() => setIsFormOpen(true)}>+ Record an injury</Button>
+        <Button onClick={() => setIsFormOpen(true)}>{t("record")}</Button>
       </div>
 
       {/*
@@ -425,27 +435,21 @@ const Injuries = () => {
         does not diagnose, and it will not tell anyone how to treat an injury.
       */}
       <Card className="mt-4 border-l-4 border-l-error">
-        <p className="font-bold">This is a logbook, not a doctor</p>
-        <p className="text-on-surface-variant mt-1">
-          Nothing here is medical advice. The app records how you feel and keeps
-          training suggestions off the affected area — it cannot tell you what
-          is wrong or how to fix it. If pain persists, worsens, or came on
-          suddenly, see a doctor or physiotherapist.
-        </p>
+        <p className="font-bold">{t("disclaimer.title")}</p>
+        <p className="text-on-surface-variant mt-1">{t("disclaimer.body")}</p>
       </Card>
 
       {isPending ? (
-        <p className="text-on-surface-variant mt-6">Loading...</p>
+        <p className="text-on-surface-variant mt-6">
+          {t("common:state.loading")}
+        </p>
       ) : (
         <>
           <div className="mt-6 flex flex-col gap-3">
             {openInjuries.length === 0 ? (
               <Card>
-                <p className="font-bold">Nothing hurting right now</p>
-                <p className="text-on-surface-variant mt-1">
-                  Good. If that changes, record it here — the AI coach will
-                  route your training around it.
-                </p>
+                <p className="font-bold">{t("empty.title")}</p>
+                <p className="text-on-surface-variant mt-1">{t("empty.body")}</p>
               </Card>
             ) : (
               openInjuries.map(renderInjuryCard)
@@ -459,8 +463,9 @@ const Injuries = () => {
                 onClick={() => setShowHealed((shown) => !shown)}
                 className="text-primary text-label-md hover:underline cursor-pointer"
               >
-                {showHealed ? "Hide" : "Show"} {healedInjuries.length} healed
-                injur{healedInjuries.length === 1 ? "y" : "ies"}
+                {t(showHealed ? "healed.hide" : "healed.show", {
+                  count: healedInjuries.length,
+                })}
               </button>
               {showHealed && (
                 <div className="mt-3 flex flex-col gap-3">
@@ -478,39 +483,45 @@ const Injuries = () => {
         onConfirm={() =>
           pendingDelete && deleteInjury(pendingDelete.injury_id)
         }
-        title="Delete this injury?"
+        title={t("delete.title")}
         message={
           pendingDelete
-            ? `This removes the ${pendingDelete.body_part_label.toLowerCase()} record and every pain check-in on it. That history cannot be recovered.`
+            ? t("delete.message", {
+                part: pendingDelete.body_part_label.toLowerCase(),
+              })
             : ""
         }
-        confirmLabel="Delete"
+        confirmLabel={t("common:action.delete")}
       />
 
       <Modal
         open={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title="Record an injury"
+        title={t("form.title")}
         size="lg"
         footer={
           <>
             <span />
             <div className="flex gap-3">
               <Button variant="secondary" onClick={() => setIsFormOpen(false)}>
-                Cancel
+                {t("common:action.cancel")}
               </Button>
               <Button onClick={handleCreate} disabled={isCreating}>
-                {isCreating ? "Saving..." : "Save"}
+                {isCreating
+                  ? t("common:action.saving")
+                  : t("common:action.save")}
               </Button>
             </div>
           </>
         }
       >
             <p className="text-label-md text-on-surface-variant mb-2">
-              Where does it hurt?
+              {t("form.bodyPart")}
             </p>
             {isBodyPartsLoading ? (
-              <p className="text-on-surface-variant text-body-sm">Loading...</p>
+              <p className="text-on-surface-variant text-body-sm">
+                {t("common:state.loading")}
+              </p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {bodyParts.map((part) => (
@@ -535,7 +546,7 @@ const Injuries = () => {
 
             <div className="mt-4">
               <p className="text-label-md text-on-surface-variant mb-2">
-                Which side?
+                {t("form.side")}
               </p>
               <div className="flex flex-wrap gap-2">
                 {SIDES.map((side) => (
@@ -555,7 +566,7 @@ const Injuries = () => {
                         : "bg-surface-container-high text-on-surface border-outline-variant hover:bg-surface-container-highest"
                     }`}
                   >
-                    {side}
+                    {t(`side.${side}`)}
                   </button>
                 ))}
               </div>
@@ -564,7 +575,7 @@ const Injuries = () => {
             <div className="mt-4">
               <Input
                 type="date"
-                label="When did it start?"
+                label={t("form.date")}
                 max={today}
                 value={form.occurredOn}
                 onChange={(e) =>
@@ -578,7 +589,7 @@ const Injuries = () => {
                 htmlFor="severity"
                 className="text-label-md text-on-surface-variant"
               >
-                How bad is it? — {form.severity}/5
+                {t("form.severity", { level: form.severity })}
               </label>
               <input
                 id="severity"
@@ -593,15 +604,15 @@ const Injuries = () => {
                 className="w-full mt-2 accent-primary cursor-pointer"
               />
               <div className="flex justify-between text-label-sm text-on-surface-variant">
-                <span>Niggle</span>
-                <span>Can't climb</span>
+                <span>{t("form.severityMin")}</span>
+                <span>{t("form.severityMax")}</span>
               </div>
             </div>
 
             <div className="mt-4">
               <Textarea
-                label="What happened?"
-                placeholder="Felt a pop on a small crimp on an overhang..."
+                label={t("form.description")}
+                placeholder={t("form.descriptionPlaceholder")}
                 className="min-h-20"
                 value={form.description}
                 onChange={(e) =>

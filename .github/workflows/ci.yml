@@ -1,8 +1,11 @@
 name: CI
 
 # Runs on every pull request and every push to main. Nothing used to gate a
-# merge here — the only workflow was the Render deploy hook — so a change that
-# broke the typecheck reached production and was found by a person.
+# merge here, so a change that broke the typecheck reached production and was
+# found by a person.
+#
+# There is no deploy workflow: Vercel's Git integration builds both projects
+# itself, and the API project's build step is what applies migrations.
 on:
   pull_request:
   push:
@@ -67,8 +70,9 @@ jobs:
         run: npm run lint
 
       # `npm run build` runs `tsc -b` first, so this covers the typecheck too.
-      # The Supabase vars are read at module load and the client throws without
-      # them; these are placeholders, and no build output is deployed from here.
+      # All three are required — vite.config.ts fails the build without them,
+      # so a missing one cannot ship. These are placeholders; no build output is
+      # deployed from here.
       - name: Build
         run: npm run build
         env:

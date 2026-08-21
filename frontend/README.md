@@ -26,7 +26,7 @@ src/
   hooks/         useAuth / useTheme — the context objects and their hooks live
                  apart from the providers for the same reason.
   lib/           api client, Supabase client, query client, date helpers,
-                 storage (Supabase Storage upload/sign/delete), sessionDraft.
+                 storage (R2 upload/sign/delete via the API), sessionDraft.
   types/         the API's shapes, mirroring server/src/repositories.
 ```
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import Button from "./Button";
 import { useAuth } from "../hooks/useAuth";
 
@@ -19,6 +20,7 @@ export default function ConfirmEmailNotice({
   email,
   onBack,
 }: ConfirmEmailNoticeProps) {
+  const { t } = useTranslation("profile");
   const { resendConfirmation } = useAuth();
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -39,13 +41,17 @@ export default function ConfirmEmailNotice({
 
   return (
     <div className="w-full max-w-sm flex flex-col gap-4 p-8">
-      <h1 className="text-headline-md">Confirm your email</h1>
+      <h1 className="text-headline-md">{t("confirmEmail.title")}</h1>
       <p className="text-on-surface-variant text-body-md">
-        We sent a confirmation link to <strong>{email}</strong>. Open it to
-        finish setting up your account — you&apos;ll be signed in automatically.
+        <Trans
+          i18nKey="confirmEmail.body"
+          ns="profile"
+          values={{ email }}
+          components={{ email: <strong /> }}
+        />
       </p>
       <p className="text-on-surface-variant text-label-sm">
-        No email? Check your spam folder, or send it again.
+        {t("confirmEmail.noEmail")}
       </p>
 
       {error && (
@@ -55,15 +61,15 @@ export default function ConfirmEmailNotice({
       )}
       {sent && !error && (
         <div role="status" className="p-3 rounded-lg bg-primary-container text-on-primary-container text-body-sm">
-          Sent. It can take a minute to arrive.
+          {t("confirmEmail.sent")}
         </div>
       )}
 
       <Button type="button" onClick={handleResend} disabled={isSending}>
-        {isSending ? "Sending..." : "Resend confirmation email"}
+        {isSending ? t("confirmEmail.sending") : t("confirmEmail.resend")}
       </Button>
       <Button type="button" variant="secondary" onClick={onBack}>
-        Back to log in
+        {t("confirmEmail.backToLogin")}
       </Button>
     </div>
   );

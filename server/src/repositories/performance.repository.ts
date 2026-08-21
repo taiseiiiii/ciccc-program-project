@@ -53,28 +53,75 @@ export interface CreatePerformanceInput {
  * period inserts a new row rather than updating the old one, and `update`
  * reaches only the climber's own title/note/pin.
  */
+export interface PerformanceFilters {
+  periodType?: "daily" | "monthly";
+  /** True returns only pinned reports; false only unpinned; omitted, both. */
+  isPinned?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PerformancePage {
+  rows: Performance[];
+  /** Matching rows in total, so the browser can page and say how many exist. */
+  total: number;
+}
+
 export const performanceRepository = {
   async findAll(
     userId: number,
-    options: { periodType?: "daily" | "monthly"; limit?: number } = {},
+    options: PerformanceFilters = {},
   ): Promise<Performance[]> {
+    return (await this.findPage(userId, options)).rows;
+  },
+
+  /**
+   * One page of reports, with the count of everything that matched.
+   *
+   * Reports used to come back as a single capped list, which was enough while
+   * they were a row of buttons under the card. Browsing an archive needs to
+   * know what is beyond the page, and needs the pinned ones on their own —
+   * "the reports I kept" is the whole reason for pinning.
+   */
+  async findPage(
+    userId: number,
+    options: PerformanceFilters = {},
+  ): Promise<PerformancePage> {
     const values: unknown[] = [userId];
     let where = `WHERE user_id = $1`;
     if (options.periodType) {
       values.push(options.periodType);
       where += ` AND period_type = $${values.length}`;
     }
-    values.push(options.limit ?? 20);
-    // Pinned reports lead: the review screen exists so a climber can keep a
-    // handful of reports to check back against, not to scroll a full archive.
-    const { rows } = await query<Performance>(
+    if (options.isPinned !== undefined) {
+      values.push(options.isPinned);
+      where += ` AND is_pinned = $${values.length}`;
+    }
+
+    const countPromise = query<{ total: string }>(
+      `SELECT count(*)::text AS total FROM performances ${where}`,
+      values,
+    );
+
+    // Pinned reports lead: a climber keeps a handful to check back against, and
+    // those should not sink below a month of newer ones.
+    const pageValues = [...values, options.limit ?? 20, options.offset ?? 0];
+    const rowsPromise = query<Performance>(
       `SELECT * FROM performances
        ${where}
        ORDER BY is_pinned DESC, created_at DESC, performance_id DESC
-       LIMIT $${values.length}`,
-      values,
+       LIMIT $${pageValues.length - 1} OFFSET $${pageValues.length}`,
+      pageValues,
     );
-    return rows;
+
+    const [countResult, rowsResult] = await Promise.all([
+      countPromise,
+      rowsPromise,
+    ]);
+    return {
+      rows: rowsResult.rows,
+      total: Number(countResult.rows[0]?.total ?? 0),
+    };
   },
 
   async findById(id: number, userId: number): Promise<Performance | null> {

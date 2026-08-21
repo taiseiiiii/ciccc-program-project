@@ -1,5 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { filterUnsafeDrills, type TrainingDrill } from "./ai.service";
+
+// `filterUnsafeDrills` is a pure function, but it sits beside the OpenAI
+// transport, which reads config/env when it loads and throws without a
+// DATABASE_URL. Hoisted rather than stubbed in the body: the import below runs
+// first otherwise. (app.test.ts gets away with vi.stubEnv because it imports
+// the app lazily, inside beforeAll.)
+//
+// `??=` so a developer's own .env still wins locally; this is only here to make
+// the suite runnable on a machine that has none, CI included.
+vi.hoisted(() => {
+  process.env.DATABASE_URL ??= "postgres://u:p@localhost:5432/climb_app_test";
+  process.env.SUPABASE_URL ??= "https://test.supabase.co";
+});
 
 /**
  * The injury guardrail's second layer.

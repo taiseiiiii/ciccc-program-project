@@ -4,10 +4,10 @@ import { query } from "../db/pool";
  * Data-access layer for photo/video attachments.
  *
  * Only metadata is stored. The file itself is uploaded by the browser straight
- * to Supabase Storage with the climber's own access token, and this server
- * never sees a byte of it — the client uploads first, then posts the resulting
- * object key here. A failed upload therefore leaves no row, and a row that
- * exists always points at an object that was successfully written.
+ * to object storage, using a URL this server signs for that one upload, and no
+ * byte of it passes through here — the client uploads first, then posts the
+ * resulting object key. A failed upload therefore leaves no row, and a row that
+ * exists always points at an object the server has confirmed is there.
  *
  * Same ownership rule as everywhere else: every read/write is scoped to the
  * user_id taken from the verified token, and all values are parameterized.
@@ -114,9 +114,51 @@ export const mediaRepository = {
   },
 
   /**
-   * Total bytes this climber is storing. The bucket is on a shared free-tier
-   * quota, so uploads are refused past a per-user ceiling rather than letting
-   * one account exhaust it for everyone.
+   * Of the given keys, the ones this climber actually has a row for.
+   *
+   * The filter is the point: signing a display URL is the one operation that
+   * takes a storage key from the client rather than choosing it, and a key is
+   * the part of the scheme a client has already seen. Anything unmatched is
+   * simply absent from the result, so a guessed key reads the same as a deleted
+   * one.
+   */
+  async findOwnedPaths(userId: number, paths: string[]): Promise<string[]> {
+    if (paths.length === 0) return [];
+    const { rows } = await query<{ storage_path: string }>(
+      `SELECT storage_path FROM media
+        WHERE user_id = $1 AND storage_path = ANY($2::text[])`,
+      [userId, paths],
+    );
+    return rows.map((row) => row.storage_path);
+  },
+
+  /**
+   * Every object key belonging to a session — rows pinned to the visit itself
+   * and rows pinned to any climb within it. Read before the session is deleted,
+   * so the files can be removed once the cascade has taken the rows.
+   */
+  async findPathsBySession(sessionId: number, userId: number): Promise<string[]> {
+    const { rows } = await query<{ storage_path: string }>(
+      `SELECT m.storage_path FROM media m
+         LEFT JOIN attempts a ON a.attempt_id = m.attempt_id
+        WHERE m.user_id = $1 AND (m.session_id = $2 OR a.session_id = $2)`,
+      [userId, sessionId],
+    );
+    return rows.map((row) => row.storage_path);
+  },
+
+  /** Every object key belonging to one climb. Same purpose as the above. */
+  async findPathsByAttempt(attemptId: number, userId: number): Promise<string[]> {
+    const { rows } = await query<{ storage_path: string }>(
+      `SELECT storage_path FROM media WHERE user_id = $1 AND attempt_id = $2`,
+      [userId, attemptId],
+    );
+    return rows.map((row) => row.storage_path);
+  },
+
+  /**
+   * Total bytes this climber is storing. Uploads are refused past a per-user
+   * ceiling rather than letting one account fill the bucket for everyone.
    */
   async totalBytes(userId: number): Promise<number> {
     const { rows } = await query<{ total: string | null }>(

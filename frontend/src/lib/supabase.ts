@@ -12,4 +12,12 @@ if (!url || !anonKey) {
   );
 }
 
-export const supabase = createClient(url, anonKey);
+export const supabase = createClient(url, anonKey, {
+  auth: {
+    // Face ID / Touch ID / Windows Hello sign-in. The passkey methods throw
+    // without this flag, and it is marked experimental by the SDK — the API may
+    // change, so everything that touches it goes through lib/passkeys.ts and
+    // degrades to the password flow when it is unavailable.
+    experimental: { passkey: true },
+  },
+});

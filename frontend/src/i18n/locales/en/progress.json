@@ -1,0 +1,76 @@
+{
+  "title": "Performance Analytics",
+  "state": {
+    "loading": "Loading analytics data...",
+    "errorTitle": "Could not load your analytics",
+    "errorBody": "The server did not answer. Nothing you logged has been lost — try reloading in a moment."
+  },
+  "goals": {
+    "title": "Active Goals",
+    "addGoal": "+ Add goal",
+    "empty": "No active goals set yet.",
+    "addFirst": "Set your first climbing goal",
+    "defaultDescription": "Send {{grade}}",
+    "due": "Due {{date}}",
+    "complete": "Complete",
+    "showLess": "Show less",
+    "viewAll": "View all {{count}} goals ({{hidden}} more)",
+    "gradeFallback": "Grade {{id}}",
+    "newTitle": "Set a new goal",
+    "editTitle": "Edit goal",
+    "saveGoal": "Save goal",
+    "updateGoal": "Update goal",
+    "targetGrade": "Target grade",
+    "loadingGrades": "Loading grades...",
+    "targetDate": "Target date",
+    "description": "Description / memo",
+    "descriptionPlaceholder": "Send V5 in one month!!",
+    "deleteTitle": "Delete goal",
+    "deleteMessage": "This removes the goal and its deadline. Your logged climbs are not affected.",
+    "created": "Goal created",
+    "updated": "Goal updated",
+    "deleted": "Goal deleted",
+    "pickGradeFirst": "Pick a target grade first"
+  },
+  "recentSessions": {
+    "title": "Recent Sessions",
+    "viewAll": "View all sessions",
+    "empty": "No sessions logged yet.",
+    "noClimbs": "No climbs"
+  },
+  "stats": {
+    "sendsThisMonth": "TOTAL SENDS / MONTH",
+    "outOfTries": "/ {{tries}}",
+    "flashedFirstTry": "{{count}} flashed first try",
+    "fromLastMonth": "{{delta}} from last month",
+    "highestGradeThisMonth": "HIGHEST GRADE / MONTH",
+    "climbingDaysThisMonth": "CLIMBING DAYS / MONTH",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "timeOnTheWall": "TIME ON THE WALL",
+    "addSessionLength": "Add a session length when you log"
+  },
+  "charts": {
+    "monthlyFrequency": "Monthly Session Frequency",
+    "totalVisits": "Total visits",
+    "successRateByGrade": "Success Rate by Grade (%)",
+    "successRate": "Success rate",
+    "successRateByWall": "Success Rate by Wall Angle (%)",
+    "wallNote": "A route tagged with two angles counts under both, so these bars do not add up to the month.",
+    "successRateOfTries": "{{value}}% of {{tries}}"
+  },
+  "heatmap": {
+    "title": "Session Activity Heatmap",
+    "lastDays": "Last 30 days",
+    "tileTitle": "{{date}}: {{sessions}}",
+    "sessions_one": "{{count}} session",
+    "sessions_other": "{{count}} sessions",
+    "rest": "Rest",
+    "multiSession": "Multi-session"
+  },
+  "personalRecords": {
+    "title": "PERSONAL RECORDS (TOP 3)",
+    "noLocation": "No location name",
+    "empty": "No sends recorded yet. Keep climbing!"
+  }
+}

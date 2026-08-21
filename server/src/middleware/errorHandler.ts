@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { HttpError } from "../utils/HttpError";
 import { isProduction } from "../config/env";
+import { captureError, flushSentry } from "../observability/sentry";
 
 /** 404 handler for unmatched routes. */
 export const notFound: RequestHandler = (req, res) => {
@@ -47,8 +48,14 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   }
 
   // Tagged with the request id so a user reporting "it said 500" hands over
-  // something that finds the exact line in the log.
+  // something that finds the exact line in the log — and the matching event.
+  //
+  // Only this branch reports. Everything above is the API saying no on purpose;
+  // a 400 or a 404 is not a defect, and shipping those would bury the failures
+  // that are.
   console.error(`[error] ${req.id ?? "-"}`, err);
+  captureError(err, req.id);
+  flushSentry();
 
   res.status(500).json({
     error: {

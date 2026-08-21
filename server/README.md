@@ -67,12 +67,24 @@ Rules that keep environments in sync:
   Statements that cannot run in a transaction (e.g. `CREATE INDEX
 CONCURRENTLY`) need a different approach.
 
-In production, migrate with the compiled runner as a deploy step, before the
-new server version starts:
+In production this happens in the deploy's **build step**
+(`scripts/vercel-build.sh`), before the new version is published: a deployment
+that cannot migrate never goes live.
 
 ```bash
 pnpm build && pnpm db:migrate:prod
 ```
+
+Two things that step depends on:
+
+- `MIGRATE_DATABASE_URL` must point at a **direct session** connection, not a
+  transaction pooler. The runner takes a session-scoped advisory lock and runs
+  multi-statement transactions, neither of which survives a pooler handing out
+  a different connection per statement. The app itself runs through that
+  pooler, so the two connection strings differ.
+- Its presence is also the switch. Unset, the build skips migrating — which is
+  what preview deployments want, since they should run against the schema
+  production already has rather than moving it.
 
 `0002_lock_down_data_api.sql` exists because this database may be hosted on
 Supabase: it revokes the `anon`/`authenticated` privileges that Supabase's Data
@@ -133,6 +145,33 @@ token on every request (except `/health`):
 3. The row is attached as `req.user`. Controllers take the owner from there —
    never from request bodies — and scope every query to it, so one user can
    never read or modify another user's data (foreign rows look like 404s).
+
+## File storage
+
+Photos and videos live in **Cloudflare R2**, and no byte of one passes through
+this server. Uploading is two requests:
+
+1. `POST /media/presign` — the client describes the file. Every rule is checked
+   here: type, per-file size, per-account quota, and whether the session it is
+   being pinned to belongs to the caller. The response carries the object key
+   (chosen here, not by the client) and a URL good for exactly one upload.
+2. `POST /media` — after the browser has PUT the bytes. The server asks storage
+   what is actually there before writing the row, because the quota is computed
+   from these rows and a row describing a file that was never uploaded would
+   corrupt it.
+
+The declared size and content type are **signed into** the upload URL, so
+storage itself refuses anything that does not match. That is what makes the
+size trustworthy; it used to be a number the client supplied and nothing ever
+verified.
+
+Reading is `POST /media/urls`, which signs display URLs in a batch and only for
+keys the caller has a row for. And because the server holds the credentials, it
+can delete: removing a session, a climb, or one attachment takes the stored
+files with it.
+
+Without `R2_*` configured the server still boots and only the media endpoints
+answer 503 — the same treatment as a missing `OPENAI_API_KEY`.
 
 ## API
 

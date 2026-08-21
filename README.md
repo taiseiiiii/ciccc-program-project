@@ -11,7 +11,7 @@ performance report and a training plan. If something hurts, you record it, and
 the plan routes around it.
 
 Built as a full-stack program project: React 19 PWA, Express + PostgreSQL API,
-Supabase for auth and file storage, OpenAI for the coaching.
+Supabase for auth and Postgres, Cloudflare R2 for media, OpenAI for the coaching.
 
 ---
 
@@ -21,13 +21,16 @@ Supabase for auth and file storage, OpenAI for the coaching.
 | ---------------- | ------------------------------------------------------------------------- |
 | **Dashboard**    | This month at a glance, five-month trends, weekly streak, recent visits    |
 | **Log session**  | The whole visit in one form — routes, counts, tags, notes, photos          |
+| **Sessions**     | Every visit, searchable by gym, route, date or grade — and editable        |
 | **Progress**     | Success rate by grade and wall angle, a 30-day heatmap, goals, PRs         |
 | **AI Coach**     | Generated performance reports and training plans, saved and annotatable    |
 | **Injuries**     | What hurts, a daily pain trend, and the guardrail on the training plans    |
-| **Profile**      | Name, lifetime totals, storage usage, account closing                      |
+| **Profile**      | Name, lifetime totals, storage, language, passkeys, CSV import             |
 
-Installable as a PWA, works offline for anything already loaded, and ships iOS
-launch images for the home-screen case.
+English and Japanese throughout, including the AI coach's own writing. Sign in
+with a password or a passkey — Face ID, Touch ID, Windows Hello. Installable as
+a PWA, works offline for anything already loaded, and ships iOS launch images
+for the home-screen case.
 
 ---
 
@@ -38,6 +41,7 @@ frontend/          React 19 · Vite · TypeScript · Tailwind v4 · TanStack Que
   src/pages/         one file per screen, all lazy-loaded
   src/components/    shared UI (Button, Modal, ReportCard, MediaGallery, …)
   src/lib/           api client, Supabase client, date helpers, draft storage
+  src/i18n/          en/ja catalogues, one namespace per screen
 
 server/            Express 4 · TypeScript · node-postgres
   src/routes/        thin — path to controller, plus auth and rate limits
@@ -111,12 +115,20 @@ CI runs the typecheck, tests, lint and both builds on every pull request.
 
 ## Deployment
 
-The API runs on Render and the frontend on Vercel.
+Two Vercel projects — the frontend, and the API as a function that exports the
+Express app (`server/api/index.ts`). Postgres, auth and email come from
+Supabase; photos and videos live in Cloudflare R2; errors go to Sentry.
 
-`pnpm start` is `node dist/db/migrate.js && node dist/index.js`, so a deploy
-applies any pending migration before the new build serves traffic — code can
-never reach production ahead of the schema it needs. The migration runner takes
-a Postgres advisory lock, so instances starting together are safe.
+Migrations run in the API project's **build step**, not at boot: a deployment
+that cannot migrate never goes live, so code can never reach production ahead
+of the schema it needs. They connect through the direct session URL
+(`MIGRATE_DATABASE_URL`) because the advisory lock that serialises them cannot
+survive a transaction pooler, while the app itself runs through that pooler.
+Preview deployments leave that variable unset and skip the step, running
+against the schema production already has.
+
+Everything that has to be clicked rather than committed — DNS records, the R2
+bucket, Postmark, Supabase settings — is in [`MANUAL_SETUP.md`](MANUAL_SETUP.md).
 
 ---
 
@@ -126,7 +138,8 @@ a Postgres advisory lock, so instances starting together are safe.
 | ----------------------------------------------------- | ------------------------------------------------------- |
 | [`server/README.md`](server/README.md)                 | API layout, migration rules, auth, local setup           |
 | [`server/docs/openapi.yaml`](server/docs/openapi.yaml) | Every endpoint, request and response shape               |
-| [`MANUAL_SETUP.md`](MANUAL_SETUP.md)                   | The Supabase bits that are not code — bucket, RLS, demo  |
+| [`MANUAL_SETUP.md`](MANUAL_SETUP.md)                   | Going live: accounts, Postmark, DNS, R2, Vercel, Supabase — all of it clicked, not committed |
+| [`MANUAL_SETUP.ja.md`](MANUAL_SETUP.ja.md)             | 同上（日本語版）                                          |
 | [`frontend/SUPABASE_SETUP.md`](frontend/SUPABASE_SETUP.md) | Creating the Supabase project and finding the keys  |
 | [`frontend/API_INTEGRATION.md`](frontend/API_INTEGRATION.md) | How the client talks to the API                   |
 | [`required/climb-app-erd.md`](required/climb-app-erd.md) | The entity-relationship diagram                        |

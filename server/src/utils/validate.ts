@@ -55,6 +55,43 @@ export function parseLimit(
 }
 
 /**
+ * An `?offset=` query parameter. Absent stays undefined so the repository's own
+ * default applies.
+ *
+ * `ID_PATTERN` rejects a leading zero and a leading minus, so 0 needs its own
+ * case — it is the first page, and by far the most common value.
+ */
+export function parseOffset(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (value === "0") return 0;
+  if (typeof value !== "string" || !ID_PATTERN.test(value)) {
+    throw HttpError.badRequest("offset must be a non-negative integer");
+  }
+  const offset = Number(value);
+  if (!Number.isSafeInteger(offset)) {
+    throw HttpError.badRequest("offset must be a non-negative integer");
+  }
+  return offset;
+}
+
+/**
+ * A `?flag=true|false` query parameter.
+ *
+ * Absent stays undefined, which callers read as "no filter" rather than
+ * "filter on false" — the difference between browsing every report and
+ * browsing only the unpinned ones.
+ */
+export function parseQueryBoolean(
+  value: unknown,
+  field: string,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw HttpError.badRequest(`${field} must be 'true' or 'false'`);
+}
+
+/**
  * One of a fixed set of string values — the shape every status/side/kind field
  * takes. Returns undefined for an absent optional field and null for an
  * explicit null, matching the other optional* helpers.

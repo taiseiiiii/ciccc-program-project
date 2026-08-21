@@ -1,0 +1,81 @@
+{
+  "title": "Injuries",
+  "subtitle": "Track what hurts, watch it improve, and keep your training plans away from it.",
+  "record": "+ Record an injury",
+  "disclaimer": {
+    "title": "This is a logbook, not a doctor",
+    "body": "Nothing here is medical advice. The app records how you feel and keeps training suggestions off the affected area — it cannot tell you what is wrong or how to fix it. If pain persists, worsens, or came on suddenly, see a doctor or physiotherapist."
+  },
+  "empty": {
+    "title": "Nothing hurting right now",
+    "body": "Good. If that changes, record it here — the AI coach will route your training around it."
+  },
+  "status": {
+    "active": "Still hurts",
+    "recovering": "Getting back on it",
+    "healed": "Healed"
+  },
+  "markStatus": {
+    "active": "Mark still hurts",
+    "recovering": "Mark getting back on it",
+    "healed": "Mark healed"
+  },
+  "side": {
+    "left": "left",
+    "right": "right",
+    "both": "both"
+  },
+  "card": {
+    "partWithSide": "{{part}} ({{side}})",
+    "since": "Since {{date}}",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "severity": "severity {{level}}/5",
+    "lastPain": "Last: {{level}}/10",
+    "open": "Open"
+  },
+  "healed": {
+    "show_one": "Show {{count}} healed injury",
+    "show_other": "Show {{count}} healed injuries",
+    "hide_one": "Hide {{count}} healed injury",
+    "hide_other": "Hide {{count}} healed injuries"
+  },
+  "chart": {
+    "loading": "Loading check-ins...",
+    "needMore": "Check in for a couple of days and the trend will show up here.",
+    "pain": "Pain"
+  },
+  "checkIn": {
+    "question": "How does it feel today? — {{level}}/10",
+    "min": "No pain",
+    "max": "Worst it has been",
+    "notePlaceholder": "Anything worth remembering about today?",
+    "submit": "Check in for today"
+  },
+  "delete": {
+    "title": "Delete this injury?",
+    "message": "This removes the {{part}} record and every pain check-in on it. That history cannot be recovered."
+  },
+  "form": {
+    "title": "Record an injury",
+    "bodyPart": "Where does it hurt?",
+    "side": "Which side?",
+    "date": "When did it start?",
+    "severity": "How bad is it? — {{level}}/5",
+    "severityMin": "Niggle",
+    "severityMax": "Can't climb",
+    "description": "What happened?",
+    "descriptionPlaceholder": "Felt a pop on a small crimp on an overhang..."
+  },
+  "toast": {
+    "created": "Injury recorded. Take it easy.",
+    "createFailed": "Failed to save",
+    "updated": "Updated",
+    "updateFailed": "Failed to update",
+    "deleted": "Injury removed",
+    "deleteFailed": "Failed to delete",
+    "checkedIn": "Checked in for today",
+    "checkInFailed": "Failed to check in",
+    "needBodyPart": "Which body part?"
+  }
+}

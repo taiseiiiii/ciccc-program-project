@@ -13,7 +13,11 @@ export default function Input({ label, className = "", ...props }: InputProps) {
   const id = useId();
 
   return (
-    <div className="flex flex-col gap-stack-sm w-full font-sans">
+    // `min-w-0` matters as soon as this sits in a flex or grid row. Both
+    // layouts default an item's min-width to its content, and a `type="date"`
+    // control's native spinner fields are wider than the track it is given —
+    // without this the field ignores its share of the row and overflows.
+    <div className="flex flex-col gap-stack-sm w-full min-w-0 font-sans">
       {label && (
         <label className="text-label-md text-on-surface-variant" htmlFor={id}>
           {label}

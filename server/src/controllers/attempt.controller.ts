@@ -3,6 +3,8 @@ import { attemptRepository } from "../repositories/attempt.repository";
 import { gradeRepository } from "../repositories/grade.repository";
 import { taxonomyRepository } from "../repositories/taxonomy.repository";
 import { weaknessRepository } from "../repositories/weakness.repository";
+import { mediaRepository } from "../repositories/media.repository";
+import { deleteObjects } from "../services/r2.service";
 import { HttpError } from "../utils/HttpError";
 import {
   optionalIdArray,
@@ -142,36 +144,13 @@ export const attemptController = {
       }
     }
 
-    const attempt = await attemptRepository.update(id, req.user!.user_id, {
-      attempt_count: attemptCount,
-      send_count: sendCount,
-      note: optionalString(note, "note", 2000),
-    });
-    if (!attempt) {
-      throw HttpError.notFound(`Attempt ${id} not found`);
-    }
-
-    // Grade and name live on the route, and `attempt.route_id` came from a row
-    // this caller was just confirmed to own — so this can only ever reach their
-    // own route.
-    if (gradeId !== undefined || routeName !== undefined) {
-      await attemptRepository.updateRoute(attempt.route_id, {
-        grade_id: gradeId,
-        route_name: routeName,
-      });
-    }
-
-    // Tags hang off the route, weaknesses off the attempt. Both are replace-in-
-    // full, so sending an empty array is how a climber clears them.
-    if (wallIds !== undefined || holdIds !== undefined) {
-      await attemptRepository.setRouteTags(attempt.route_id, {
-        wallTypeIds: wallIds,
-        holdTypeIds: holdIds,
-      });
-    }
-
+    // Free-text weaknesses become rows the climber owns before the edit is
+    // applied, so the same word is a dropdown option next time. Resolved here
+    // rather than inside the transaction because each one may create a row that
+    // outlives this climb, and is useful even if the edit is then rejected.
     const weaknessIds = optionalIdArray(weakness_type_ids, "weakness_type_ids");
     const labels = optionalLabelArray(weakness_labels, "weakness_labels");
+    let resolvedWeaknessIds: number[] | undefined;
     if (weaknessIds !== undefined || labels !== undefined) {
       const resolved = [...(weaknessIds ?? [])];
       for (const label of labels ?? []) {
@@ -181,20 +160,45 @@ export const attemptController = {
         );
         resolved.push(row.weakness_type_id);
       }
-      await weaknessRepository.setForAttempt(id, [...new Set(resolved)]);
+      resolvedWeaknessIds = [...new Set(resolved)];
     }
 
-    // Re-read so the response reflects the tag writes above.
-    res.json({ data: await attemptRepository.findById(id, req.user!.user_id) });
+    // One call, one transaction. The counts, the route's grade and name, and
+    // both tag lists move together or not at all.
+    const attempt = await attemptRepository.update(id, req.user!.user_id, {
+      attempt_count: attemptCount,
+      send_count: sendCount,
+      note: optionalString(note, "note", 2000),
+      grade_id: gradeId,
+      route_name: routeName,
+      wall_type_ids: wallIds,
+      hold_type_ids: holdIds,
+      weakness_type_ids: resolvedWeaknessIds,
+    });
+    if (!attempt) {
+      throw HttpError.notFound(`Attempt ${id} not found`);
+    }
+
+    res.json({ data: attempt });
   },
 
   // DELETE /api/v1/attempts/:id
   async remove(req: Request, res: Response): Promise<void> {
     const id = parseId(req.params.id!);
+
+    // Read before deleting: the cascade takes the media rows with the climb,
+    // and nothing afterwards remembers which files were attached to it.
+    const paths = await mediaRepository.findPathsByAttempt(
+      id,
+      req.user!.user_id,
+    );
+
     const deleted = await attemptRepository.remove(id, req.user!.user_id);
     if (!deleted) {
       throw HttpError.notFound(`Attempt ${id} not found`);
     }
+
+    await deleteObjects(paths);
     res.status(204).send();
   },
 };
