@@ -149,6 +149,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       return { error: error?.message ?? null };
     },
+    async requestPasswordReset(email) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      // A wrong address and an unregistered one look identical from here, and
+      // that is the point — the caller is told the mail was sent either way, so
+      // this form cannot be used to find out who has an account. Real failures
+      // (the send rate limit, mostly) still surface.
+      return { error: error?.message ?? null };
+    },
+    async updatePassword(password) {
+      const { error } = await supabase.auth.updateUser({ password });
+      return { error: error?.message ?? null };
+    },
     async signOut() {
       await supabase.auth.signOut();
     },

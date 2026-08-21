@@ -6,6 +6,7 @@ import { useAuth, type AuthResult } from "../hooks/useAuth";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import ConfirmEmailNotice from "../components/ConfirmEmailNotice";
+import ForgotPasswordForm from "../components/ForgotPasswordForm";
 import {
   isPasskeySupported,
   isUserCancellation,
@@ -29,6 +30,10 @@ const Auth = () => {
   // form out for the "check your inbox" notice.
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const [isPasskeyPending, setIsPasskeyPending] = useState(false);
+  // Swaps the form out for the reset-link request. Its own flag rather than a
+  // mode enum: sign-up and unconfirmed-email already have theirs, and the three
+  // are mutually exclusive by construction.
+  const [isForgotten, setIsForgotten] = useState(false);
 
   /**
    * Sign in with a device credential.
@@ -82,6 +87,7 @@ const Auth = () => {
 
   const handleBackToLogin = () => {
     setUnconfirmedEmail(null);
+    setIsForgotten(false);
     setIsSignUp(false);
     setPassword("");
   };
@@ -117,6 +123,11 @@ const Auth = () => {
           {unconfirmedEmail ? (
             <ConfirmEmailNotice
               email={unconfirmedEmail}
+              onBack={handleBackToLogin}
+            />
+          ) : isForgotten ? (
+            <ForgotPasswordForm
+              initialEmail={email}
               onBack={handleBackToLogin}
             />
           ) : (
@@ -186,6 +197,16 @@ const Auth = () => {
                 minLength={isSignUp ? 6 : undefined}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={() => setIsForgotten(true)}
+                  className="self-start text-label-sm text-on-surface-variant hover:text-primary"
+                >
+                  {t("auth.forgotPassword")}
+                </button>
+              )}
+
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting
                   ? t("common:state.loading")

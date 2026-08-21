@@ -52,7 +52,8 @@
     "haveAccount": "Already have an account?",
     "noAccount": "Don't have an account?",
     "switchToSignIn": "Log in",
-    "switchToSignUp": "Create account"
+    "switchToSignUp": "Create account",
+    "forgotPassword": "Forgot your password?"
   },
   "passkeys": {
     "title": "Face ID & passkeys",
@@ -76,6 +77,28 @@
     "sent": "Sent. It can take a minute to arrive.",
     "sending": "Sending...",
     "resend": "Resend confirmation email",
+    "backToLogin": "Back to log in"
+  },
+  "forgotPassword": {
+    "title": "Reset your password",
+    "body": "Enter the address you signed up with and we'll email you a link to set a new password.",
+    "send": "Send reset link",
+    "sending": "Sending...",
+    "sentTitle": "Check your inbox",
+    "sentBody": "If an account exists for <email>{{email}}</email>, a link to set a new password is on its way.",
+    "noEmail": "No email? Check your spam folder. The link expires after an hour.",
+    "backToLogin": "Back to log in"
+  },
+  "resetPassword": {
+    "title": "Choose a new password",
+    "body": "You're signed in from the link in your email. Pick a new password to finish.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "mismatch": "Those two passwords don't match.",
+    "save": "Save password",
+    "saving": "Saving...",
+    "invalidTitle": "That link no longer works",
+    "invalidBody": "Reset links expire after an hour and can only be used once. Request a new one from the log-in screen.",
     "backToLogin": "Back to log in"
   }
 }
