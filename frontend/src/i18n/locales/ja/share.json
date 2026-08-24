@@ -1,0 +1,66 @@
+{
+  "title": "シェア",
+  "entry": {
+    "session": "この日をシェア",
+    "month": "今月をシェア"
+  },
+  "medium": {
+    "photo": "写真",
+    "video": "動画"
+  },
+  "format": {
+    "label": "形式",
+    "image": "カード",
+    "photo": "写真",
+    "video": "動画",
+    "photoHint": "自分の写真にグレードとジム名を載せます。",
+    "videoHint": "自分の動画にグレードとジム名を焼き込みます。"
+  },
+  "source": {
+    "where": "{{medium}}はどこにありますか?",
+    "take": "その場で撮る",
+    "library": "カメラロールから選ぶ",
+    "inApp": "ClimbLogから選ぶ",
+    "inAppNumbered": "{{label}} · {{n}}",
+    "change": "別の{{medium}}にする",
+    "fetchFailed": "保存した{{medium}}を読み込めませんでした。カメラロールから選び直してみてください。",
+    "decodeFailed": "この{{medium}}を開けませんでした。iPhoneで撮ったものは、同じiPhone上で書き出してみてください。"
+  },
+  "crop": {
+    "toggle": "9:16に切り抜く",
+    "hint": "ストーリーズ・リール向け。",
+    "position": "位置"
+  },
+  "video": {
+    "processing": "焼き込んでいます…",
+    "processingHint": "動画の長さと同じくらいかかります。この画面を開いたままにしてください。",
+    "cancel": "キャンセル",
+    "tooLong": "最初の{{seconds}}秒だけを使います。",
+    "unsupported": "このブラウザでは動画を処理できません。カードと写真は使えます。",
+    "failed": "動画の作成中に問題が起きました。",
+    "ready": "できました。シェアで送るか、保存で端末に残せます。"
+  },
+  "action": {
+    "share": "シェア",
+    "save": "保存",
+    "preparing": "準備中…",
+    "shareNow": "シェアする"
+  },
+  "label": {
+    "sent": "完登",
+    "tries": "トライ",
+    "routes": "課題",
+    "days": "日数",
+    "flashes": "一撃",
+    "best": "最高"
+  },
+  "toast": {
+    "saved": "保存しました",
+    "shared": "シェアしました"
+  },
+  "error": {
+    "generic": "うまくいきませんでした。",
+    "shareRefusedStill": "端末がシェアを開けませんでした。上のプレビューを長押しすると保存できます。",
+    "shareRefusedVideo": "端末がシェアを開けなかったため、動画を保存しました。ダウンロードを確認してください。"
+  }
+}

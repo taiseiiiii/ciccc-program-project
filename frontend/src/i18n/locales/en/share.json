@@ -1,0 +1,66 @@
+{
+  "title": "Share",
+  "entry": {
+    "session": "Share this visit",
+    "month": "Share this month"
+  },
+  "medium": {
+    "photo": "photo",
+    "video": "video"
+  },
+  "format": {
+    "label": "Format",
+    "image": "Card",
+    "photo": "Photo",
+    "video": "Video",
+    "photoHint": "Puts the grade and gym on your own photo.",
+    "videoHint": "Burns the grade and gym into your own video."
+  },
+  "source": {
+    "where": "Where is the {{medium}}?",
+    "take": "Take one now",
+    "library": "Choose from your library",
+    "inApp": "Choose from ClimbLog",
+    "inAppNumbered": "{{label}} · {{n}}",
+    "change": "Use a different {{medium}}",
+    "fetchFailed": "Could not load the saved {{medium}}. Try choosing it from your library instead.",
+    "decodeFailed": "That {{medium}} could not be opened. If it was taken on an iPhone, try exporting it on the same phone."
+  },
+  "crop": {
+    "toggle": "Crop to 9:16",
+    "hint": "For Stories and Reels.",
+    "position": "Position"
+  },
+  "video": {
+    "processing": "Adding the overlay…",
+    "processingHint": "Takes about as long as the video runs. Keep this screen open.",
+    "cancel": "Cancel",
+    "tooLong": "Only the first {{seconds}} seconds will be used.",
+    "unsupported": "This browser cannot process video. The card and photo still work.",
+    "failed": "Something went wrong while making the video.",
+    "ready": "Ready. Tap Share to send it, or Save to keep it."
+  },
+  "action": {
+    "share": "Share",
+    "save": "Save",
+    "preparing": "Preparing…",
+    "shareNow": "Share now"
+  },
+  "label": {
+    "sent": "SENT",
+    "tries": "TRIES",
+    "routes": "ROUTES",
+    "days": "DAYS",
+    "flashes": "FLASHES",
+    "best": "BEST"
+  },
+  "toast": {
+    "saved": "Saved",
+    "shared": "Shared"
+  },
+  "error": {
+    "generic": "Something went wrong.",
+    "shareRefusedStill": "Your device would not open the share sheet. Press and hold the preview above to save the picture.",
+    "shareRefusedVideo": "Your device would not open the share sheet, so the video was saved instead. Check your downloads."
+  }
+}

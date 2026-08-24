@@ -104,6 +104,7 @@ describe("authentication", () => {
     "/api/v1/stats",
     "/api/v1/performances",
     "/api/v1/trainings",
+    "/api/v1/share-events",
   ];
 
   it.each(guarded)("rejects %s without a token", async (path) => {
@@ -199,6 +200,54 @@ describe("rate limiting", () => {
   it("still counts an ordinary request", async () => {
     const res = await request(app).get("/api/v1/health/../sessions");
     expect(res.headers["ratelimit"]).toMatch(/limit=300/);
+  });
+});
+
+describe("POST /share-events", () => {
+  // The share feature's only server-side footprint. Cards are drawn in the
+  // browser, so this row is the one thing that says which template and format
+  // anyone uses — and it must stay a counter: these tests pin the body to the
+  // three enum fields and nothing else.
+  const valid = { template: "climb", format: "video", outcome: "shared" };
+
+  it("records a valid event", async () => {
+    const { query } = await import("./db/pool");
+    vi.mocked(query).mockResolvedValueOnce({
+      rows: [{ share_event_id: 7, user_id: 1, ...valid, created_at: "2026-08-21T00:00:00Z" }],
+      rowCount: 1,
+    } as never);
+
+    const res = await request(app)
+      .post("/api/v1/share-events")
+      .set("Authorization", TOKEN)
+      .send(valid);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ share_event_id: 7, ...valid });
+    // The user comes from the token, never from the body.
+    expect(vi.mocked(query).mock.lastCall?.[1]).toEqual([1, "climb", "video", "shared"]);
+  });
+
+  it.each([
+    ["template", { ...valid, template: "stats" }],
+    ["format", { ...valid, format: "gif" }],
+    ["outcome", { ...valid, outcome: "posted" }],
+    ["template", { format: "image", outcome: "saved" }],
+  ])("rejects a bad or missing %s", async (field, body) => {
+    const res = await request(app)
+      .post("/api/v1/share-events")
+      .set("Authorization", TOKEN)
+      .send(body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain(field);
+  });
+
+  it("is write-only", async () => {
+    const res = await request(app)
+      .get("/api/v1/share-events")
+      .set("Authorization", TOKEN);
+    expect(res.status).toBe(404);
   });
 });
 

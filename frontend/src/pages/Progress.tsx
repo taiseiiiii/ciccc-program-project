@@ -23,6 +23,8 @@ import Input from "../components/Input";
 import Textarea from "../components/Textarea";
 import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ShareSheet from "../components/ShareSheet";
+import { monthSubject } from "../lib/share/buildSubject";
 import {
   BarChart,
   Bar,
@@ -86,6 +88,7 @@ const Progress = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [openSession, setOpenSession] = useState<SessionSummary | null>(null);
   const [showAllGoals, setShowAllGoals] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   const month = currentMonthKey();
 
@@ -398,9 +401,24 @@ const Progress = () => {
         </div>
       </Modal>
 
-      <h1 className="text-primary text-headline-md font-bold tracking-tight mb-4">
-        {t("title")}
-      </h1>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h1 className="text-primary text-headline-md font-bold tracking-tight">
+          {t("title")}
+        </h1>
+        <Button variant="secondary" onClick={() => setIsSharing(true)}>
+          {t("share:entry.month")}
+        </Button>
+      </div>
+
+      {/* The month is what this screen can share; a single climb or one visit
+          is shared from that visit's own detail. */}
+      {isSharing && (
+        <ShareSheet
+          open
+          onClose={() => setIsSharing(false)}
+          subject={monthSubject(stats)}
+        />
+      )}
 
       <Card className="p-4 mb-6 border border-outline-variant/30">
         <div className="flex items-center justify-between mb-3">

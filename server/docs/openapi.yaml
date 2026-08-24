@@ -95,6 +95,10 @@ tags:
     description: AI-generated performance analysis of one day or month of climbing.
   - name: Trainings
     description: AI-generated training plans based on the last 30 days of climbing.
+  - name: Share
+    description: >-
+      Counters for the share feature. Cards and overlaid videos are produced in
+      the browser, so this is the only part of sharing the server observes.
 
 paths:
   /health:
@@ -1759,6 +1763,49 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /share-events:
+    post:
+      tags: [Share]
+      summary: Record a share
+      description: >-
+        Records that the climber exported one share card. Sharing is done
+        entirely in the browser — the canvas is drawn locally and handed to the
+        OS — so nothing else about it reaches this server, and without this call
+        there is no way to tell which of the three templates or two formats get
+        used.
+
+
+        Carries no content: no route names, no gym, no media. `outcome: shared`
+        means the file reached the OS share sheet, which is not the same as
+        reaching a social network — the Web Share API never reports the
+        destination.
+      operationId: recordShareEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareEventCreate'
+            example:
+              template: climb
+              format: video
+              outcome: shared
+      responses:
+        '201':
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ShareEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1859,6 +1906,48 @@ components:
                 server's log line — quote it in a bug report.
             details:
               description: Optional extra context. Usually absent.
+
+    ShareEventCreate:
+      type: object
+      required: [template, format, outcome]
+      properties:
+        template:
+          type: string
+          enum: [climb, session, month]
+          description: Which card was exported — one climb, one visit, or the month.
+        format:
+          type: string
+          enum: [image, photo, video]
+          description: >-
+            The card the app drew, the climber's own photo with the overlay on
+            it, or their video with it burned in.
+        outcome:
+          type: string
+          enum: [shared, saved]
+          description: Handed to the OS share sheet, or saved to the device.
+
+    ShareEvent:
+      type: object
+      required: [share_event_id, user_id, template, format, outcome, created_at]
+      properties:
+        share_event_id:
+          type: integer
+          example: 42
+        user_id:
+          type: integer
+          example: 1
+        template:
+          type: string
+          enum: [climb, session, month]
+        format:
+          type: string
+          enum: [image, photo, video]
+        outcome:
+          type: string
+          enum: [shared, saved]
+        created_at:
+          type: string
+          format: date-time
 
     Health:
       type: object

@@ -8,6 +8,7 @@ import enProgress from "./locales/en/progress.json";
 import enCoach from "./locales/en/coach.json";
 import enInjuries from "./locales/en/injuries.json";
 import enProfile from "./locales/en/profile.json";
+import enShare from "./locales/en/share.json";
 
 import jaCommon from "./locales/ja/common.json";
 import jaDashboard from "./locales/ja/dashboard.json";
@@ -16,6 +17,7 @@ import jaProgress from "./locales/ja/progress.json";
 import jaCoach from "./locales/ja/coach.json";
 import jaInjuries from "./locales/ja/injuries.json";
 import jaProfile from "./locales/ja/profile.json";
+import jaShare from "./locales/ja/share.json";
 
 /**
  * Interface language.
@@ -54,6 +56,7 @@ const resources = {
     coach: enCoach,
     injuries: enInjuries,
     profile: enProfile,
+    share: enShare,
   },
   ja: {
     common: jaCommon,
@@ -63,6 +66,7 @@ const resources = {
     coach: jaCoach,
     injuries: jaInjuries,
     profile: jaProfile,
+    share: jaShare,
   },
 } as const;
 
