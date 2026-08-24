@@ -492,6 +492,22 @@ export async function exportVideoWithOverlay(
 
     let frameIndex = 0;
     let lastTimestamp = -1;
+    /**
+     * How long each frame is shown, in microseconds.
+     *
+     * Required, not optional: a `VideoFrame` built without one produces an
+     * `EncodedVideoChunk` whose `duration` is null, and the muxer rejects that
+     * outright — which is what "addVideoChunkRaw's fourth argument (duration)
+     * must be a non-negative real number" was.
+     *
+     * Only the final frame's value survives. mp4-muxer overwrites every other
+     * sample's duration with the real gap to the sample after it, so this is a
+     * placeholder everywhere except the end of the file — which is why the
+     * previous interval is a good enough estimate, and why the nominal frame
+     * rate is a reasonable seed for the very first frame.
+     */
+    const nominalFrameDuration = Math.round(1_000_000 / fps);
+    let frameDuration = nominalFrameDuration;
     // The muxer requires the first sample of a track to sit at zero, and the
     // first frame the browser *presents* after play() is rarely the one at
     // mediaTime 0. Every video timestamp is taken relative to the first one
@@ -517,6 +533,12 @@ export async function exportVideoWithOverlay(
       // which produces a file that plays back stuttering or not at all.
       const absolute = Math.round(metadata.mediaTime * 1_000_000);
       if (absolute <= lastTimestamp) continue;
+      // Measured rather than assumed: phone footage is regularly not the 30fps
+      // the encoder is configured for, and a clip can be variable-rate.
+      if (lastTimestamp >= 0) {
+        const gap = absolute - lastTimestamp;
+        if (Number.isFinite(gap) && gap > 0) frameDuration = gap;
+      }
       lastTimestamp = absolute;
       firstTimestamp ??= absolute;
       const timestamp = absolute - firstTimestamp;
@@ -534,7 +556,10 @@ export async function exportVideoWithOverlay(
       );
       drawOverlay(ctx, plan.width, plan.height, subject, strings);
 
-      const frame = new VideoFrame(canvas, { timestamp });
+      const frame = new VideoFrame(canvas, {
+        timestamp,
+        duration: frameDuration,
+      });
       encoder.encode(frame, { keyFrame: frameIndex % (fps * 2) === 0 });
       frame.close();
       frameIndex += 1;
