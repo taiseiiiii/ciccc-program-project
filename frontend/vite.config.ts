@@ -33,6 +33,37 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
+    /**
+     * Dev server only — none of this reaches a build.
+     *
+     * For trying the app on a real phone. The share feature's APIs
+     * (`navigator.share` with files, `capture`, WebCodecs) exist only in a
+     * secure context, so a LAN address over plain http shows none of them;
+     * the dev server has to be reached through an https tunnel instead.
+     *
+     *   - `allowedHosts`: Vite refuses requests whose Host header it does not
+     *     recognise, which is every request arriving through a tunnel. A
+     *     leading dot covers the domain and its subdomains. ngrok hands out
+     *     `.ngrok-free.dev` to new free accounts and `.ngrok-free.app` to
+     *     older ones; if it ever adds another, the error page names the host
+     *     to add here.
+     *   - `proxy`: with `VITE_API_URL=/api/v1` the phone talks to the API
+     *     through this same origin, so one tunnel covers both and CORS never
+     *     enters into it. Ordinary local development keeps the absolute
+     *     localhost:4000 URL and never touches the proxy.
+     */
+    server: {
+      allowedHosts: [
+        ".ngrok-free.dev",
+        ".ngrok-free.app",
+        ".ngrok.dev",
+        ".ngrok.app",
+        ".ngrok.io",
+      ],
+      proxy: {
+        "/api": { target: "http://localhost:4000", changeOrigin: true },
+      },
+    },
     plugins: [
       react(),
       tailwindcss(),

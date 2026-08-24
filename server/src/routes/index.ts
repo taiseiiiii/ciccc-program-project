@@ -14,6 +14,7 @@ import weaknessRoutes from "./weakness.routes";
 import mediaRoutes from "./media.routes";
 import injuryRoutes from "./injury.routes";
 import statsRoutes from "./stats.routes";
+import shareEventRoutes from "./shareEvent.routes";
 import {
   wallTypeRoutes,
   holdTypeRoutes,
@@ -64,6 +65,12 @@ router.use("/weaknesses", requireAuth, weaknessRoutes); // presets + the climber
 router.use("/media", requireAuth, mediaRoutes); // photo/video metadata (files live in Storage)
 router.use("/injuries", requireAuth, injuryRoutes); // injuries + daily pain check-ins
 router.use("/stats", requireAuth, statsRoutes); // counted-up figures for the charts
+
+// Sharing happens entirely in the browser (canvas in, image or video out), so
+// this is the only part of it the server ever sees: one row per export, used to
+// tell which of the three card templates and two formats anyone actually uses.
+// Authenticated like everything else — the share feature adds no public surface.
+router.use("/share-events", requireAuth, shareEventRoutes);
 
 // The two AI resources. Their POSTs each cost a paid model call, so those two
 // verbs carry an extra limiter — applied inside the routers, not here, so that

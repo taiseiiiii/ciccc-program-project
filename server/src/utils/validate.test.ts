@@ -11,6 +11,7 @@ import {
   parseId,
   parseLimit,
   requireDate,
+  requireEnum,
   requireInt,
 } from "./validate";
 
@@ -154,6 +155,30 @@ describe("optionalEnum", () => {
       optionalEnum("middle", "side", SIDES);
     } catch (err) {
       expect((err as HttpError).message).toContain("left, right, both");
+    }
+  });
+});
+
+describe("requireEnum", () => {
+  const FORMATS = ["image", "video"] as const;
+
+  it("accepts a member", () => {
+    expect(requireEnum("video", "format", FORMATS)).toBe("video");
+  });
+
+  // The one thing it adds over optionalEnum: absence is an error, because the
+  // field is what the request is about. Both absent forms are asserted.
+  it("rejects an absent field, undefined and null alike", () => {
+    expectBadRequest(() => requireEnum(undefined, "format", FORMATS), "format");
+    expectBadRequest(() => requireEnum(null, "format", FORMATS), "format");
+  });
+
+  it("rejects a non-member and lists the options", () => {
+    expectBadRequest(() => requireEnum("gif", "format", FORMATS), "format");
+    try {
+      requireEnum("gif", "format", FORMATS);
+    } catch (err) {
+      expect((err as HttpError).message).toContain("image, video");
     }
   });
 });

@@ -66,12 +66,14 @@ export interface AttemptRecord {
 }
 
 /** Sum of tries across a list of climbs — what "total attempts" now means. */
-export const totalTries = (attempts: AttemptRecord[]): number =>
-  attempts.reduce((sum, a) => sum + a.attempt_count, 0);
+export const totalTries = (
+  attempts: Pick<AttemptRecord, "attempt_count">[],
+): number => attempts.reduce((sum, a) => sum + a.attempt_count, 0);
 
 /** Sum of sends across a list of climbs. */
-export const totalSends = (attempts: AttemptRecord[]): number =>
-  attempts.reduce((sum, a) => sum + a.send_count, 0);
+export const totalSends = (
+  attempts: Pick<AttemptRecord, "send_count">[],
+): number => attempts.reduce((sum, a) => sum + a.send_count, 0);
 
 /** A route sent on its only try. The figure climbers actually celebrate. */
 export const isFlash = (attempt: AttemptRecord): boolean =>

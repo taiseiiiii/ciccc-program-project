@@ -14,6 +14,9 @@ import Button from "./Button";
 import Input from "./Input";
 import ClimbEditModal from "./ClimbEditModal";
 import ConfirmDialog from "./ConfirmDialog";
+import ShareSheet from "./ShareSheet";
+import { climbSubject, sessionSubject } from "../lib/share/buildSubject";
+import type { ShareTemplate } from "../lib/share/types";
 
 interface SessionDetailProps {
   session: SessionType | null;
@@ -50,6 +53,12 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
   // null with the modal open means "add a climb"; a record means "edit it".
   const [editingClimb, setEditingClimb] = useState<AttemptRecord | null>(null);
   const [climbModalOpen, setClimbModalOpen] = useState(false);
+  // The climb being shared, or null for the visit as a whole. A separate piece
+  // of state from `editingClimb` because sharing and editing are different
+  // intents on the same row, and sharing must not open the editor behind it.
+  const [sharing, setSharing] = useState<
+    { template: ShareTemplate; climb: AttemptRecord | null } | null
+  >(null);
 
   // This component stays mounted between visits — the pages render it with a
   // `session` of null rather than unmounting it — so none of the state above
@@ -65,6 +74,7 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
     setClimbModalOpen(false);
     setEditingClimb(null);
     setEditingHeader(false);
+    setSharing(null);
   }
 
   const { data: attemptsData, isPending: isAttemptsLoading } = useQuery({
@@ -190,12 +200,26 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
                       duration: formatMinutes(session.duration_minutes),
                     })}`}
                 </p>
-                <Button
-                  variant="secondary"
-                  onClick={() => setEditingHeader(true)}
-                >
-                  {t("detail.editDetails")}
-                </Button>
+                <div className="flex gap-2">
+                  {/* Named for what it shares. Two buttons both reading
+                      "Share" — one here, one per climb — left no way to tell
+                      which was which; the climb rows keep the bare word
+                      because the row they sit in already says. */}
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setSharing({ template: "session", climb: null })
+                    }
+                  >
+                    {t("share:entry.session")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setEditingHeader(true)}
+                  >
+                    {t("detail.editDetails")}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -238,13 +262,24 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
                           <span className="truncate">
                             {climb.route_name || t("common:climb.unnamedRoute")}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => openClimb(climb)}
-                            className="ml-auto text-label-sm text-primary hover:underline cursor-pointer shrink-0"
-                          >
-                            {t("common:action.edit")}
-                          </button>
+                          <span className="ml-auto flex gap-3 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSharing({ template: "climb", climb })
+                              }
+                              className="text-label-sm text-primary hover:underline cursor-pointer"
+                            >
+                              {t("share:title")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openClimb(climb)}
+                              className="text-label-sm text-primary hover:underline cursor-pointer"
+                            >
+                              {t("common:action.edit")}
+                            </button>
+                          </span>
                         </div>
 
                         {tags.length > 0 && (
@@ -320,6 +355,30 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
           onClose={() => setClimbModalOpen(false)}
           sessionId={sessionId}
           attempt={editingClimb}
+        />
+      )}
+
+      {/*
+        Mounted only while sharing, and keyed by what is being shared, so the
+        sheet re-seeds its format and chosen video per subject. A sheet left
+        mounted would carry the previous climb's video over to the next one —
+        the overlay right, the footage wrong, and nothing on screen saying so.
+      */}
+      {session && sharing && (
+        <ShareSheet
+          key={sharing.climb?.attempt_id ?? "session"}
+          open
+          onClose={() => setSharing(null)}
+          subject={
+            sharing.climb
+              ? climbSubject(sharing.climb, session)
+              : sessionSubject(session, attempts)
+          }
+          inAppMedia={
+            sharing.climb
+              ? (mediaByAttempt.get(sharing.climb.attempt_id) ?? [])
+              : media
+          }
         />
       )}
 

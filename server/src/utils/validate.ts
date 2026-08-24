@@ -109,6 +109,22 @@ export function optionalEnum<const T extends readonly string[]>(
   return value as T[number];
 }
 
+/**
+ * The same, but the field has to be there. `optionalEnum` cannot express this:
+ * its `undefined` return means "left alone", which is the right default for a
+ * PATCH and the wrong one for a value the request is entirely about.
+ */
+export function requireEnum<const T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  allowed: T,
+): T[number] {
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw HttpError.badRequest(`${field} is required and must be one of: ${allowed.join(", ")}`);
+  }
+  return value as T[number];
+}
+
 /** A required positive integer from a request body. */
 export function requireInt(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
