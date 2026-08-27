@@ -355,6 +355,13 @@ export default function SessionDetail({ session, onClose }: SessionDetailProps) 
           onClose={() => setClimbModalOpen(false)}
           sessionId={sessionId}
           attempt={editingClimb}
+          // Read from the visit's one media request rather than fetched again
+          // inside the editor, so a photo deleted in there disappears from the
+          // row behind it in the same pass.
+          media={
+            editingClimb ? (mediaByAttempt.get(editingClimb.attempt_id) ?? []) : []
+          }
+          onMediaChanged={refetchMedia}
         />
       )}
 

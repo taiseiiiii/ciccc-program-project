@@ -20,6 +20,12 @@
     "saveSession": "Save Session",
     "saveHintEmpty": "Nothing is saved to your account until you press this.",
     "saveHintWaiting": "{{routes}} waiting to be saved.",
+    "clear": "Clear",
+    "confirmClear": {
+      "title": "Clear this form?",
+      "message": "Everything typed in is emptied. Nothing has been saved to your account yet, so it cannot be brought back.",
+      "messageWithRoutes": "Everything typed in is emptied, including the {{routes}} added below. None of it has been saved to your account yet, so it cannot be brought back."
+    },
     "editTitle": "Edit route",
     "removeRoute": "Remove route",
     "media": {
@@ -40,7 +46,8 @@
       "saveFailed": "Failed to save session",
       "routeAdded": "Route added — press Save Session when the visit is done",
       "routeUpdated": "Route updated",
-      "routeRemoved": "Route removed"
+      "routeRemoved": "Route removed",
+      "cleared": "Form cleared"
     },
     "error": {
       "nameRoute": "Give the route a name so you can recognise it later",

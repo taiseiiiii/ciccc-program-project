@@ -19,6 +19,8 @@ import type AttemptType from "../types/AttemptType";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
+import ConfirmDialog from "../components/ConfirmDialog";
+import FilePicker from "../components/FilePicker";
 import Textarea from "../components/Textarea";
 import ClimbFields, { type ClimbFieldsProps } from "../components/ClimbFields";
 
@@ -113,6 +115,7 @@ const LogSession = () => {
     restored ? restored.climbs.map((climb) => ({ ...climb, files: [] })) : [],
   );
   const [editing, setEditing] = useState<DraftClimb | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   // Held so a save blocked on the gym name can put the climber in front of the
   // field instead of relying on a toast that appears at the top of the screen,
@@ -125,6 +128,11 @@ const LogSession = () => {
     isClimbDirty(draft) ||
     gymName.trim() !== "" ||
     durationMinutes.trim() !== "";
+
+  // The date is deliberately outside `hasUnsavedWork` — it starts filled in, so
+  // a visit that is only a changed date is not work worth restoring. It is
+  // still something Clear puts back, which is why the two differ.
+  const hasAnythingToClear = hasUnsavedWork || visitDate !== today;
 
   // Say so, once, when a visit is brought back — and be honest about the files,
   // which are the one part that could not come with it.
@@ -189,6 +197,24 @@ const LogSession = () => {
   // draft's grade names on save, and the tag lists to label the saved-climb
   // summary rows.
   const { gradeIdByName, wallTypes, holdTypes } = useClimbTaxonomies();
+
+  /**
+   * Put the whole screen back to how it opens.
+   *
+   * Shared by Save Session, which empties the form because the visit is now on
+   * the server, and by Clear, which empties it because the climber asked. Both
+   * have to reach every field — a reset that missed one left the next visit
+   * starting with the last one's gym name.
+   */
+  const resetForm = () => {
+    setDraft(emptyClimb());
+    setClimbs([]);
+    setGymName("");
+    setDurationMinutes("");
+    setVisitDate(today);
+    setEditing(null);
+    clearSessionDraft(userId);
+  };
 
   /**
    * One request saves the whole visit: POST /sessions accepts the climbs
@@ -266,15 +292,9 @@ const LogSession = () => {
       // Typed-in weaknesses became saved options — pick them up for next time.
       queryClient.invalidateQueries({ queryKey: ["weaknesses"] });
 
-      setDraft(emptyClimb());
-      setGymName("");
-      setDurationMinutes("");
-      setVisitDate(today);
-      setClimbs([]);
       // The visit is on the server now, so the local copy has nothing left to
-      // protect. (Resetting the fields above would clear it anyway; doing it
-      // here keeps the two from drifting apart.)
-      clearSessionDraft(userId);
+      // protect — resetForm drops it along with the fields.
+      resetForm();
 
       if (failedUploads > 0) {
         toast.success(t("log.toast.savedWithFailedUploads"));
@@ -338,6 +358,19 @@ const LogSession = () => {
     setClimbs(climbs.map((c) => (c.id === editing.id ? editing : c)));
     setEditing(null);
     toast.success(t("log.toast.routeUpdated"));
+  };
+
+  /**
+   * Empty the whole screen in one press.
+   *
+   * Behind a confirmation, because it throws away more than it looks like it
+   * does: not just the fields in view but every route already added to the
+   * list below them, none of which is on the server yet.
+   */
+  const handleClear = () => {
+    resetForm();
+    setConfirmingClear(false);
+    toast.success(t("log.toast.cleared"));
   };
 
   const handleDeleteClimb = () => {
@@ -439,58 +472,6 @@ const LogSession = () => {
     />
   );
 
-  /** Staged files for one climb. Uploaded only once the session is saved. */
-  const renderFilePicker = (
-    climb: DraftClimb,
-    update: <K extends keyof DraftClimb>(field: K, value: DraftClimb[K]) => void,
-  ) => (
-    <div className="mt-3">
-      <p className="text-label-md text-on-surface-variant mb-2">
-        {t("log.media.label")}
-      </p>
-      <input
-        type="file"
-        accept="image/*,video/*"
-        multiple
-        onChange={(e) => {
-          const picked = Array.from(e.target.files ?? []);
-          update("files", [...climb.files, ...picked]);
-          // Clear the input so re-picking the same file fires onChange again.
-          e.target.value = "";
-        }}
-        className="block w-full text-body-sm text-on-surface-variant file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-surface-container-high file:text-on-surface file:cursor-pointer"
-      />
-      {climb.files.length > 0 && (
-        <ul className="flex flex-col gap-1 mt-2">
-          {climb.files.map((file, i) => (
-            <li
-              key={`${file.name}-${i}`}
-              className="flex items-center justify-between gap-2 text-body-sm text-on-surface-variant"
-            >
-              <span className="truncate">{file.name}</span>
-              <button
-                type="button"
-                aria-label={t("log.media.remove", { name: file.name })}
-                onClick={() =>
-                  update(
-                    "files",
-                    climb.files.filter((_, index) => index !== i),
-                  )
-                }
-                className="cursor-pointer hover:text-on-surface shrink-0"
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="text-label-sm text-on-surface-variant mt-1.5">
-        {t("log.media.hint")}
-      </p>
-    </div>
-  );
-
   return (
     <div className="max-w-5xl mx-auto">
       <h1 className="text-on-surface text-headline-md font-bold tracking-tight">
@@ -547,7 +528,12 @@ const LogSession = () => {
           />
         </div>
 
-        {renderFilePicker(draft, updateDraft)}
+        {/* Staged only. Nothing is uploaded until the visit is saved and the
+            climbs come back with ids to attach the files to. */}
+        <FilePicker
+          files={draft.files}
+          onChange={(files) => updateDraft("files", files)}
+        />
 
         <div className="flex flex-col items-end">
           <Button className="mt-3" onClick={handleAddClimb}>
@@ -621,9 +607,22 @@ const LogSession = () => {
         time, and walk away with nothing on their account.
       */}
       <div className="flex flex-col items-end gap-1.5 mt-6">
-        <Button onClick={handleSaveSession} disabled={isSavingSession}>
-          {isSavingSession ? t("common:action.saving") : t("log.saveSession")}
-        </Button>
+        <div className="flex flex-wrap justify-end gap-3">
+          {/* Left of Save and quieter than it, so the destructive one is not
+              the button a thumb reaches first. Disabled while there is nothing
+              to clear, rather than hidden — a control that appears and
+              disappears under the save button is worse than a greyed one. */}
+          <Button
+            variant="secondary"
+            onClick={() => setConfirmingClear(true)}
+            disabled={!hasAnythingToClear || isSavingSession}
+          >
+            {t("log.clear")}
+          </Button>
+          <Button onClick={handleSaveSession} disabled={isSavingSession}>
+            {isSavingSession ? t("common:action.saving") : t("log.saveSession")}
+          </Button>
+        </div>
         <p className="text-label-sm text-on-surface-variant text-right">
           {climbs.length === 0
             ? t("log.saveHintEmpty")
@@ -632,6 +631,21 @@ const LogSession = () => {
               })}
         </p>
       </div>
+
+      <ConfirmDialog
+        open={confirmingClear}
+        onCancel={() => setConfirmingClear(false)}
+        onConfirm={handleClear}
+        title={t("log.confirmClear.title")}
+        message={
+          climbs.length > 0
+            ? t("log.confirmClear.messageWithRoutes", {
+                routes: t("common:climb.routes", { count: climbs.length }),
+              })
+            : t("log.confirmClear.message")
+        }
+        confirmLabel={t("log.clear")}
+      />
 
       <Modal
         open={editing !== null}
@@ -668,7 +682,10 @@ const LogSession = () => {
               />
             </div>
 
-            {renderFilePicker(editing, updateEditing)}
+            <FilePicker
+              files={editing.files}
+              onChange={(files) => updateEditing("files", files)}
+            />
           </>
         )}
       </Modal>

@@ -3,14 +3,18 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { uploadMedia } from "../lib/storage";
 import { useClimbTaxonomies } from "../hooks/useClimbTaxonomies";
 import Button from "./Button";
 import ClimbFields from "./ClimbFields";
 import ConfirmDialog from "./ConfirmDialog";
+import FilePicker from "./FilePicker";
+import MediaGallery from "./MediaGallery";
 import Modal from "./Modal";
 import Textarea from "./Textarea";
 import type AttemptType from "../types/AttemptType";
 import type { AttemptRecord } from "../types/AttemptType";
+import type Media from "../types/MediaType";
 
 /**
  * Edit one climb on a session that is already saved, or add one that was
@@ -21,7 +25,10 @@ import type { AttemptRecord } from "../types/AttemptType";
  * had no way at all to add a route to a session after the fact.
  *
  * The form is the same ClimbFields the log screen uses, so a climb corrected
- * here offers exactly the fields it was logged with.
+ * here offers exactly the fields it was logged with — photos and video
+ * included. Those were the one thing the log screen could take and this could
+ * not, so a video forgotten at the gym had nowhere to go afterwards and the
+ * ones already attached were invisible here.
  */
 
 interface ClimbEditModalProps {
@@ -31,6 +38,10 @@ interface ClimbEditModalProps {
   sessionId: number;
   /** The climb being edited. Null adds a new one. */
   attempt: AttemptRecord | null;
+  /** What is already attached to this climb. Empty while adding one. */
+  media: Media[];
+  /** Called once an attachment has been added or removed. */
+  onMediaChanged: () => void;
 }
 
 /** A saved climb, in the shape the draft form works in. */
@@ -70,6 +81,8 @@ export default function ClimbEditModal({
   onClose,
   sessionId,
   attempt,
+  media,
+  onMediaChanged,
 }: ClimbEditModalProps) {
   const { t } = useTranslation("sessions");
   const queryClient = useQueryClient();
@@ -78,6 +91,8 @@ export default function ClimbEditModal({
     attempt ? toDraft(attempt) : emptyDraft(),
   );
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  /** Picked here, uploaded once the save below has an attempt id to pin them to. */
+  const [files, setFiles] = useState<File[]>([]);
 
   const update = <K extends keyof AttemptType>(
     field: K,
@@ -119,23 +134,43 @@ export default function ClimbEditModal({
         weakness_labels: draft.weakness_labels,
       };
 
-      return attempt
-        ? api(`/attempts/${attempt.attempt_id}`, {
+      const saved = attempt
+        ? await api<{ data: AttemptRecord }>(`/attempts/${attempt.attempt_id}`, {
             method: "PATCH",
             body: JSON.stringify(body),
           })
-        : api(`/sessions/${sessionId}/attempts`, {
+        : await api<{ data: AttemptRecord }>(`/sessions/${sessionId}/attempts`, {
             method: "POST",
             body: JSON.stringify(body),
           });
+
+      // Only now is there an id to hang a file on — for a climb being added,
+      // it does not exist until the request above comes back.
+      //
+      // Best-effort, the same way the log screen uploads: an edit that saved is
+      // saved, and a file storage refuses (the account's quota, a video too
+      // long) is reported rather than throwing the correction away with it.
+      let failedUploads = 0;
+      for (const file of files) {
+        try {
+          await uploadMedia(file, { attemptId: saved.data.attempt_id });
+        } catch {
+          failedUploads += 1;
+        }
+      }
+      return { failedUploads };
     },
-    onSuccess: () => {
+    onSuccess: ({ failedUploads }) => {
       invalidate();
       // Typed-in weaknesses became saved options — pick them up for next time.
       queryClient.invalidateQueries({ queryKey: ["weaknesses"] });
+      onMediaChanged();
       toast.success(
         attempt ? t("climbEdit.toast.updated") : t("climbEdit.toast.added"),
       );
+      if (failedUploads > 0) {
+        toast.error(t("log.toast.uploadFailed", { count: failedUploads }));
+      }
       onClose();
     },
     onError: (err) =>
@@ -206,6 +241,12 @@ export default function ClimbEditModal({
             onChange={(e) => update("note", e.target.value)}
           />
         </div>
+
+        {/* What is already on the climb, then a way to add to it. The gallery
+            renders nothing at all when there is none, so a climb logged
+            without photos just shows the picker. */}
+        <MediaGallery media={media} onChanged={onMediaChanged} />
+        <FilePicker files={files} onChange={setFiles} />
       </Modal>
 
       <ConfirmDialog

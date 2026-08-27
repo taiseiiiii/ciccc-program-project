@@ -183,6 +183,34 @@
     outline-offset: 2px;
   }
 
+  /* Mobile Safari lays a date field out from its own shadow parts rather than
+   * from the box we style. The value lives in `::-webkit-date-and-time-value`,
+   * which arrives with its own margins, its own line box and no left
+   * alignment, and the control takes its height from that part instead of from
+   * our padding. Sitting under Location and Time on the wall — two ordinary
+   * text inputs — that made Session Date render as a shorter control with the
+   * date pushed off-centre, which is the collapse people see on a phone and
+   * not on a laptop.
+   *
+   * Fixed here rather than on the one field, because the same control is the
+   * date filter on Sessions and Progress and the dates on the injury form. */
+  input[type="date"] {
+    /* The platform control also sizes itself past the track a grid gives it;
+     * without this it is the native widget's width that wins, not ours. */
+    -webkit-appearance: none;
+    appearance: none;
+    /* What `py-2` + `text-body-md` + the 1px border come to on every other
+     * field. Named in tokens so the two cannot drift apart. */
+    min-height: calc(var(--text-body-md--line-height) + 1rem + 2px);
+  }
+
+  input[type="date"]::-webkit-date-and-time-value {
+    display: block;
+    margin: 0;
+    text-align: left;
+    line-height: var(--text-body-md--line-height);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     ::before,
