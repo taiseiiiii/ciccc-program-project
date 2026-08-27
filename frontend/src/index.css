@@ -183,25 +183,35 @@
     outline-offset: 2px;
   }
 
-  /* Mobile Safari lays a date field out from its own shadow parts rather than
-   * from the box we style. The value lives in `::-webkit-date-and-time-value`,
-   * which arrives with its own margins, its own line box and no left
-   * alignment, and the control takes its height from that part instead of from
-   * our padding. Sitting under Location and Time on the wall — two ordinary
-   * text inputs — that made Session Date render as a shorter control with the
-   * date pushed off-centre, which is the collapse people see on a phone and
-   * not on a laptop.
+  /* Every control on a form row is one height: `py-2` + `text-body-md` + a 1px
+   * border. Text inputs get there on their own; these two do not, and each
+   * misses in its own way.
    *
-   * Fixed here rather than on the one field, because the same control is the
-   * date filter on Sessions and Progress and the dates on the injury form. */
+   * A `select` lays its text out in its own line box rather than the one
+   * `text-body-md` sets, and came out 4px short — visible as a step in the
+   * Sessions filter row, where the Grade dropdown sits between two date fields.
+   *
+   * Mobile Safari builds a date field from its shadow parts rather than from
+   * the box we style: the value lives in `::-webkit-date-and-time-value`, which
+   * arrives with its own margins and no left alignment, and the control takes
+   * its height from that part instead of from our padding. Beside two ordinary
+   * text inputs that made Session Date render short with the date pushed
+   * off-centre — the collapse that shows on a phone and not on a laptop.
+   *
+   * Named in tokens so the height cannot drift from the one the utilities give
+   * everything else, and fixed here rather than per field: the same two
+   * controls are the date filters on Sessions and Progress, the injury form's
+   * date, and the weakness dropdown. */
+  input[type="date"],
+  select {
+    min-height: calc(var(--text-body-md--line-height) + 1rem + 2px);
+  }
+
   input[type="date"] {
     /* The platform control also sizes itself past the track a grid gives it;
      * without this it is the native widget's width that wins, not ours. */
     -webkit-appearance: none;
     appearance: none;
-    /* What `py-2` + `text-body-md` + the 1px border come to on every other
-     * field. Named in tokens so the two cannot drift apart. */
-    min-height: calc(var(--text-body-md--line-height) + 1rem + 2px);
   }
 
   input[type="date"]::-webkit-date-and-time-value {

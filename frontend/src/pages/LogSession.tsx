@@ -484,8 +484,14 @@ const LogSession = () => {
         min-content width it refuses to shrink below, so as a flex item it
         pushed the row past the card's edge on narrow screens. Grid tracks
         divide the width up front and the control fits whatever it is given.
+
+        Two columns before three, because "whatever it is given" has a floor.
+        A date input wants about 167px — the value plus the calendar indicator
+        — and three tracks in this card only reach that around `lg`: at the old
+        `md` breakpoint Session Date got 135px and rendered as "2026/08/2" with
+        the icon over the rest.
       */}
-      <Card className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-6">
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-6">
         <Input
           ref={gymNameRef}
           type="text"

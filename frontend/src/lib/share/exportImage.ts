@@ -141,12 +141,25 @@ function unsupportedReason(file: File): string {
   return `this browser will not share a ${file.type || "file"} (${file.size} bytes)`;
 }
 
-/** Write the file out through a download link. */
+/**
+ * Write the file out through a download link.
+ *
+ * The link is aimed away from this window on purpose. A browser that honours
+ * `download` ignores `target` and writes the file where it always would; one
+ * that does not — iOS Safari, for several of these types — follows the link
+ * instead. This app is installed to the home screen with `display: standalone`,
+ * so following it in place means the app's only window navigates to a `blob:`
+ * URL, with no address bar and no back button to return from: a blank view and
+ * a force-quit. The target costs a discarded tab in the case that already
+ * fails, and nothing at all in the case that works.
+ */
 function saveToDevice(blob: Blob, filename: string): DeliveryResult {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  link.target = "_blank";
+  link.rel = "noopener";
   document.body.appendChild(link);
   link.click();
   link.remove();

@@ -427,7 +427,11 @@ function SessionHeaderForm({
 
   return (
     <div className="rounded-xl bg-surface-container-high/40 border border-outline-variant/30 p-3">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* Two columns, never three. Same floor as the log screen's card — a date
+          input wants about 167px — but this form sits inside a `max-w-lg`
+          modal, so its width does not grow with the viewport: a third track
+          would be 147px at every size, not just at `md`. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Input
           type="text"
           label={t("field.gym")}
