@@ -22,6 +22,19 @@ const WIDTHS = {
 } as const;
 
 /**
+ * How many modals are up right now.
+ *
+ * The scroll lock below used to be a snapshot: each modal read
+ * `body.style.overflow` as it opened and put that value back as it closed.
+ * That is right for one modal and wrong for two, and this app stacks them —
+ * the share sheet over a session, a delete confirmation over an editor. If the
+ * outer one unmounts first it restores "" and the inner one then restores
+ * "hidden", leaving the page scroll-locked with no modal on screen to unlock
+ * it. Counting makes the last one out win, whatever order they leave in.
+ */
+let openModalCount = 0;
+
+/**
  * The app's one modal.
  *
  * There used to be four of these, hand-rolled as `fixed inset-0` divs — the
@@ -51,16 +64,34 @@ export default function Modal({
 
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
+
+    return () => {
+      // Some callers close a modal by unmounting it rather than by flipping
+      // `open` — the share sheet does exactly that, taking itself off screen
+      // the moment a share completes, and so does the climb editor. Without
+      // this an open `<dialog>` is torn out of the document while it is still
+      // in the top layer, which is a state the platform is not obliged to
+      // clean up after. Safari does not: the panel stays composited over
+      // everything — a near-white `bg-surface` sheet filling a phone screen —
+      // and the document stays inert behind it, so nothing responds to a tap.
+      // Installed to the home screen there is no address bar and no reload, so
+      // the only way out is to force-quit the app.
+      //
+      // Closing first is the supported way off the top layer, and it is a
+      // no-op for every caller that already flipped `open`.
+      if (dialog.open) dialog.close();
+    };
   }, [open]);
 
   // `showModal` makes the page behind inert but does not stop it scrolling,
   // which on a phone reads as the modal sliding around.
   useEffect(() => {
     if (!open) return;
-    const previous = document.body.style.overflow;
+    openModalCount += 1;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = previous;
+      openModalCount -= 1;
+      if (openModalCount === 0) document.body.style.overflow = "";
     };
   }, [open]);
 

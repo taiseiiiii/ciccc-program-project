@@ -106,7 +106,13 @@ export default function Sessions() {
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/*
+          Two columns before three. A date input has an intrinsic width of about
+          167px — the value plus the calendar indicator — and three tracks in
+          this card do not reach that until `lg`: at the old `md` breakpoint
+          each field got 135px and Chrome clipped the year under the icon, which
+          is the filter row reading as broken. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Input
             type="date"
             label={t("list.from")}

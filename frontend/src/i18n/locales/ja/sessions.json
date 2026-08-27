@@ -19,6 +19,12 @@
     "saveSession": "セッションを保存",
     "saveHintEmpty": "このボタンを押すまで、アカウントには何も保存されません。",
     "saveHintWaiting": "{{routes}}が未保存です。",
+    "clear": "クリア",
+    "confirmClear": {
+      "title": "入力内容をすべて消しますか？",
+      "message": "入力した内容がすべて空になります。まだアカウントには保存されていないため、元に戻せません。",
+      "messageWithRoutes": "下に追加した{{routes}}を含め、入力した内容がすべて空になります。まだアカウントには保存されていないため、元に戻せません。"
+    },
     "editTitle": "課題を編集",
     "removeRoute": "課題を削除",
     "media": {
@@ -38,7 +44,8 @@
       "saveFailed": "セッションを保存できませんでした",
       "routeAdded": "課題を追加しました。セッションが終わったら「セッションを保存」を押してください",
       "routeUpdated": "課題を更新しました",
-      "routeRemoved": "課題を削除しました"
+      "routeRemoved": "課題を削除しました",
+      "cleared": "入力内容を消しました"
     },
     "error": {
       "nameRoute": "あとで見返せるように課題名を付けてください",
