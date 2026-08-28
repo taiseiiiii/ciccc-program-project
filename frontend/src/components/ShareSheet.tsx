@@ -208,6 +208,8 @@ export default function ShareSheet({
   const previewUrlRef = useRef<string | null>(null);
   /** True from the instant the OS took the file until something answers for it. */
   const handedOff = useRef(false);
+  /** True once another app came to the front while holding that file. */
+  const leftTheApp = useRef(false);
   /** Set once the sheet has said its piece, so it cannot say it twice. */
   const settled = useRef(false);
 
@@ -511,6 +513,7 @@ export default function ShareSheet({
       if (settled.current) return;
       settled.current = true;
       handedOff.current = false;
+      leftTheApp.current = false;
       recordShareEvent(subject.template, format, outcome);
       toast.success(t(outcome === "shared" ? "toast.shared" : "toast.saved"));
       onClose();
@@ -541,8 +544,16 @@ export default function ShareSheet({
    */
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+
     const onReturn = () => {
-      if (document.visibilityState !== "visible" || !handedOff.current) return;
+      if (!handedOff.current) return;
+      // Backgrounded: another app is in front of this one, holding the file.
+      // Remembered rather than acted on, because it is the fact that survives
+      // everything else that may or may not happen next.
+      if (document.visibilityState === "hidden") {
+        leftTheApp.current = true;
+        return;
+      }
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (handedOff.current) settle("shared");
@@ -575,13 +586,24 @@ export default function ShareSheet({
         handedOff.current = true;
       },
     );
-    // An answer arrived, so the fallback above has nothing left to answer for —
-    // including when the answer is "they changed their mind".
+    // An answer arrived, so the fallback above has nothing left to answer for.
+    const hadLeftTheApp = leftTheApp.current;
     handedOff.current = false;
+    leftTheApp.current = false;
 
     // null is the climber dismissing the OS share sheet. Counting that as a
     // share would make an unpopular format look used.
-    if (!outcome) return;
+    //
+    // Unless another app had already been in front of this one, which is a
+    // different story and Instagram's: its share extension passes the picture
+    // to the Instagram app and leaves its own "Story / Reel / Post" sheet
+    // sitting over this page. Coming back and dismissing that leftover is what
+    // finally produces the AbortError — minutes after the post went out, and
+    // long past the point where anyone would call it a change of mind.
+    if (!outcome) {
+      if (hadLeftTheApp) settle("shared");
+      return;
+    }
 
     if (shareError) {
       // The file was saved, but not where they asked for it. Left on screen
