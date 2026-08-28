@@ -98,6 +98,17 @@ export async function deliver(
   filename: string,
   mimeType: string,
   intent: ShareOutcome = "shared",
+  /**
+   * Called the moment the OS takes over, before the share is awaited.
+   *
+   * The promise this function returns is not always the end of the story. On
+   * iOS the page is suspended for as long as another app holds the file, and
+   * what `navigator.share` settles to — if it settles at all — can arrive long
+   * afterwards or never. This callback is the one point where the handoff is a
+   * fact rather than an inference, so the caller is told here rather than being
+   * left to read it off a result that may never come.
+   */
+  onHandoff?: () => void,
 ): Promise<DeliveryResult> {
   const file = new File([blob], filename, { type: mimeType });
 
@@ -109,6 +120,8 @@ export async function deliver(
       };
     }
     try {
+      // Before the await, because on iOS there may be no after.
+      onHandoff?.();
       await navigator.share({ files: [file] });
       return { outcome: "shared" };
     } catch (err) {

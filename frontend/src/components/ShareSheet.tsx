@@ -68,6 +68,17 @@ const loadVideoPipeline = () => import("../lib/share/videoExport");
 /** The video still: redrawn on every slider tick, and never leaves the page. */
 const VIDEO_PREVIEW_MIME = "image/jpeg";
 
+/**
+ * How long the share promise is given to answer for itself once the climber is
+ * back in the app, before the handoff is taken as the answer. See the effect
+ * that uses it.
+ *
+ * Long enough for a promise that resolves on the next tick after the page wakes
+ * up, short enough that nobody watches an obsolete sheet sitting over their
+ * session wondering whether the share worked.
+ */
+const HANDOFF_GRACE_MS = 400;
+
 /** What each format produces, once it is time to hand a file over. */
 const OUTPUT: Record<ShareFormat, { mime: string; extension: string }> = {
   // Flat colour and type, which is the case JPEG handles worst.
@@ -195,6 +206,10 @@ export default function ShareSheet({
   const cameraInput = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  /** True from the instant the OS took the file until something answers for it. */
+  const handedOff = useRef(false);
+  /** Set once the sheet has said its piece, so it cannot say it twice. */
+  const settled = useRef(false);
 
   /**
    * The subject, stabilised by value rather than by reference.
@@ -483,6 +498,71 @@ export default function ShareSheet({
     }
   };
 
+  /**
+   * The file is gone: count it, say so, and take the sheet off the screen.
+   *
+   * Runs at most once per sheet, because on iOS it can be reached from two
+   * directions — the share promise settling, and the climber returning from the
+   * app they shared to — and whichever is second must not toast twice or write
+   * a second `share_events` row.
+   */
+  const settle = useCallback(
+    (outcome: ShareOutcome) => {
+      if (settled.current) return;
+      settled.current = true;
+      handedOff.current = false;
+      recordShareEvent(subject.template, format, outcome);
+      toast.success(t(outcome === "shared" ? "toast.shared" : "toast.saved"));
+      onClose();
+    },
+    [format, onClose, subject.template, t],
+  );
+
+  /**
+   * Coming back to the app after the file left it.
+   *
+   * `navigator.share` is documented as resolving once the file has been handed
+   * over, and on a desktop it does. On iOS the page is suspended the moment the
+   * chosen app comes to the front, and the promise very often never settles
+   * after that — so the code below the `await` in `finish` never runs, and the
+   * climber returns to the sheet they shared from, still open over their
+   * session as though nothing had happened. Nothing had, as far as this page
+   * knows.
+   *
+   * The handoff is the reliable fact. The OS does not switch apps for a share
+   * that did not happen, so returning to a page that is still waiting on one is
+   * enough to call it done.
+   *
+   * The delay is for the ordinary case where the promise *does* settle a moment
+   * after the page wakes up: it clears `handedOff` and this stands down. It
+   * also covers the reverse race, a share sheet dismissed without choosing
+   * anything — that rejects with AbortError, which arrives well inside the
+   * grace period and must not be counted as a share.
+   */
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onReturn = () => {
+      if (document.visibilityState !== "visible" || !handedOff.current) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (handedOff.current) settle("shared");
+      }, HANDOFF_GRACE_MS);
+    };
+
+    // Two ways of hearing the same thing. `visibilitychange` is the one that
+    // describes what happened; iOS has a long history of not firing it when a
+    // home-screen app comes back to the front, and window focus is what it does
+    // fire. Both are harmless outside a handoff, which is the only window in
+    // which either is listened to for anything.
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [settle]);
+
   /** Hand a finished file over and count it. */
   const finish = async (blob: Blob, intent: ShareOutcome) => {
     const { mime, extension } = OUTPUT[format];
@@ -491,11 +571,17 @@ export default function ShareSheet({
       shareFilename(subject, extension),
       mime,
       intent,
+      () => {
+        handedOff.current = true;
+      },
     );
+    // An answer arrived, so the fallback above has nothing left to answer for —
+    // including when the answer is "they changed their mind".
+    handedOff.current = false;
+
     // null is the climber dismissing the OS share sheet. Counting that as a
     // share would make an unpopular format look used.
     if (!outcome) return;
-    recordShareEvent(subject.template, format, outcome);
 
     if (shareError) {
       // The file was saved, but not where they asked for it. Left on screen
@@ -503,14 +589,14 @@ export default function ShareSheet({
       // fallback is frequently a no-op, so "saved" alone could be a lie. A
       // still can at least be rescued by long-pressing the preview, which is
       // still on screen — a video cannot, so the two say different things.
+      recordShareEvent(subject.template, format, outcome);
       setError(
         t(format === "video" ? "error.shareRefusedVideo" : "error.shareRefusedStill"),
       );
       setErrorDetail(shareError.message);
       return;
     }
-    toast.success(t(outcome === "shared" ? "toast.shared" : "toast.saved"));
-    onClose();
+    settle(outcome);
   };
 
   /**
