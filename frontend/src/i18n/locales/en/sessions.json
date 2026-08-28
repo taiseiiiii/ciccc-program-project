@@ -21,6 +21,7 @@
     "saveHintEmpty": "Nothing is saved to your account until you press this.",
     "saveHintWaiting": "{{routes}} waiting to be saved.",
     "clear": "Clear",
+    "clearRoute": "Clear route",
     "confirmClear": {
       "title": "Clear this form?",
       "message": "Everything typed in is emptied. Nothing has been saved to your account yet, so it cannot be brought back.",
@@ -47,6 +48,7 @@
       "routeAdded": "Route added — press Save Session when the visit is done",
       "routeUpdated": "Route updated",
       "routeRemoved": "Route removed",
+      "routeCleared": "Route form cleared",
       "cleared": "Form cleared"
     },
     "error": {

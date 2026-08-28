@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -58,34 +58,48 @@ export default function Modal({
 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
+  // useLayoutEffect, not useEffect, and that is the whole point of it.
+  //
+  // Some callers close a modal by unmounting it rather than by flipping `open`
+  // — the share sheet does exactly that, taking itself off screen the moment a
+  // share completes, and so does the climb editor. An open `<dialog>` that is
+  // torn out of the document is in a state the platform is not obliged to
+  // clean up after, and Safari does not: the panel stays composited over
+  // everything — a near-white `bg-surface` sheet filling a phone screen — and
+  // the document stays inert behind it, so nothing responds to a tap.
+  // Installed to the home screen there is no address bar and no reload, so the
+  // only way out is to force-quit the app. That is the "share, then restart
+  // the app" report.
+  //
+  // `close()` is the supported way off the top layer, but it only counts while
+  // the element is still in the document. A passive cleanup is too late: React
+  // runs those for a deleted subtree after the commit that removed its DOM
+  // nodes, so the previous attempt at this fix was closing a dialog that had
+  // already been detached — which is precisely the case it was meant to catch.
+  // A layout cleanup runs inside the mutation phase, before the node is
+  // removed, so the dialog leaves the top layer the supported way every time.
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
 
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
 
+    // A no-op for every caller that already flipped `open`.
     return () => {
-      // Some callers close a modal by unmounting it rather than by flipping
-      // `open` — the share sheet does exactly that, taking itself off screen
-      // the moment a share completes, and so does the climb editor. Without
-      // this an open `<dialog>` is torn out of the document while it is still
-      // in the top layer, which is a state the platform is not obliged to
-      // clean up after. Safari does not: the panel stays composited over
-      // everything — a near-white `bg-surface` sheet filling a phone screen —
-      // and the document stays inert behind it, so nothing responds to a tap.
-      // Installed to the home screen there is no address bar and no reload, so
-      // the only way out is to force-quit the app.
-      //
-      // Closing first is the supported way off the top layer, and it is a
-      // no-op for every caller that already flipped `open`.
       if (dialog.open) dialog.close();
     };
   }, [open]);
 
   // `showModal` makes the page behind inert but does not stop it scrolling,
   // which on a phone reads as the modal sliding around.
-  useEffect(() => {
+  //
+  // Layout-phase for the same reason as above: the lock is released in the same
+  // commit that takes the dialog off the top layer, rather than in a passive
+  // pass that a backgrounded page — an OS share sheet is exactly that — may not
+  // reach for some time. The two must not come apart, or the page is left
+  // unscrollable with nothing on screen to explain it.
+  useLayoutEffect(() => {
     if (!open) return;
     openModalCount += 1;
     document.body.style.overflow = "hidden";
