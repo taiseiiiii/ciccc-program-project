@@ -134,6 +134,12 @@ const LogSession = () => {
   // still something Clear puts back, which is why the two differ.
   const hasAnythingToClear = hasUnsavedWork || visitDate !== today;
 
+  // Same distinction one level down, for the Clear beside Add Route. The grade
+  // is not part of `isClimbDirty` — a grade on its own is not a route anyone
+  // would miss — but it is a field of this form, and a Clear that left it on V4
+  // would not have cleared the form.
+  const hasRouteToClear = isClimbDirty(draft) || draft.grade_name !== "V0";
+
   // Say so, once, when a visit is brought back — and be honest about the files,
   // which are the one part that could not come with it.
   const hasAnnouncedRestore = useRef(false);
@@ -373,6 +379,19 @@ const LogSession = () => {
     toast.success(t("log.toast.cleared"));
   };
 
+  /**
+   * Empty the route form, and only it.
+   *
+   * The Clear at the bottom of the page takes the whole visit with it, which is
+   * why it asks first. This one throws away a single route that has not been
+   * added yet — the fields directly above the button — so it goes through
+   * without a dialog and is simply greyed out when there is nothing in them.
+   */
+  const handleClearDraft = () => {
+    setDraft(emptyClimb());
+    toast.success(t("log.toast.routeCleared"));
+  };
+
   const handleDeleteClimb = () => {
     setClimbs(climbs.filter((c) => c.id !== editing?.id));
     setEditing(null);
@@ -541,10 +560,20 @@ const LogSession = () => {
           onChange={(files) => updateDraft("files", files)}
         />
 
-        <div className="flex flex-col items-end">
-          <Button className="mt-3" onClick={handleAddClimb}>
-            {t("log.addRoute")}
-          </Button>
+        {/* Laid out like the pair at the bottom of the page: the destructive one
+            to the left of the primary and quieter than it, wrapping rather than
+            overflowing when a phone cannot fit both on one line. */}
+        <div className="flex flex-col items-end mt-3">
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={handleClearDraft}
+              disabled={!hasRouteToClear}
+            >
+              {t("log.clearRoute")}
+            </Button>
+            <Button onClick={handleAddClimb}>{t("log.addRoute")}</Button>
+          </div>
           <p className="text-label-sm text-on-surface-variant mt-1.5 text-right">
             {t("log.addRouteHint")}
           </p>

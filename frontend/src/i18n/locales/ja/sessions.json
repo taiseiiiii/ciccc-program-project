@@ -20,6 +20,7 @@
     "saveHintEmpty": "このボタンを押すまで、アカウントには何も保存されません。",
     "saveHintWaiting": "{{routes}}が未保存です。",
     "clear": "クリア",
+    "clearRoute": "課題をクリア",
     "confirmClear": {
       "title": "入力内容をすべて消しますか？",
       "message": "入力した内容がすべて空になります。まだアカウントには保存されていないため、元に戻せません。",
@@ -45,6 +46,7 @@
       "routeAdded": "課題を追加しました。セッションが終わったら「セッションを保存」を押してください",
       "routeUpdated": "課題を更新しました",
       "routeRemoved": "課題を削除しました",
+      "routeCleared": "課題の入力内容を消しました",
       "cleared": "入力内容を消しました"
     },
     "error": {
